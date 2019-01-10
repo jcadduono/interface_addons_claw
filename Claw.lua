@@ -779,7 +779,8 @@ PredatorySwiftness.buff_duration = 12
 ------ Procs
 
 -- Azerite Traits
-
+local IronJaws = Ability.add(276021, true, true)
+local WildFleshrending = Ability.add(279527, false, true)
 -- Racials
 local Shadowmeld = Ability.add(58984, true, true)
 -- Trinket Effects
@@ -1165,6 +1166,7 @@ local function UpdateVars()
 	var.main =  nil
 	var.cd = nil
 	var.extra = nil
+	var.pool_energy = nil
 	var.time = GetTime()
 	start, duration = GetSpellCooldown(61304)
 	var.gcd_remains = start > 0 and duration - (var.time - start) or 0
@@ -1212,6 +1214,14 @@ local function UseExtra(ability, overwrite)
 	end
 end
 
+local function Pool(ability, extra)
+	local deficit = ability:energyCost() + (extra or 0) - var.energy
+	if deficit > 0 then
+		var.pool_energy = deficit
+	end
+	return ability
+end
+
 -- Begin Action Priority Lists
 
 local APL = {
@@ -1236,11 +1246,254 @@ end
 
 APL[SPEC.FERAL].main = function(self)
 	if TimeInCombat() == 0 then
+--[[
+actions.precombat=flask
+actions.precombat+=/food
+actions.precombat+=/augmentation
+actions.precombat+=/regrowth,if=talent.bloodtalons.enabled
+# It is worth it for almost everyone to maintain thrash
+actions.precombat+=/variable,name=use_thrash,value=0
+actions.precombat+=/variable,name=use_thrash,value=2,if=azerite.wild_fleshrending.enabled
+actions.precombat+=/cat_form
+actions.precombat+=/prowl
+# Snapshot raid buffed stats before combat begins and pre-potting is done.
+actions.precombat+=/snapshot_stats
+actions.precombat+=/potion
+actions.precombat+=/berserk
+]]
+		if Bloodtalons.known and Bloodtalons:remains() < 6 then
+			UseCooldown(Regrowth)
+		end
+		if Prowl:usable() then
+			return Prowl
+		end
+		if CatForm:down() then
+			return CatForm
+		end
 		if not InArenaOrBattleground() then
 			if Opt.pot and BattlePotionOfAgility:usable() then
 				UseCooldown(BattlePotionOfAgility)
 			end
 		end
+		if Berserk:usable() then
+			UseCooldown(Berserk)
+		end
+	end
+--[[
+actions=auto_attack,if=!buff.prowl.up&!buff.shadowmeld.up
+actions+=/run_action_list,name=opener,if=variable.opener_done=0
+actions+=/cat_form,if=!buff.cat_form.up
+actions+=/rake,if=buff.prowl.up|buff.shadowmeld.up
+actions+=/call_action_list,name=cooldowns
+actions+=/ferocious_bite,target_if=dot.rip.ticking&dot.rip.remains<3&target.time_to_die>10&(talent.sabertooth.enabled)
+actions+=/regrowth,if=combo_points=5&buff.predatory_swiftness.up&talent.bloodtalons.enabled&buff.bloodtalons.down&(!buff.incarnation.up|dot.rip.remains<8)
+actions+=/run_action_list,name=finishers,if=combo_points>4
+actions+=/run_action_list,name=generators
+]]
+	if not var.opener_done then
+		return self:opener()
+	end
+	if CatForm:down() then
+		return CatForm
+	end
+	if Prowl:up() or Shadowmeld:up() then
+		return Rake
+	end
+	self:cooldowns()
+	if Sabertooth.known and FerociousBite:usable() and Rip:up() and Rip:remains() < 3 and Target.timeToDie > 10 then
+		return FerociousBite
+	end
+	if Bloodtalons.known and Regrowth:usable() and ComboPoints() == 5 and PredatorySwiftness:up() and Bloodtalons:down() and (IncarnationKingOfTheJungle:down() or Rip:remains() < 8) then
+		return Regrowth
+	end
+	if ComboPoints() == 5 then
+		return self:finishers()
+	end
+	return self:generators()
+end
+
+APL[SPEC.FERAL].cooldowns = function(self)
+--[[
+actions.cooldowns=berserk,if=energy>=30&(cooldown.tigers_fury.remains>5|buff.tigers_fury.up)
+actions.cooldowns+=/tigers_fury,if=energy.deficit>=60
+actions.cooldowns+=/berserking
+actions.cooldowns+=/feral_frenzy,if=combo_points=0
+actions.cooldowns+=/incarnation,if=energy>=30&(cooldown.tigers_fury.remains>15|buff.tigers_fury.up)
+actions.cooldowns+=/potion,name=battle_potion_of_agility,if=target.time_to_die<65|(time_to_die<180&(buff.berserk.up|buff.incarnation.up))
+actions.cooldowns+=/shadowmeld,if=combo_points<5&energy>=action.rake.cost&dot.rake.pmultiplier<2.1&buff.tigers_fury.up&(buff.bloodtalons.up|!talent.bloodtalons.enabled)&(!talent.incarnation.enabled|cooldown.incarnation.remains>18)&!buff.incarnation.up
+actions.cooldowns+=/use_items
+]]
+	if Berserk:usable() and Energy() >= 30 and (TigersFury:cooldown() > 5 or TigersFury:up()) then
+		return UseCooldown(Berserk)
+	end
+	if TigersFury:usable() and EnergyDeficit() >= 60 then
+		return UseCooldown(TigersFury)
+	end
+	if FeralFrenzy:usable() and ComboPoints() == 0 then
+		return UseCooldown(FeralFrenzy)
+	end
+	if IncarnationKingOfTheJungle:usable() and Energy() >= 30 and (TigersFury:cooldown() > 15 or TigersFury:up()) then
+		return UseCooldown(IncarnationKingOfTheJungle)
+	end
+	if Opt.pot and BattlePotionOfAgility:usable() and (Target.timeToDie < 65 or (Target.timeToDie < 180 and (Berserk:up() or IncarnationKingOfTheJungle:up()))) then
+		return UseCooldown(BattlePotionOfAgility)
+	end
+	if Shadowmeld:usable() and ComboPoints() < 5 and Energy() >= Rake:energyCost() and Rake:multiplier() < 2.1 and TigersFury:up() and (not Bloodtalons.known or Bloodtalons:up()) and (not IncarnationKingOfTheJungle.known or (IncarnationKingOfTheJungle:down() and IncarnationKingOfTheJungle:cooldown() > 18)) then
+		return UseCooldown(Shadowmeld)
+	end
+end
+
+APL[SPEC.FERAL].finishers = function(self)
+--[[
+actions.finishers=pool_resource,for_next=1
+actions.finishers+=/savage_roar,if=buff.savage_roar.down
+actions.finishers+=/pool_resource,for_next=1
+actions.finishers+=/primal_wrath,target_if=spell_targets.primal_wrath>1&dot.rip.remains<4
+actions.finishers+=/pool_resource,for_next=1
+actions.finishers+=/primal_wrath,target_if=spell_targets.primal_wrath>=2
+actions.finishers+=/pool_resource,for_next=1
+actions.finishers+=/rip,target_if=!ticking|(remains<=duration*0.3)&(!talent.sabertooth.enabled)|(remains<=duration*0.8&persistent_multiplier>dot.rip.pmultiplier)&target.time_to_die>8
+actions.finishers+=/pool_resource,for_next=1
+actions.finishers+=/savage_roar,if=buff.savage_roar.remains<12
+actions.finishers+=/pool_resource,for_next=1
+actions.finishers+=/maim,if=buff.iron_jaws.up
+actions.finishers+=/ferocious_bite,max_energy=1
+]]
+	if SavageRoar:usable(true) and SavageRoar:down() then
+		return Pool(SavageRoar)
+	end
+	if PrimalWrath:usable(true) and Enemies() >= 2 then
+		return Pool(PrimalWrath)
+	end
+	if Rip:usable(true) and (Rip:down() or (Target.timeToDie > 8 and ((Rip:refreshable() and not Sabertooth.known) or (Rip:remains() <= Rip:duration() * 0.8 and Rip:nextMultiplier() > Rip:multiplier())))) then
+		return Pool(Rip)
+	end
+	if SavageRoar:usable(true) and SavageRoar:remains() < 12 then
+		return Pool(SavageRoar)
+	end
+	if Maim:usable(true) and IronJaws:up() then
+		return Pool(Maim)
+	end
+	if Ferocious:usable(true) then
+		return Pool(FerociousBite, 25)
+	end
+end
+
+APL[SPEC.FERAL].generators = function(self)
+--[[
+actions.generators=regrowth,if=talent.bloodtalons.enabled&buff.predatory_swiftness.up&buff.bloodtalons.down&combo_points=4&dot.rake.remains<4
+actions.generators+=/regrowth,if=talent.bloodtalons.enabled&buff.bloodtalons.down&buff.predatory_swiftness.up&talent.lunar_inspiration.enabled&dot.rake.remains<1
+actions.generators+=/brutal_slash,if=spell_targets.brutal_slash>desired_targets
+actions.generators+=/pool_resource,for_next=1
+actions.generators+=/thrash_cat,if=(refreshable)&(spell_targets.thrash_cat>2)
+actions.generators+=/pool_resource,for_next=1
+actions.generators+=/thrash_cat,if=(talent.scent_of_blood.enabled&buff.scent_of_blood.down)&spell_targets.thrash_cat>3
+actions.generators+=/pool_resource,for_next=1
+actions.generators+=/swipe_cat,if=buff.scent_of_blood.up
+actions.generators+=/pool_resource,for_next=1
+actions.generators+=/rake,target_if=!ticking|(!talent.bloodtalons.enabled&remains<duration*0.3)&target.time_to_die>4
+actions.generators+=/pool_resource,for_next=1
+actions.generators+=/rake,target_if=talent.bloodtalons.enabled&buff.bloodtalons.up&((remains<=7)&persistent_multiplier>dot.rake.pmultiplier*0.85)&target.time_to_die>4
+# With LI & BT, we can use moonfire to save BT charges, allowing us to better refresh rake
+actions.generators+=/moonfire_cat,if=buff.bloodtalons.up&buff.predatory_swiftness.down&combo_points<5
+actions.generators+=/brutal_slash,if=(buff.tigers_fury.up&(raid_event.adds.in>(1+max_charges-charges_fractional)*recharge_time))
+actions.generators+=/moonfire_cat,target_if=refreshable
+actions.generators+=/pool_resource,for_next=1
+actions.generators+=/thrash_cat,if=refreshable&((variable.use_thrash=2&(!buff.incarnation.up|azerite.wild_fleshrending.enabled))|spell_targets.thrash_cat>1)
+actions.generators+=/thrash_cat,if=refreshable&variable.use_thrash=1&buff.clearcasting.react&(!buff.incarnation.up|azerite.wild_fleshrending.enabled)
+actions.generators+=/pool_resource,for_next=1
+actions.generators+=/swipe_cat,if=spell_targets.swipe_cat>1
+actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.cost-energy)%energy.regen|buff.clearcasting.react
+]]
+	if Bloodtalons.known and Regrowth:usable() and PredatorySwiftness:up() and Bloodtalons:down() then
+		if ComboPoints() == 4 and Rake:remains() < 4 then
+			return Regrowth
+		end
+		if LunarInspiration.known and Rake:remains() < 1 then
+			return Regrowth
+		end
+	end
+	if Thrash:usable(true) then
+		if Thrash:refreshable() and Enemies() > 2 then
+			return Pool(Thrash)
+		end
+		if ScentOfBlood.known and ScentOfBlood:down() and Enemies() > 3 then
+			return Pool(Thrash)
+		end
+	end
+	if ScentOfBlood.known and Swipe:usable(true) and ScentOfBlood:up() then
+		return Pool(Swipe)
+	end
+	if Rake:usable(true) then
+		if Rake:down() then
+			return Pool(Rake)
+		end
+		if Target.timeToDie > 4 then
+			if not Bloodtalons.known and Rake:refreshable() then
+				return Pool(Rake)
+			end
+			if Bloodtalons.known and Bloodtalons:up() and Rake:remains() < 7 and Rake:nextMultiplier() > (Rake:multiplier() * 0.85) then
+				return Pool(Rake)
+			end
+		end
+	end
+	if LunarInspiration.known and Moonfire:usable() then
+		if Bloodtalons:up() and PredatorySwiftness:down() and ComboPoints() < 5 then
+			return Moonfire
+		end
+		if Moonfire:refreshable() then
+			return Moonfire
+		end
+	end
+	if Thrash:usable(true) and Thrash:refreshable() then
+		if IncarnationKingOfTheJungle:down() or WildFleshrending.known or Enemies() > 1 then
+			return Pool(Thrash)
+		end
+		if Clearcasting:up() and (IncarnationKingOfTheJungle:down() or WildFleshrending.known) then
+			return Thrash
+		end
+	end
+	if Swipe:usable(true) and Enemies() > 1 then
+		return Pool(Swipe)
+	end
+	if Shred:usable() and (Clearcasting:up() or Rake:remains() > ((Shred:energyCost() + Rake:energyCost() - Energy()) / EnergyRegen())) then
+		return Shred
+	end
+end
+
+APL[SPEC.FERAL].opener = function(self)
+--[[
+# We will open with TF, you can safely cast this from stealth without breaking it.
+actions.opener=tigers_fury
+# Always open with rake, consuming stealth and one BT charge (if talented)
+actions.opener+=/rake,if=!ticking|buff.prowl.up
+# Lets make sure we end the opener "sequence" when our first rip is ticking
+actions.opener+=/variable,name=opener_done,value=dot.rip.ticking
+# Break out of the action list
+actions.opener+=/wait,sec=0.001,if=dot.rip.ticking
+# If we have LI, and haven't applied it yet use moonfire.
+actions.opener+=/moonfire_cat,if=!ticking
+# no need to wait for 5 CPs anymore, just rip and we are up and running
+actions.opener+=/rip,if=!ticking
+]]
+	if TigersFury:usable() then
+		return TigersFury
+	end
+	if Rake:usable() and (Rake:down() or Prowl:up()) then
+		return Rake
+	end
+	if Rip:up() then
+		var.opener_done = true
+		return self:main()
+	end
+	if LunarInspiration.known and Moonfire:down() then
+		return Moonfire
+	end
+	if ComboPoints() >= 4 and PrimalWrath:usable() then
+		return PrimalWrath
+	end
+	if Rip:usable() then
+		return Rip
 	end
 end
 
@@ -1572,6 +1825,12 @@ local function UpdateCombat()
 			clawPanel.border:Hide()
 		end
 	end
+	if var.pool_energy then
+		clawPanel.text:SetText(format('POOL %d', var.pool_energy))
+		clawPanel.text:Show()
+	else
+		clawPanel.text:Hide()
+	end
 	if var.cd ~= var.last_cd then
 		if var.cd then
 			clawCooldownPanel.icon:SetTexture(var.cd.icon)
@@ -1823,6 +2082,9 @@ function events:PLAYER_REGEN_ENABLED()
 	if var.last_ability then
 		var.last_ability = nil
 		clawPreviousPanel:Hide()
+	end
+	if currentSpec == SPEC.FERAL then
+		var.opener_done = nil
 	end
 end
 
