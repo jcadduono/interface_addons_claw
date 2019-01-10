@@ -383,26 +383,28 @@ function Ability:ready(seconds)
 	return self:cooldown() <= (seconds or 0)
 end
 
-function Ability:usable(seconds)
+function Ability:usable(pool)
 	if not self.known then
 		return false
 	end
-	if self:manaCost() > var.mana then
-		return false
-	end
-	if self:energyCost() > var.energy then
-		return false
+	if not pool then
+		if self:manaCost() > var.mana then
+			return false
+		end
+		if self:energyCost() > var.energy then
+			return false
+		end
+		if self:rageCost() > var.rage then
+			return false
+		end
 	end
 	if self:cpCost() > var.combo_points then
-		return false
-	end
-	if self:rageCost() > var.rage then
 		return false
 	end
 	if self.requires_charge and self:charges() == 0 then
 		return false
 	end
-	return self:ready(seconds)
+	return self:ready()
 end
 
 function Ability:remains()
@@ -511,7 +513,7 @@ function Ability:stack()
 end
 
 function Ability:manaCost()
-	return self.mana_cost > 0 and (self.mana_cost / 100 * var.mana_base) or 0
+	return self.mana_cost > 0 and (self.mana_cost / 100 * var.mana_max) or 0
 end
 
 function Ability:energyCost()
@@ -642,8 +644,8 @@ function trackAuras:purge()
 	local now = GetTime()
 	local _, ability, guid, expires
 	for _, ability in next, self.abilities do
-		for guid, expires in next, ability.aura_targets do
-			if expires <= now then
+		for guid, aura in next, ability.aura_targets do
+			if aura.expires <= now then
 				ability:removeAura(guid)
 			end
 		end
@@ -659,19 +661,11 @@ function Ability:trackAuras()
 end
 
 function Ability:applyAura(guid)
-	if self.aura_targets and UnitGUID(self.auraTarget) == guid then -- for now, we can only track if the enemy is targeted
-		local _, i, id, expires
-		for i = 1, 40 do
-			_, _, _, _, _, expires, _, _, _, id = UnitAura(self.auraTarget, i, self.auraFilter)
-			if not id then
-				return
-			end
-			if id == self.spellId or id == self.spellId2 then
-				self.aura_targets[guid] = expires
-				return
-			end
-		end
-	end
+
+end
+
+function Ability:refreshAura(guid)
+
 end
 
 function Ability:removeAura(guid)
@@ -684,9 +678,24 @@ end
 
 -- Druid Abilities
 ---- Multiple Specializations
+local CatForm = Ability.add(768, true, true)
 local SkullBash = Ability.add(106839, false, true)
 SkullBash.cooldown_duration = 15
 SkullBash.triggers_gcd = false
+local Prowl = Ability.add(5215, true, true)
+Prowl.cooldown_duration = 6
+local Regrowth = Ability.add(8936, true, true)
+Regrowth.buff_duration = 12
+Regrowth.mana_cost = 14
+Regrowth.tick_interval = 2
+Regrowth.hasted_ticks = true
+local Moonfire = Ability.add(8921, false, true, 164812)
+Moonfire.buff_duration = 18
+Moonfire.energy_cost = 30
+Moonfire.tick_interval = 2
+Moonfire.hasted_ticks = true
+local WildChargeCat = Ability.add(49376, false, true)
+WildChargeCat.cooldown_duration = 15
 ------ Procs
 
 ------ Talents
@@ -698,14 +707,65 @@ SkullBash.triggers_gcd = false
 ------ Procs
 
 ---- Feral
-local Maim = Ability.add(22570, false, true)
+local Berserk = Ability.add(106951, true, true)
+Berserk.buff_duration = 20
+local Rip = Ability.add(1079, false, true)
+Rip.buff_duration = 4
+Rip.energy_cost = 20
+Rip.cp_cost = 1
+Rip.tick_interval = 2
+Rip.hasted_ticks = true
+Rip:trackAuras()
+local Rake = Ability.add(1822, false, true, 155722)
+Rake.buff_duration = 15
+Rake.energy_cost = 35
+Rake.tick_interval = 3
+Rake.hasted_ticks = true
+Rake:trackAuras()
+local Shred = Ability.add(5221, false, true)
+Shred.energy_cost = 40
+local FerociousBite = Ability.add(22568, false, true)
+FerociousBite.cp_cost = 1
+local Thrash = Ability.add(106830, false, true)
+Thrash.buff_duration = 15
+Thrash.energy_cost = 40
+Thrash.tick_interval = 3
+Thrash.hasted_ticks = true
+Thrash:setAutoAoe(true)
+Thrash:trackAuras()
+local Swipe = Ability.add(106785, false, true)
+Swipe.energy_cost = 35
+Swipe:setAutoAoe(true)
+local TigersFury = Ability.add(5217, true, true)
+TigersFury.cooldown_duration = 30
+TigersFury.triggers_gcd = false
+local Maim = Ability.add(22570, false, true, 203123)
 Maim.cooldown_duration = 20
 Maim.energy_cost = 30
 Maim.cp_cost = 1
 ------ Talents
-
+local Bloodtalons = Ability.add(145152, true, true)
+Bloodtalons.buff_duration = 30
+local IncarnationKingOfTheJungle = Ability.add(102543, true, true)
+IncarnationKingOfTheJungle.buff_duration = 30
+IncarnationKingOfTheJungle.cooldown_duration = 180
+local JungleStalker = Ability.add(252071, true, true)
+JungleStalker.buff_duration = 30
+local LunarInspiration = Ability.add(155580, false, true)
+local Sabertooth = Ability.add(202031, false, true)
+local SavageRoar = Ability.add(52610, true, true)
+SavageRoar.buff_duration = 12
+SavageRoar.energy_cost = 25
+SavageRoar.cp_cost = 1
+local PrimalWrath = Ability.add(285381, false, true)
+PrimalWrath.energy_cost = 1
+PrimalWrath.cp_cost = 1
+PrimalWrath:setAutoAoe(true)
 ------ Procs
-
+local Clearcasting = Ability.add(135700, true, true)
+Clearcasting.buff_duration = 15
+local PredatorySwiftness = Ability.add(69369, true, true)
+PredatorySwiftness.buff_duration = 12
 ---- Guardian
 
 ------ Talents
@@ -721,7 +781,7 @@ Maim.cp_cost = 1
 -- Azerite Traits
 
 -- Racials
-
+local Shadowmeld = Ability.add(58984, true, true)
 -- Trinket Effects
 
 -- End Abilities
@@ -913,6 +973,188 @@ end
 
 -- Start Ability Modifications
 
+function Ability:energyCost()
+	local cost  = self.energy_cost
+	if currentSpec == SPEC.FERAL then
+		if (self == Shred or self == Thrash or self == Swipe) and Clearcasting:up() then
+			return 0
+		end
+		if Berserk:up() then
+			cost = cost - (cost * 0.40)
+		end
+	end
+	return cost
+end
+
+function Regrowth:manaCost()
+	if PredatorySwiftness:up() then
+		return 0
+	end
+	return Ability.manaCost(self)
+end
+
+function Rake:applyAura(timeStamp, guid)
+	local aura = {
+		expires = timeStamp + self.buff_duration,
+		multiplier = self.next_multiplier
+	}
+	self.aura_targets[guid] = aura
+end
+
+function Rake:refreshAura(timeStamp, guid)
+	local aura = self.aura_targets[guid]
+	if not aura then
+		self:applyAura(timeStamp, guid)
+		return
+	end
+	local remains = aura.expires - timeStamp
+	aura.expires = timeStamp + min(1.3 * self.buff_duration, remains + self.buff_duration)
+	aura.multiplier = self.next_multiplier
+end
+
+function Rake:multiplier()
+	local aura = self.aura_targets[Target.guid]
+	return aura and aura.multiplier or 0
+end
+
+function Rake:nextMultiplier()
+	local multiplier = 1.00
+	local stealthed = false
+	local _, i, id
+	for i = 1, 40 do
+		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL|PLAYER')
+		if not id then
+			break
+		end
+		if id == Shadowmeld.spellId or id == Prowl.spellId or id == IncarnationKingOfTheJungle.spellId then
+			stealthed = true
+		elseif id == TigersFury.spellId then
+			multiplier = multiplier * 1.15
+		elseif id == SavageRoar.spellId then
+			multiplier = multiplier * 1.10
+		elseif id == Bloodtalons.spellId then
+			multiplier = multiplier * 1.25
+		end
+	end
+	if stealthed then
+		multiplier = multiplier * 2.00
+	end
+	return multiplier
+end
+
+function Rip:applyAura(timeStamp, guid)
+	local duration
+	if self.next_applied_by == Rip then
+		duration = 4 + (4 * self.next_combo_points)
+	elseif self.next_applied_by == PrimalWrath then
+		duration = 2 + (2 * self.next_combo_points)
+	elseif self.next_applied_by == FerociousBite then
+		return
+	end
+	local aura = {
+		expires = timeStamp + duration,
+		multiplier = self.next_multiplier
+	}
+	self.aura_targets[guid] = aura
+end
+
+function Rip:refreshAura(timeStamp, guid)
+	local aura = self.aura_targets[guid]
+	if not aura then
+		self:applyAura(timeStamp, guid)
+		return
+	end
+	local remains = aura.expires - timeStamp
+	local duration, max_duration
+	if self.next_applied_by == Rip then
+		duration = 4 + (4 * self.next_combo_points)
+		max_duration = 1.3 * duration
+		aura.multiplier = self.next_multiplier
+	elseif self.next_applied_by == PrimalWrath then
+		duration = 2 + (2 * self.next_combo_points)
+		max_duration = 1.3 * duration
+		aura.multiplier = self.next_multiplier
+	elseif self.next_applied_by == FerociousBite then
+		duration = 4 * self.next_combo_points
+		max_duration = 1.3 * (4 + (4 * var.combo_points_max))
+	end
+	aura.expires = timeStamp + min(max_duration, remains + duration)
+end
+
+function Rip:multiplier()
+	local aura = self.aura_targets[Target.guid]
+	return aura and aura.multiplier or 0
+end
+
+function Rip:nextMultiplier()
+	local multiplier = 1.00
+	local _, i, id
+	for i = 1, 40 do
+		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL|PLAYER')
+		if not id then
+			break
+		end
+		if id == TigersFury.spellId then
+			multiplier = multiplier * 1.15
+		elseif id == SavageRoar.spellId then
+			multiplier = multiplier * 1.10
+		elseif id == Bloodtalons.spellId then
+			multiplier = multiplier * 1.25
+		end
+	end
+	return multiplier
+end
+
+function Thrash:applyAura(timeStamp, guid)
+	local aura = {
+		expires = timeStamp + self.buff_duration,
+		multiplier = self.next_multiplier
+	}
+	self.aura_targets[guid] = aura
+end
+
+function Thrash:refreshAura(timeStamp, guid)
+	local aura = self.aura_targets[guid]
+	if not aura then
+		self:applyAura(timeStamp, guid)
+		return
+	end
+	local remains = aura.expires - timeStamp
+	aura.expires = timeStamp + min(1.3 * self.buff_duration, remains + self.buff_duration)
+	aura.multiplier = self.next_multiplier
+end
+
+function Thrash:multiplier()
+	local aura = self.aura_targets[Target.guid]
+	return aura and aura.multiplier or 0
+end
+
+function Thrash:nextMultiplier()
+	local multiplier = 1.00
+	local _, i, id
+	for i = 1, 40 do
+		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL|PLAYER')
+		if not id then
+			break
+		end
+		if id == TigersFury.spellId then
+			multiplier = multiplier * 1.15
+		elseif id == SavageRoar.spellId then
+			multiplier = multiplier * 1.10
+		elseif id == Bloodtalons.spellId then
+			multiplier = multiplier * 1.25
+		end
+	end
+	return multiplier
+end
+
+function Prowl:usable()
+	if InCombatLockdown() and not JungleStalker:up() then
+		return false
+	end
+	return Ability.usable(self)
+end
+
 -- End Ability Modifications
 
 local function UpdateVars()
@@ -933,6 +1175,7 @@ local function UpdateVars()
 	if currentForm == FORM.CAT then
 		var.gcd = 1
 		var.energy_regen = GetPowerRegen()
+		var.energy_max = UnitPowerMax('player', 3)
 		var.energy = UnitPower('player', 3) + (var.energy_regen * var.execute_remains)
 		var.energy = min(max(var.energy, 0), var.energy_max)
 		var.combo_points = UnitPower('player', 4)
@@ -1404,6 +1647,25 @@ function events:ADDON_LOADED(name)
 	end
 end
 
+function events:UNIT_SPELLCAST_SENT(srcName, destName, castId, spellId)
+	if srcName ~= 'player' then
+		return
+	end
+	local castedAbility = abilityBySpellId[spellId]
+	if not castedAbility then
+		return
+	end
+	if castedAbility == Rip or castedAbility == PrimalWrath or (Sabertooth.known and castedAbility == FerociousBite) then
+		Rip.next_applied_by = castedAbility
+		Rip.next_combo_points = UnitPower('player', 4)
+		Rip.next_multiplier = Rip:nextMultiplier()
+	elseif castedAbility == Rake then
+		Rake.next_multiplier = Rake:nextMultiplier()
+	elseif castedAbility == Thrash then
+		Thrash.next_multiplier = Thrash:nextMultiplier()
+	end
+end
+
 function events:COMBAT_LOG_EVENT_UNFILTERED()
 	local timeStamp, eventType, hideCaster, srcGUID, srcName, srcFlags, srcRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellId, spellName = CombatLogGetCurrentEventInfo()
 	if Opt.auto_aoe then
@@ -1417,11 +1679,12 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 			autoAoe:remove(dstGUID)
 		end
 	end
-	if srcGUID ~= var.player and srcGUID ~= var.pet then
+	if srcGUID ~= var.player then
 		return
 	end
 	local castedAbility = abilityBySpellId[spellId]
 	if not castedAbility then
+		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', eventType, spellName, spellId))
 		return
 	end
 --[[ DEBUG ]
@@ -1448,6 +1711,9 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 		end
 		return
 	end
+	if eventType == 'SPELL_DAMAGE' and Sabertooth.known and castedAbility == FerociousBite and Rip.aura_targets[dstGUID] then
+		Rip:refreshAura(timeStamp, dstGUID)
+	end
 	if eventType == 'SPELL_MISSED' or eventType == 'SPELL_DAMAGE' or eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH' then
 		if castedAbility.travel_start and castedAbility.travel_start[dstGUID] then
 			castedAbility.travel_start[dstGUID] = nil
@@ -1460,8 +1726,10 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 		end
 	end
 	if castedAbility.aura_targets then
-		if eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH' then
-			castedAbility:applyAura(dstGUID)
+		if eventType == 'SPELL_AURA_APPLIED' then
+			castedAbility:applyAura(timeStamp, dstGUID)
+		elseif eventType == 'SPELL_AURA_REFRESH' then
+			castedAbility:refreshAura(timeStamp, dstGUID)
 		elseif eventType == 'SPELL_AURA_REMOVED' or eventType == 'UNIT_DIED' or eventType == 'UNIT_DESTROYED' or eventType == 'UNIT_DISSIPATES' or eventType == 'SPELL_INSTAKILL' or eventType == 'PARTY_KILL' then
 			castedAbility:removeAura(dstGUID)
 		end
@@ -1543,11 +1811,6 @@ function events:PLAYER_REGEN_ENABLED()
 		if ability.travel_start then
 			for guid in next, ability.travel_start do
 				ability.travel_start[guid] = nil
-			end
-		end
-		if ability.aura_targets then
-			for guid in next, ability.aura_targets do
-				ability.aura_targets[guid] = nil
 			end
 		end
 	end
