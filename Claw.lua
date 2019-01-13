@@ -134,6 +134,7 @@ local Azerite = {}
 
 local var = {
 	gcd = 1.5,
+	time_diff = 0,
 	mana = 0,
 	mana_max = 100,
 	mana_regen = 0,
@@ -160,7 +161,7 @@ clawPanel.border:SetAllPoints(clawPanel)
 clawPanel.border:SetTexture('Interface\\AddOns\\Claw\\border.blp')
 clawPanel.border:Hide()
 clawPanel.text = clawPanel:CreateFontString(nil, 'OVERLAY')
-clawPanel.text:SetFont('Fonts\\FRIZQT__.TTF', 14, 'OUTLINE')
+clawPanel.text:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
 clawPanel.text:SetTextColor(1, 1, 1, 1)
 clawPanel.text:SetAllPoints(clawPanel)
 clawPanel.text:SetJustifyH('CENTER')
@@ -272,6 +273,7 @@ local targetModes = {
 
 local function SetTargetMode(mode)
 	targetMode = min(mode, #targetModes[currentSpec])
+	var.enemy_count = targetModes[currentSpec][targetMode][1]
 	clawPanel.targets:SetText(targetModes[currentSpec][targetMode][2])
 end
 Claw_SetTargetMode = SetTargetMode
@@ -303,9 +305,11 @@ function autoAoe:update()
 		SetTargetMode(1)
 		return
 	end
+	var.enemy_count = count
 	for i = #targetModes[currentSpec], 1, -1 do
 		if count >= targetModes[currentSpec][i][1] then
 			SetTargetMode(i)
+			var.enemy_count = count
 			return
 		end
 	end
@@ -435,7 +439,7 @@ function Ability:refreshable()
 end
 
 function Ability:up()
-	if self:traveling() then
+	if self:traveling() or self:casting() then
 		return true
 	end
 	local _, i, id, expires
@@ -726,6 +730,7 @@ local Shred = Ability.add(5221, false, true)
 Shred.energy_cost = 40
 local FerociousBite = Ability.add(22568, false, true)
 FerociousBite.cp_cost = 1
+FerociousBite.energy_cost = 25
 local Thrash = Ability.add(106830, false, true)
 Thrash.buff_duration = 15
 Thrash.energy_cost = 40
@@ -744,8 +749,14 @@ Maim.cooldown_duration = 20
 Maim.energy_cost = 30
 Maim.cp_cost = 1
 ------ Talents
-local Bloodtalons = Ability.add(145152, true, true)
+local Bloodtalons = Ability.add(155672, true, true, 145152)
 Bloodtalons.buff_duration = 30
+local FeralFrenzy = Ability.add(274837, false, true, 274838)
+FeralFrenzy.buff_duration = 6
+FeralFrenzy.cooldown_duration = 45
+FeralFrenzy.energy_cost = 25
+FeralFrenzy.tick_interval = 2
+FeralFrenzy.hasted_ticks = true
 local IncarnationKingOfTheJungle = Ability.add(102543, true, true)
 IncarnationKingOfTheJungle.buff_duration = 30
 IncarnationKingOfTheJungle.cooldown_duration = 180
@@ -757,6 +768,8 @@ local SavageRoar = Ability.add(52610, true, true)
 SavageRoar.buff_duration = 12
 SavageRoar.energy_cost = 25
 SavageRoar.cp_cost = 1
+local ScentOfBlood = Ability.add(285564, true, true, 285646)
+ScentOfBlood.buff_duration = 6
 local PrimalWrath = Ability.add(285381, false, true)
 PrimalWrath.energy_cost = 1
 PrimalWrath.cp_cost = 1
@@ -899,12 +912,24 @@ local function Energy()
 	return var.energy
 end
 
+local function EnergyRegen()
+	return var.energy_regen
+end
+
+local function EnergyDeficit()
+	return var.energy_max - var.energy
+end
+
 local function EnergyTimeToMax()
 	local deficit = var.energy_max - var.energy
 	if deficit <= 0 then
 		return 0
 	end
 	return deficit / var.energy_regen
+end
+
+local function ComboPoints()
+	return var.combo_points
 end
 
 local function Rage()
@@ -916,15 +941,12 @@ local function GCD()
 end
 
 local function Enemies()
-	return targetModes[currentSpec][targetMode][1]
+	return var.enemy_count
 end
 
 local function TimeInCombat()
 	if combatStartTime > 0 then
 		return var.time - combatStartTime
-	end
-	if var.ability_casting then
-		return 0.1
 	end
 	return 0
 end
@@ -1082,9 +1104,30 @@ function Rip:refreshAura(timeStamp, guid)
 	aura.expires = timeStamp + min(max_duration, remains + duration)
 end
 
+function Rip:lowestRemains()
+	local _, aura, lowest
+	for _, aura in next, self.aura_targets do
+		if not lowest or aura.expires < lowest then
+			lowest = aura.expires
+		end
+	end
+	if lowest then
+		return lowest - (var.time - var.time_diff)
+	end
+	return 0
+end
+
 function Rip:multiplier()
 	local aura = self.aura_targets[Target.guid]
 	return aura and aura.multiplier or 0
+end
+
+function Rip:multiplierSum()
+	local sum, aura, _ = 0
+	for _, aura in next, self.aura_targets do
+		sum = sum + (aura.multiplier or 0)
+	end
+	return sum
 end
 
 function Rip:nextMultiplier()
@@ -1102,6 +1145,20 @@ function Rip:nextMultiplier()
 		elseif id == Bloodtalons.spellId then
 			multiplier = multiplier * 1.25
 		end
+	end
+	return multiplier
+end
+
+function Rip:multiplierMax()
+	local multiplier = 1.00
+	if TigersFury.known then
+		multiplier = multiplier * 1.15
+	end
+	if SavageRoar.known then
+		multiplier = multiplier * 1.10
+	end
+	if Bloodtalons.known then
+		multiplier = multiplier * 1.25
 	end
 	return multiplier
 end
@@ -1150,7 +1207,14 @@ function Thrash:nextMultiplier()
 end
 
 function Prowl:usable()
-	if InCombatLockdown() and not JungleStalker:up() then
+	if Prowl:up() or Shadowmeld:up() or (InCombatLockdown() and not JungleStalker:up()) then
+		return false
+	end
+	return Ability.usable(self)
+end
+
+function Shadowmeld:usable()
+	if Prowl:up() or Shadowmeld:up() or not UnitInParty('player') then
 		return false
 	end
 	return Ability.usable(self)
@@ -1362,11 +1426,22 @@ actions.finishers+=/ferocious_bite,max_energy=1
 	if SavageRoar:usable(true) and SavageRoar:down() then
 		return Pool(SavageRoar)
 	end
-	if PrimalWrath:usable(true) and Enemies() >= 2 then
+	if Target.timeToDie > max(8, Rip:remains() + 4) and Rip:multiplier() < var.rip_multiplier_max and Rip:nextMultiplier() >= var.rip_multiplier_max then
+		if Sabertooth.known and PrimalWrath:usable(true) then
+			return Pool(PrimalWrath)
+		elseif Rip:usable(true) then
+			return Pool(Rip)
+		end
+	end
+	if PrimalWrath:usable(true) and Enemies() > 1 and (Enemies() >= 5 or Rip:nextMultiplier() > (Rip:multiplierSum() / Enemies()) or Rip:lowestRemains() < 6) then
 		return Pool(PrimalWrath)
 	end
-	if Rip:usable(true) and (Rip:down() or (Target.timeToDie > 8 and ((Rip:refreshable() and not Sabertooth.known) or (Rip:remains() <= Rip:duration() * 0.8 and Rip:nextMultiplier() > Rip:multiplier())))) then
-		return Pool(Rip)
+	if Rip:down() or (Target.timeToDie > 8 and ((Rip:refreshable() and not Sabertooth.known) or (Rip:remains() <= Rip:duration() * 0.8 and Rip:nextMultiplier() > Rip:multiplier()))) then
+		if Sabertooth.known and PrimalWrath:usable(true) then
+			return Pool(PrimalWrath)
+		elseif Rip:usable(true) then
+			return Pool(Rip)
+		end
 	end
 	if SavageRoar:usable(true) and SavageRoar:remains() < 12 then
 		return Pool(SavageRoar)
@@ -1374,7 +1449,7 @@ actions.finishers+=/ferocious_bite,max_energy=1
 	if Maim:usable(true) and IronJaws:up() then
 		return Pool(Maim)
 	end
-	if Ferocious:usable(true) then
+	if FerociousBite:usable(true) then
 		return Pool(FerociousBite, 25)
 	end
 end
@@ -1445,7 +1520,7 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 			return Moonfire
 		end
 	end
-	if Thrash:usable(true) and Thrash:refreshable() then
+	if Thrash:usable(true) and Thrash:refreshable() and (Enemies() > 1 or Target.timeToDie > (Thrash:remains() + 4)) then
 		if IncarnationKingOfTheJungle:down() or WildFleshrending.known or Enemies() > 1 then
 			return Pool(Thrash)
 		end
@@ -1477,7 +1552,7 @@ actions.opener+=/moonfire_cat,if=!ticking
 actions.opener+=/rip,if=!ticking
 ]]
 	if TigersFury:usable() then
-		return TigersFury
+		UseCooldown(TigersFury)
 	end
 	if Rake:usable() and (Rake:down() or Prowl:up()) then
 		return Rake
@@ -1946,6 +2021,7 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', eventType, spellName, spellId))
 		return
 	end
+	var.time_diff = GetTime() - timeStamp
 --[[ DEBUG ]
 	print(format('EVENT %s TRACK CHECK FOR %s ID %d', eventType, spellName, spellId))
 	if eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH' or eventType == 'SPELL_PERIODIC_DAMAGE' or eventType == 'SPELL_DAMAGE' then
@@ -1977,8 +2053,13 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 		if castedAbility.travel_start and castedAbility.travel_start[dstGUID] then
 			castedAbility.travel_start[dstGUID] = nil
 		end
-		if Opt.auto_aoe and castedAbility.auto_aoe then
-			castedAbility:recordTargetHit(dstGUID)
+		if Opt.auto_aoe then
+			if castedAbility.auto_aoe then
+				castedAbility:recordTargetHit(dstGUID)
+			end
+			if castedAbility == Shred then
+				SetTargetMode(1)
+			end
 		end
 		if Opt.previous and Opt.miss_effect and eventType == 'SPELL_MISSED' and clawPanel:IsVisible() and castedAbility == clawPreviousPanel.ability then
 			clawPreviousPanel.border:SetTexture('Interface\\AddOns\\Claw\\misseffect.blp')
@@ -2098,6 +2179,11 @@ local function UpdateAbilityData()
 		ability.name, _, ability.icon = GetSpellInfo(ability.spellId)
 		ability.known = (IsPlayerSpell(ability.spellId) or (ability.spellId2 and IsPlayerSpell(ability.spellId2)) or Azerite.traits[ability.spellId]) and true or false
 	end
+	if currentSpec == SPEC.FERAL then
+		Swipe.known = true
+		Thrash.known = true
+		var.rip_multiplier_max = Rip:multiplierMax()
+	end
 end
 
 function events:PLAYER_EQUIPMENT_CHANGED()
@@ -2122,6 +2208,7 @@ end
 
 function events:PLAYER_SPECIALIZATION_CHANGED(unitName)
 	if unitName == 'player' then
+		currentSpec = GetSpecialization() or 0
 		Azerite:update()
 		UpdateAbilityData()
 		local _, i
@@ -2130,7 +2217,6 @@ function events:PLAYER_SPECIALIZATION_CHANGED(unitName)
 		end
 		clawPreviousPanel.ability = nil
 		PreviousGCD = {}
-		currentSpec = GetSpecialization() or 0
 		SetTargetMode(1)
 		UpdateTargetInfo()
 		events:PLAYER_REGEN_ENABLED()
