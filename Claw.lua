@@ -255,7 +255,8 @@ local targetModes = {
 		{1, ''},
 		{2, '2'},
 		{3, '3'},
-		{4, '4+'}
+		{4, '4'},
+		{5, '5+'}
 	},
 	[SPEC.GUARDIAN] = {
 		{1, ''},
@@ -272,6 +273,9 @@ local targetModes = {
 }
 
 local function SetTargetMode(mode)
+	if mode == targetMode then
+		return
+	end
 	targetMode = min(mode, #targetModes[currentSpec])
 	var.enemy_count = targetModes[currentSpec][targetMode][1]
 	clawPanel.targets:SetText(targetModes[currentSpec][targetMode][2])
@@ -289,7 +293,6 @@ local function ToggleTargetModeReverse()
 	SetTargetMode(mode < 1 and #targetModes[currentSpec] or mode)
 end
 Claw_ToggleTargetModeReverse = ToggleTargetModeReverse
-
 
 local autoAoe = {
 	abilities = {},
@@ -383,6 +386,17 @@ function Ability.add(spellId, buff, player, spellId2)
 	return ability
 end
 
+function Ability:match(spell)
+	if type(spell) == 'number' then
+		return spell == self.spellId or (self.spellId2 and spell == self.spellId2)
+	elseif type(spell) == 'string' then
+		return spell:lower() == self.name:lower()
+	elseif type(spell) == 'table' then
+		return spell == self
+	end
+	return false
+end
+
 function Ability:ready(seconds)
 	return self:cooldown() <= (seconds or 0)
 end
@@ -421,7 +435,7 @@ function Ability:remains()
 		if not id then
 			return 0
 		end
-		if id == self.spellId or id == self.spellId2 then
+		if self:match(id) then
 			if expires == 0 then
 				return 600 -- infinite duration
 			end
@@ -448,7 +462,7 @@ function Ability:up()
 		if not id then
 			return false
 		end
-		if id == self.spellId or id == self.spellId2 then
+		if self:match(id) then
 			return expires == 0 or expires - var.time > var.execute_remains
 		end
 	end
@@ -509,7 +523,7 @@ function Ability:stack()
 		if not id then
 			return 0
 		end
-		if id == self.spellId or id == self.spellId2 then
+		if self:match(id) then
 			return (expires == 0 or expires - var.time > var.execute_remains) and count or 0
 		end
 	end
@@ -645,7 +659,7 @@ local trackAuras = {
 }
 
 function trackAuras:purge()
-	local now = GetTime()
+	local now = GetTime() - var.time_diff
 	local _, ability, guid, expires
 	for _, ability in next, self.abilities do
 		for guid, aura in next, ability.aura_targets do
@@ -653,6 +667,13 @@ function trackAuras:purge()
 				ability:removeAura(guid)
 			end
 		end
+	end
+end
+
+function trackAuras:remove(guid)
+	local _, ability
+	for _, ability in next, self.abilities do
+		ability:removeAura(guid)
 	end
 end
 
@@ -664,16 +685,12 @@ function Ability:trackAuras()
 	end
 end
 
-function Ability:applyAura(guid)
+function Ability:applyAura(guid) end
 
-end
-
-function Ability:refreshAura(guid)
-
-end
+function Ability:refreshAura(guid) end
 
 function Ability:removeAura(guid)
-	if self.aura_targets then
+	if self.aura_targets[guid] then
 		self.aura_targets[guid] = nil
 	end
 end
@@ -1049,13 +1066,13 @@ function Rake:nextMultiplier()
 		if not id then
 			break
 		end
-		if id == Shadowmeld.spellId or id == Prowl.spellId or id == IncarnationKingOfTheJungle.spellId then
+		if Shadowmeld:match(id) or Prowl:match(id) or IncarnationKingOfTheJungle:match(id) then
 			stealthed = true
-		elseif id == TigersFury.spellId then
+		elseif TigersFury:match(id) then
 			multiplier = multiplier * 1.15
-		elseif id == SavageRoar.spellId then
+		elseif SavageRoar:match(id) then
 			multiplier = multiplier * 1.10
-		elseif id == Bloodtalons.spellId then
+		elseif Bloodtalons:match(id) then
 			multiplier = multiplier * 1.25
 		end
 	end
@@ -1104,10 +1121,11 @@ function Rip:refreshAura(timeStamp, guid)
 	aura.expires = timeStamp + min(max_duration, remains + duration)
 end
 
-function Rip:lowestRemains()
-	local _, aura, lowest
-	for _, aura in next, self.aura_targets do
-		if not lowest or aura.expires < lowest then
+-- this will return the lowest remaining duration Rip on an enemy that isn't main target
+function Rip:lowestRemainsOthers()
+	local guid, aura, lowest
+	for guid, aura in next, self.aura_targets do
+		if guid ~= Target.guid and (not lowest or aura.expires < lowest) then
 			lowest = aura.expires
 		end
 	end
@@ -1138,11 +1156,11 @@ function Rip:nextMultiplier()
 		if not id then
 			break
 		end
-		if id == TigersFury.spellId then
+		if TigersFury:match(id) then
 			multiplier = multiplier * 1.15
-		elseif id == SavageRoar.spellId then
+		elseif SavageRoar:match(id) then
 			multiplier = multiplier * 1.10
-		elseif id == Bloodtalons.spellId then
+		elseif Bloodtalons:match(id) then
 			multiplier = multiplier * 1.25
 		end
 	end
@@ -1195,11 +1213,11 @@ function Thrash:nextMultiplier()
 		if not id then
 			break
 		end
-		if id == TigersFury.spellId then
+		if TigersFury:match(id) then
 			multiplier = multiplier * 1.15
-		elseif id == SavageRoar.spellId then
+		elseif SavageRoar:match(id) then
 			multiplier = multiplier * 1.10
-		elseif id == Bloodtalons.spellId then
+		elseif Bloodtalons:match(id) then
 			multiplier = multiplier * 1.25
 		end
 	end
@@ -1433,7 +1451,10 @@ actions.finishers+=/ferocious_bite,max_energy=1
 			return Pool(Rip)
 		end
 	end
-	if PrimalWrath:usable(true) and Enemies() > 1 and (Enemies() >= 5 or Rip:nextMultiplier() > (Rip:multiplierSum() / Enemies()) or Rip:lowestRemains() < 6) then
+	if Sabertooth.known and FerociousBite:usable(true) and Rip:up() and between(Enemies(), 2, 3) and Rip:lowestRemainsOthers() > (((Berserk:up() or IncarnationKingOfTheJungle:up()) and 5 or 8) * (Enemies() - 1)) then
+		return Pool(FerociousBite, Rip:remains() < 1 and 0 or 25)
+	end
+	if PrimalWrath:usable(true) and Enemies() > 1 and (Enemies() >= 5 or Rip:nextMultiplier() > (Rip:multiplierSum() / Enemies()) or Rip:lowestRemainsOthers() < ((Berserk:up() or IncarnationKingOfTheJungle:up()) and 5 or 8)) then
 		return Pool(PrimalWrath)
 	end
 	if Rip:down() or (Target.timeToDie > 8 and ((Rip:refreshable() and not Sabertooth.known) or (Rip:remains() <= Rip:duration() * 0.8 and Rip:nextMultiplier() > Rip:multiplier()))) then
@@ -2002,15 +2023,17 @@ end
 
 function events:COMBAT_LOG_EVENT_UNFILTERED()
 	local timeStamp, eventType, hideCaster, srcGUID, srcName, srcFlags, srcRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellId, spellName = CombatLogGetCurrentEventInfo()
-	if Opt.auto_aoe then
-		if eventType == 'SWING_DAMAGE' or eventType == 'SWING_MISSED' then
-			if dstGUID == var.player then
-				autoAoe:add(srcGUID)
-			elseif srcGUID == var.player then
-				autoAoe:add(dstGUID)
-			end
-		elseif eventType == 'UNIT_DIED' or eventType == 'UNIT_DESTROYED' or eventType == 'UNIT_DISSIPATES' or eventType == 'SPELL_INSTAKILL' or eventType == 'PARTY_KILL' then
+	if eventType == 'UNIT_DIED' or eventType == 'UNIT_DESTROYED' or eventType == 'UNIT_DISSIPATES' or eventType == 'SPELL_INSTAKILL' or eventType == 'PARTY_KILL' then
+		trackAuras:remove(dstGUID)
+		if Opt.auto_aoe then
 			autoAoe:remove(dstGUID)
+		end
+	end
+	if Opt.auto_aoe and (eventType == 'SWING_DAMAGE' or eventType == 'SWING_MISSED') then
+		if dstGUID == var.player then
+			autoAoe:add(srcGUID)
+		elseif srcGUID == var.player then
+			autoAoe:add(dstGUID)
 		end
 	end
 	if srcGUID ~= var.player then
@@ -2046,6 +2069,15 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 		end
 		return
 	end
+	if castedAbility.aura_targets then
+		if eventType == 'SPELL_AURA_APPLIED' then
+			castedAbility:applyAura(timeStamp, dstGUID)
+		elseif eventType == 'SPELL_AURA_REFRESH' then
+			castedAbility:refreshAura(timeStamp, dstGUID)
+		elseif eventType == 'SPELL_AURA_REMOVED' then
+			castedAbility:removeAura(dstGUID)
+		end
+	end
 	if eventType == 'SPELL_DAMAGE' and Sabertooth.known and castedAbility == FerociousBite and Rip.aura_targets[dstGUID] then
 		Rip:refreshAura(timeStamp, dstGUID)
 	end
@@ -2063,15 +2095,6 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 		end
 		if Opt.previous and Opt.miss_effect and eventType == 'SPELL_MISSED' and clawPanel:IsVisible() and castedAbility == clawPreviousPanel.ability then
 			clawPreviousPanel.border:SetTexture('Interface\\AddOns\\Claw\\misseffect.blp')
-		end
-	end
-	if castedAbility.aura_targets then
-		if eventType == 'SPELL_AURA_APPLIED' then
-			castedAbility:applyAura(timeStamp, dstGUID)
-		elseif eventType == 'SPELL_AURA_REFRESH' then
-			castedAbility:refreshAura(timeStamp, dstGUID)
-		elseif eventType == 'SPELL_AURA_REMOVED' or eventType == 'UNIT_DIED' or eventType == 'UNIT_DESTROYED' or eventType == 'UNIT_DISSIPATES' or eventType == 'SPELL_INSTAKILL' or eventType == 'PARTY_KILL' then
-			castedAbility:removeAura(dstGUID)
 		end
 	end
 end
