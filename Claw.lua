@@ -296,8 +296,35 @@ Claw_ToggleTargetModeReverse = ToggleTargetModeReverse
 
 local autoAoe = {
 	abilities = {},
-	targets = {}
+	targets = {},
+	blacklist = {}
 }
+
+function autoAoe:add(guid, update)
+	if self.blacklist[guid] then
+		return
+	end
+	local new = not self.targets[guid]
+	self.targets[guid] = GetTime()
+	if update and new then
+		self:update()
+	end
+end
+
+function autoAoe:remove(guid)
+	self.blacklist[guid] = GetTime()
+	if self.targets[guid] then
+		self.targets[guid] = nil
+		self:update()
+	end
+end
+
+function autoAoe:clear(guid)
+	local guid
+	for guid in next, self.targets do
+		self.targets[guid] = nil
+	end
+end
 
 function autoAoe:update()
 	local count, i = 0
@@ -318,21 +345,6 @@ function autoAoe:update()
 	end
 end
 
-function autoAoe:add(guid)
-	local new = not self.targets[guid]
-	self.targets[guid] = GetTime()
-	if new then
-		self:update()
-	end
-end
-
-function autoAoe:remove(guid)
-	if self.targets[guid] then
-		self.targets[guid] = nil
-		self:update()
-	end
-end
-
 function autoAoe:purge()
 	local update, guid, t
 	local now = GetTime()
@@ -340,6 +352,12 @@ function autoAoe:purge()
 		if now - t > Opt.auto_aoe_ttl then
 			self.targets[guid] = nil
 			update = true
+		end
+	end
+	-- blacklist enemies for 2 seconds when they die to prevent out of order events from re-adding them
+	for guid, t in next, self.blacklist do
+		if now - t > 2 then
+			self.blacklist[guid] = nil
 		end
 	end
 	if update then
@@ -606,46 +624,26 @@ function Ability:azeriteRank()
 	return Azerite.traits[self.spellId] or 0
 end
 
-function Ability:setAutoAoe(enabled)
-	if enabled and not self.auto_aoe then
-		self.auto_aoe = true
-		self.first_hit_time = nil
-		self.targets_hit = {}
-		autoAoe.abilities[#autoAoe.abilities + 1] = self
-	end
-	if not enabled and self.auto_aoe then
-		self.auto_aoe = nil
-		self.first_hit_time = nil
-		self.targets_hit = nil
-		local i
-		for i = 1, #autoAoe.abilities do
-			if autoAoe.abilities[i] == self then
-				autoAoe.abilities[i] = nil
-				break
-			end
-		end
-	end
+function Ability:autoAoe()
+	self.auto_aoe = true
+	self.first_hit_time = nil
+	self.targets_hit = {}
 end
 
 function Ability:recordTargetHit(guid)
-	local t = GetTime()
-	self.targets_hit[guid] = t
+	self.targets_hit[guid] = GetTime()
 	if not self.first_hit_time then
-		self.first_hit_time = t
+		self.first_hit_time = self.targets_hit[guid]
 	end
 end
 
 function Ability:updateTargetsHit()
 	if self.first_hit_time and GetTime() - self.first_hit_time >= 0.3 then
 		self.first_hit_time = nil
-		local guid, t
-		for guid in next, autoAoe.targets do
-			if not self.targets_hit[guid] then
-				autoAoe.targets[guid] = nil
-			end
-		end
-		for guid, t in next, self.targets_hit do
-			autoAoe.targets[guid] = t
+		autoAoe:clear()
+		local guid
+		for guid in next, self.targets_hit do
+			autoAoe:add(guid)
 			self.targets_hit[guid] = nil
 		end
 		autoAoe:update()
@@ -753,11 +751,11 @@ Thrash.buff_duration = 15
 Thrash.energy_cost = 40
 Thrash.tick_interval = 3
 Thrash.hasted_ticks = true
-Thrash:setAutoAoe(true)
+Thrash:autoAoe()
 Thrash:trackAuras()
 local Swipe = Ability.add(106785, false, true)
 Swipe.energy_cost = 35
-Swipe:setAutoAoe(true)
+Swipe:autoAoe()
 local TigersFury = Ability.add(5217, true, true)
 TigersFury.cooldown_duration = 30
 TigersFury.triggers_gcd = false
@@ -790,7 +788,7 @@ ScentOfBlood.buff_duration = 6
 local PrimalWrath = Ability.add(285381, false, true)
 PrimalWrath.energy_cost = 1
 PrimalWrath.cp_cost = 1
-PrimalWrath:setAutoAoe(true)
+PrimalWrath:autoAoe()
 ------ Procs
 local Clearcasting = Ability.add(135700, true, true)
 Clearcasting.buff_duration = 15
@@ -2031,9 +2029,9 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 	end
 	if Opt.auto_aoe and (eventType == 'SWING_DAMAGE' or eventType == 'SWING_MISSED') then
 		if dstGUID == var.player then
-			autoAoe:add(srcGUID)
+			autoAoe:add(srcGUID, true)
 		elseif srcGUID == var.player then
-			autoAoe:add(dstGUID)
+			autoAoe:add(dstGUID, true)
 		end
 	end
 	if srcGUID ~= var.player then
@@ -2207,6 +2205,12 @@ local function UpdateAbilityData()
 		Thrash.known = true
 		var.rip_multiplier_max = Rip:multiplierMax()
 	end
+	autoAoe.abilities = {}
+	for _, ability in next, abilities do
+		if ability.auto_aoe and ability.known then
+			autoAoe.abilities[#autoAoe.abilities + 1] = ability
+		end
+	end
 end
 
 function events:PLAYER_EQUIPMENT_CHANGED()
@@ -2279,9 +2283,7 @@ clawPanel:SetScript('OnUpdate', function(self, elapsed)
 		if Opt.auto_aoe then
 			local _, ability
 			for _, ability in next, autoAoe.abilities do
-				if ability.known then
-					ability:updateTargetsHit()
-				end
+				ability:updateTargetsHit()
 			end
 			autoAoe:purge()
 		end
