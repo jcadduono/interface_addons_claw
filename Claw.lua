@@ -1382,8 +1382,8 @@ actions+=/run_action_list,name=generators
 		return Rake
 	end
 	self:cooldowns()
-	if Sabertooth.known and FerociousBite:usable() and Rip:up() and Rip:remains() < 3 and Target.timeToDie > 10 then
-		return FerociousBite
+	if Sabertooth.known and FerociousBite:usable(true) and Rip:up() and Rip:remains() < 3 and Target.timeToDie > 10 then
+		return Pool(FerociousBite, Rip:remains() < 1 and 0 or 25)
 	end
 	if Bloodtalons.known and Regrowth:usable() and ComboPoints() == 5 and PredatorySwiftness:up() and Bloodtalons:down() and (IncarnationKingOfTheJungle:down() or Rip:remains() < 8) then
 		return Regrowth
@@ -1585,7 +1585,7 @@ actions.opener+=/rip,if=!ticking
 	if LunarInspiration.known and Moonfire:down() then
 		return Moonfire
 	end
-	if ComboPoints() >= 4 and PrimalWrath:usable() then
+	if ComboPoints() >= ((Berserk:remains() > 6 or TigersFury:ready()) and 3 or 5) and PrimalWrath:usable() then
 		return PrimalWrath
 	end
 	if Rip:usable() then
