@@ -2573,5 +2573,5 @@ function SlashCmdList.Claw(msg, editbox)
 	} do
 		print('  ' .. SLASH_Claw1 .. ' ' .. cmd)
 	end
-	print('Got ideas for improvement or found a bug? Contact |cFFFF7D0AInbred|cFFFFD000-Dalaran|r or |cFFFFD000Spy#1955|r (the author of this addon)')
+	print('Got ideas for improvement or found a bug? Contact |cFFFF7D0AKilobyte|cFFFFD000-Dalaran|r or |cFFFFD000Spy#1955|r (the author of this addon)')
 end
