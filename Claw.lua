@@ -295,7 +295,6 @@ end
 Claw_ToggleTargetModeReverse = ToggleTargetModeReverse
 
 local autoAoe = {
-	abilities = {},
 	targets = {},
 	blacklist = {}
 }
@@ -369,8 +368,11 @@ end
 
 -- Start Abilities
 
-local Ability, abilities, abilityBySpellId = {}, {}, {}
+local Ability = {}
 Ability.__index = Ability
+local abilities = {
+	all = {}
+}
 
 function Ability.add(spellId, buff, player, spellId2)
 	local ability = {
@@ -396,11 +398,7 @@ function Ability.add(spellId, buff, player, spellId2)
 		auraFilter = (buff and 'HELPFUL' or 'HARMFUL') .. (player and '|PLAYER' or '')
 	}
 	setmetatable(ability, Ability)
-	abilities[#abilities + 1] = ability
-	abilityBySpellId[spellId] = ability
-	if spellId2 then
-		abilityBySpellId[spellId2] = ability
-	end
+	abilities.all[#abilities.all + 1] = ability
 	return ability
 end
 
@@ -652,14 +650,12 @@ end
 
 -- start DoT tracking
 
-local trackAuras = {
-	abilities = {}
-}
+local trackAuras = {}
 
 function trackAuras:purge()
 	local now = GetTime() - var.time_diff
 	local _, ability, guid, expires
-	for _, ability in next, self.abilities do
+	for _, ability in next, abilities.trackAuras do
 		for guid, aura in next, ability.aura_targets do
 			if aura.expires <= now then
 				ability:removeAura(guid)
@@ -670,17 +666,13 @@ end
 
 function trackAuras:remove(guid)
 	local _, ability
-	for _, ability in next, self.abilities do
+	for _, ability in next, abilities.trackAuras do
 		ability:removeAura(guid)
 	end
 end
 
 function Ability:trackAuras()
 	self.aura_targets = {}
-	trackAuras.abilities[self.spellId] = self
-	if self.spellId2 then
-		trackAuras.abilities[self.spellId2] = self
-	end
 end
 
 function Ability:applyAura(guid) end
@@ -713,12 +705,13 @@ Moonfire.buff_duration = 18
 Moonfire.energy_cost = 30
 Moonfire.tick_interval = 2
 Moonfire.hasted_ticks = true
-local WildChargeCat = Ability.add(49376, false, true)
-WildChargeCat.cooldown_duration = 15
 ------ Procs
 
 ------ Talents
-
+local WildCharge = Ability.add(102401, false, true)
+WildCharge.cooldown_duration = 15
+local WildChargeCat = Ability.add(49376, false, true)
+WildChargeCat.cooldown_duration = 15
 ---- Balance
 
 ------ Talents
@@ -790,9 +783,9 @@ PrimalWrath.energy_cost = 1
 PrimalWrath.cp_cost = 1
 PrimalWrath:autoAoe()
 ------ Procs
-local Clearcasting = Ability.add(135700, true, true)
+local Clearcasting = Ability.add(16864, true, true, 135700)
 Clearcasting.buff_duration = 15
-local PredatorySwiftness = Ability.add(69369, true, true)
+local PredatorySwiftness = Ability.add(16974, true, true, 69369)
 PredatorySwiftness.buff_duration = 12
 ---- Guardian
 
@@ -1251,7 +1244,7 @@ local function UpdateVars()
 	start, duration = GetSpellCooldown(61304)
 	var.gcd_remains = start > 0 and duration - (var.time - start) or 0
 	_, _, _, _, remains, _, _, _, spellId = UnitCastingInfo('player')
-	var.ability_casting = abilityBySpellId[spellId]
+	var.ability_casting = abilities.bySpellId[spellId]
 	var.execute_remains = max(remains and (remains / 1000 - var.time) or 0, var.gcd_remains)
 	var.haste_factor = 1 / (1 + UnitSpellHaste('player') / 100)
 	if currentForm == FORM.CAT then
@@ -2004,7 +1997,7 @@ function events:UNIT_SPELLCAST_SENT(srcName, destName, castId, spellId)
 	if srcName ~= 'player' then
 		return
 	end
-	local castedAbility = abilityBySpellId[spellId]
+	local castedAbility = abilities.bySpellId[spellId]
 	if not castedAbility then
 		return
 	end
@@ -2037,7 +2030,7 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 	if srcGUID ~= var.player then
 		return
 	end
-	local castedAbility = abilityBySpellId[spellId]
+	local castedAbility = abilities.bySpellId[spellId]
 	if not castedAbility then
 		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', eventType, spellName, spellId))
 		return
@@ -2168,11 +2161,9 @@ end
 function events:PLAYER_REGEN_ENABLED()
 	combatStartTime = 0
 	local _, ability, guid
-	for _, ability in next, abilities do
-		if ability.travel_start then
-			for guid in next, ability.travel_start do
-				ability.travel_start[guid] = nil
-			end
+	for _, ability in next, abilities.velocity do
+		for guid in next, ability.travel_start do
+			ability.travel_start[guid] = nil
 		end
 	end
 	if Opt.auto_aoe then
@@ -2196,19 +2187,35 @@ local function UpdateAbilityData()
 	var.rage_max = UnitPowerMax('player', 1)
 	var.combo_points_max = UnitPowerMax('player', 4)
 	local _, ability
-	for _, ability in next, abilities do
+	for _, ability in next, abilities.all do
 		ability.name, _, ability.icon = GetSpellInfo(ability.spellId)
 		ability.known = (IsPlayerSpell(ability.spellId) or (ability.spellId2 and IsPlayerSpell(ability.spellId2)) or Azerite.traits[ability.spellId]) and true or false
 	end
+	WildChargeCat.known = WildCharge.known
 	if currentSpec == SPEC.FERAL then
 		Swipe.known = true
 		Thrash.known = true
 		var.rip_multiplier_max = Rip:multiplierMax()
 	end
-	autoAoe.abilities = {}
-	for _, ability in next, abilities do
-		if ability.auto_aoe and ability.known then
-			autoAoe.abilities[#autoAoe.abilities + 1] = ability
+	abilities.bySpellId = {}
+	abilities.velocity = {}
+	abilities.autoAoe = {}
+	abilities.trackAuras = {}
+	for _, ability in next, abilities.all do
+		if ability.known then
+			abilities.bySpellId[ability.spellId] = ability
+			if ability.spellId2 then
+				abilities.bySpellId[ability.spellId2] = ability
+			end
+			if ability.velocity > 0 then
+				abilities.velocity[#abilities.velocity + 1] = ability
+			end
+			if ability.auto_aoe then
+				abilities.autoAoe[#abilities.autoAoe + 1] = ability
+			end
+			if ability.aura_targets then
+				abilities.trackAuras[#abilities.trackAuras + 1] = ability
+			end
 		end
 	end
 end
@@ -2282,7 +2289,7 @@ clawPanel:SetScript('OnUpdate', function(self, elapsed)
 		trackAuras:purge()
 		if Opt.auto_aoe then
 			local _, ability
-			for _, ability in next, autoAoe.abilities do
+			for _, ability in next, abilities.autoAoe do
 				ability:updateTargetsHit()
 			end
 			autoAoe:purge()
