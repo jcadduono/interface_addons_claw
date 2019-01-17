@@ -1568,7 +1568,7 @@ actions.opener+=/rip,if=!ticking
 	if Rake:usable() and (Rake:down() or Prowl:up()) then
 		return Rake
 	end
-	if Rip:up() or Enemies() > 2 then
+	if Rip:up() or Enemies() > 1 then
 		var.opener_done = true
 		return self:main()
 	end
