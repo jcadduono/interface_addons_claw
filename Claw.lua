@@ -1334,14 +1334,13 @@ actions.precombat+=/snapshot_stats
 actions.precombat+=/potion
 actions.precombat+=/berserk
 ]]
-		if Bloodtalons.known and Bloodtalons:remains() < 6 then
-			UseCooldown(Regrowth)
-		end
 		if Prowl:usable() then
-			return Prowl
+			UseCooldown(Prowl)
+		elseif CatForm:down() then
+			UseCooldown(CatForm)
 		end
-		if CatForm:down() then
-			return CatForm
+		if Bloodtalons.known and Bloodtalons:remains() < 6 then
+			return Regrowth
 		end
 		if not InArenaOrBattleground() then
 			if Opt.pot and BattlePotionOfAgility:usable() then
