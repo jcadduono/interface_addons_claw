@@ -30,7 +30,7 @@ local Opt -- use this as a local table reference to Claw
 SLASH_Claw1, SLASH_Claw2 = '/claw', '/cl'
 BINDING_HEADER_CLAW = 'Claw'
 
-local function InitializeVariables()
+local function InitializeOpts()
 	local function SetDefaults(t, ref)
 		local k, v
 		for k, v in next, ref do
@@ -75,7 +75,7 @@ local function InitializeVariables()
 			restoration = true,
 		},
 		alpha = 1,
-		frequency = 0.05,
+		frequency = 0.2,
 		previous = true,
 		always_on = false,
 		cooldown = true,
@@ -111,7 +111,13 @@ local FORM = {
 
 local events, glows = {}, {}
 
-local abilityTimer, currentSpec, currentForm, targetMode, combatStartTime = 0, 0, 0, 0, 0
+local timer = {
+	combat = 0,
+	display = 0,
+	health = 0
+}
+
+local currentSpec, currentForm, targetMode, combatStartTime = 0, 0, 0, 0
 
 -- current target information
 local Target = {
@@ -1229,6 +1235,20 @@ function Thrash:nextMultiplier()
 	return multiplier
 end
 
+function Bloodtalons:up()
+	if self.known and Regrowth:casting() then
+		return true
+	end
+	return Ability.up(self)
+end
+
+function Bloodtalons:remains()
+	if self.known and Regrowth:casting() then
+		return self:duration()
+	end
+	return Ability.remains(self)
+end
+
 function Prowl:usable()
 	if Prowl:up() or Shadowmeld:up() or (InCombatLockdown() and not JungleStalker:up()) then
 		return false
@@ -1245,50 +1265,6 @@ end
 
 -- End Ability Modifications
 
-local function UpdateVars()
-	local _, start, duration, remains, spellId
-	var.last_main = var.main
-	var.last_cd = var.cd
-	var.last_extra = var.extra
-	var.main =  nil
-	var.cd = nil
-	var.extra = nil
-	var.pool_energy = nil
-	var.time = GetTime()
-	start, duration = GetSpellCooldown(61304)
-	var.gcd_remains = start > 0 and duration - (var.time - start) or 0
-	_, _, _, _, remains, _, _, _, spellId = UnitCastingInfo('player')
-	var.ability_casting = abilities.bySpellId[spellId]
-	var.execute_remains = max(remains and (remains / 1000 - var.time) or 0, var.gcd_remains)
-	var.haste_factor = 1 / (1 + UnitSpellHaste('player') / 100)
-	if currentForm == FORM.CAT then
-		var.gcd = 1
-		var.energy_regen = GetPowerRegen()
-		var.energy_max = UnitPowerMax('player', 3)
-		var.energy = UnitPower('player', 3) + (var.energy_regen * var.execute_remains)
-		var.energy = min(max(var.energy, 0), var.energy_max)
-		var.combo_points = UnitPower('player', 4)
-	else
-		var.mana_regen = GetPowerRegen()
-		var.gcd = 1.5 * var.haste_factor
-	end
-	if currentForm == FORM.BEAR then
-		var.rage = UnitPower('player', 1)
-	end
-	var.mana = UnitPower('player', 0) + (var.mana_regen * var.execute_remains)
-	if var.ability_casting then
-		var.mana = var.mana - var.ability_casting:manaCost()
-	end
-	var.mana = min(max(var.mana, 0), var.mana_max)
-	Target.health = UnitHealth('target')
-	table.remove(Target.healthArray, 1)
-	Target.healthArray[#Target.healthArray + 1] = Target.health
-	Target.timeToDieMax = Target.health / UnitHealthMax('player') * 10
-	Target.healthPercentage = Target.healthMax > 0 and (Target.health / Target.healthMax * 100) or 100
-	Target.healthLostPerSec = (Target.healthArray[1] - Target.health) / 3
-	Target.timeToDie = Target.healthLostPerSec > 0 and min(Target.timeToDieMax, (Target.health - (Target.healthLostPerSec * var.execute_remains) / Target.healthLostPerSec)) or Target.timeToDieMax
-end
-
 local function UseCooldown(ability, overwrite, always)
 	if always or (Opt.cooldown and (not Opt.boss_only or Target.boss) and (not var.cd or overwrite)) then
 		var.cd = ability
@@ -1302,10 +1278,7 @@ local function UseExtra(ability, overwrite)
 end
 
 local function Pool(ability, extra)
-	local deficit = ability:energyCost() + (extra or 0) - var.energy
-	if deficit > 0 then
-		var.pool_energy = deficit
-	end
+	var.pool_energy = ability:energyCost() + (extra or 0)
 	return ability
 end
 
@@ -1386,7 +1359,7 @@ actions+=/run_action_list,name=generators
 		return Rake
 	end
 	self:cooldowns()
-	if Sabertooth.known and FerociousBite:usable(true) and Rip:up() and Rip:remains() < 3 and Target.timeToDie > 10 then
+	if Sabertooth.known and FerociousBite:usable(true) and Rip:up() and Rip:remains() < 3 and Target.timeToDie > 10 and (Enemies() < 3 or Rip:lowestRemainsOthers() > 8) then
 		return Pool(FerociousBite, Rip:remains() < 1 and 0 or 25)
 	end
 	if Bloodtalons.known and Regrowth:usable() and ComboPoints() == 5 and PredatorySwiftness:up() and Bloodtalons:down() and (IncarnationKingOfTheJungle:down() or Rip:remains() < 8) then
@@ -1903,17 +1876,79 @@ local function UpdateAlpha()
 	clawExtraPanel:SetAlpha(Opt.alpha)
 end
 
-local function UpdateHealthArray()
-	Target.healthArray = {}
-	local i
-	for i = 1, floor(3 / Opt.frequency) do
-		Target.healthArray[i] = 0
+local function UpdateTargetHealth()
+	timer.health = 0
+	Target.health = UnitHealth('target')
+	table.remove(Target.healthArray, 1)
+	Target.healthArray[15] = Target.health
+	Target.timeToDieMax = Target.health / UnitHealthMax('player') * 10
+	Target.healthPercentage = Target.healthMax > 0 and (Target.health / Target.healthMax * 100) or 100
+	Target.healthLostPerSec = (Target.healthArray[1] - Target.health) / 3
+	Target.timeToDie = Target.healthLostPerSec > 0 and min(Target.timeToDieMax, Target.health / Target.healthLostPerSec) or Target.timeToDieMax
+end
+
+local function UpdateDisplay()
+	timer.display = 0
+	if Opt.dimmer then
+		if not var.main then
+			clawPanel.dimmer:Hide()
+		elseif var.main.spellId and IsUsableSpell(var.main.spellId) then
+			clawPanel.dimmer:Hide()
+		elseif var.main.itemId and IsUsableItem(var.main.itemId) then
+			clawPanel.dimmer:Hide()
+		else
+			clawPanel.dimmer:Show()
+		end
+	end
+	if var.pool_energy then
+		local deficit = var.pool_energy - UnitPower('player', 3)
+		if deficit > 0 then
+			clawPanel.text:SetText(format('POOL %d', deficit))
+			clawPanel.text:Show()
+		else
+			clawPanel.text:Hide()
+		end
+	else
+		clawPanel.text:Hide()
 	end
 end
 
 local function UpdateCombat()
-	abilityTimer = 0
-	UpdateVars()
+	timer.combat = 0
+	local _, start, duration, remains, spellId
+	var.last_main = var.main
+	var.last_cd = var.cd
+	var.last_extra = var.extra
+	var.main =  nil
+	var.cd = nil
+	var.extra = nil
+	var.pool_energy = nil
+	var.time = GetTime()
+	start, duration = GetSpellCooldown(61304)
+	var.gcd_remains = start > 0 and duration - (var.time - start) or 0
+	_, _, _, _, remains, _, _, _, spellId = UnitCastingInfo('player')
+	var.ability_casting = abilities.bySpellId[spellId]
+	var.execute_remains = max(remains and (remains / 1000 - var.time) or 0, var.gcd_remains)
+	var.haste_factor = 1 / (1 + UnitSpellHaste('player') / 100)
+	if currentForm == FORM.CAT then
+		var.gcd = 1
+		var.energy_regen = GetPowerRegen()
+		var.energy_max = UnitPowerMax('player', 3)
+		var.energy = UnitPower('player', 3) + (var.energy_regen * var.execute_remains)
+		var.energy = min(max(var.energy, 0), var.energy_max)
+	else
+		var.mana_regen = GetPowerRegen()
+		var.gcd = 1.5 * var.haste_factor
+	end
+	if currentForm == FORM.BEAR then
+		var.rage = UnitPower('player', 1)
+	end
+	var.mana = UnitPower('player', 0) + (var.mana_regen * var.execute_remains)
+	if var.ability_casting then
+		var.mana = var.mana - var.ability_casting:manaCost()
+	end
+	var.mana = min(max(var.mana, 0), var.mana_max)
+
 	var.main = APL[currentSpec]:main()
 	if var.main ~= var.last_main then
 		if var.main then
@@ -1924,12 +1959,6 @@ local function UpdateCombat()
 			clawPanel.icon:Hide()
 			clawPanel.border:Hide()
 		end
-	end
-	if var.pool_energy then
-		clawPanel.text:SetText(format('POOL %d', var.pool_energy))
-		clawPanel.text:Show()
-	else
-		clawPanel.text:Hide()
 	end
 	if var.cd ~= var.last_cd then
 		if var.cd then
@@ -1947,21 +1976,17 @@ local function UpdateCombat()
 			clawExtraPanel:Hide()
 		end
 	end
-	if Opt.dimmer then
-		if not var.main then
-			clawPanel.dimmer:Hide()
-		elseif var.main.spellId and IsUsableSpell(var.main.spellId) then
-			clawPanel.dimmer:Hide()
-		elseif var.main.itemId and IsUsableItem(var.main.itemId) then
-			clawPanel.dimmer:Hide()
-		else
-			clawPanel.dimmer:Show()
-		end
-	end
 	if Opt.interrupt then
 		UpdateInterrupt()
 	end
 	UpdateGlows()
+	UpdateDisplay()
+end
+
+local function UpdateCombatWithin(seconds)
+	if Opt.frequency - timer.combat > seconds then
+		timer.combat = max(seconds, Opt.frequency - seconds)
+	end
 end
 
 function events:SPELL_UPDATE_COOLDOWN()
@@ -1982,6 +2007,14 @@ function events:SPELL_UPDATE_COOLDOWN()
 	end
 end
 
+function events:UNIT_POWER_UPDATE(srcName, powerType)
+	if srcName ~= 'player' or powerType ~= 'COMBO_POINTS' then
+		return
+	end
+	var.combo_points = UnitPower('player', 4)
+	UpdateCombatWithin(0.05)
+end
+
 function events:ADDON_LOADED(name)
 	if name == 'Claw' then
 		Opt = Claw
@@ -1992,9 +2025,8 @@ function events:ADDON_LOADED(name)
 		if UnitLevel('player') < 110 then
 			print('[|cFFFFD000Warning|r] Claw is not designed for players under level 110, and almost certainly will not operate properly!')
 		end
-		InitializeVariables()
+		InitializeOpts()
 		Azerite:initialize()
-		UpdateHealthArray()
 		UpdateDraggable()
 		UpdateAlpha()
 		SnapAllPanels()
@@ -2022,6 +2054,18 @@ function events:UNIT_SPELLCAST_SENT(srcName, destName, castId, spellId)
 		Rake.next_multiplier = Rake:nextMultiplier()
 	elseif castedAbility == Thrash then
 		Thrash.next_multiplier = Thrash:nextMultiplier()
+	end
+end
+
+function events:UNIT_SPELLCAST_START(srcName)
+	if Opt.interrupt and srcName == 'target' then
+		UpdateCombatWithin(0.05)
+	end
+end
+
+function events:UNIT_SPELLCAST_STOP(srcName)
+	if Opt.interrupt and srcName == 'target' then
+		UpdateCombatWithin(0.05)
 	end
 end
 
@@ -2056,6 +2100,19 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 		castedAbility.last_trigger = timeStamp
 	end
 --[ DEBUG ]]
+	if eventType == 'SPELL_CAST_START' or
+	   eventType == 'SPELL_CAST_SUCCESS' or
+	   eventType == 'SPELL_CAST_FAILED' or
+	   eventType == 'SPELL_AURA_REMOVED' or
+	   eventType == 'SPELL_DAMAGE' or
+	   eventType == 'SPELL_HEAL' or
+	   eventType == 'SPELL_MISSED' or
+	   eventType == 'SPELL_AURA_APPLIED' or
+	   eventType == 'SPELL_AURA_REFRESH' or
+	   eventType == 'SPELL_AURA_REMOVED'
+	then
+		UpdateCombatWithin(0.05)
+	end
 	if eventType == 'SPELL_CAST_SUCCESS' then
 		var.last_ability = castedAbility
 		if castedAbility.triggers_gcd then
@@ -2115,10 +2172,11 @@ local function UpdateTargetInfo()
 		Target.hostile = true
 		Target.healthMax = 0
 		local i
-		for i = 1, #Target.healthArray do
+		for i = 1, 15 do
 			Target.healthArray[i] = 0
 		end
 		if Opt.always_on then
+			UpdateTargetHealth()
 			UpdateCombat()
 			clawPanel:Show()
 			return true
@@ -2128,7 +2186,7 @@ local function UpdateTargetInfo()
 	if guid ~= Target.guid then
 		Target.guid = guid
 		local i
-		for i = 1, #Target.healthArray do
+		for i = 1, 15 do
 			Target.healthArray[i] = UnitHealth('target')
 		end
 	end
@@ -2145,6 +2203,7 @@ local function UpdateTargetInfo()
 	end
 	Target.hostile = UnitCanAttack('player', 'target') and not UnitIsDead('target')
 	if Target.hostile or Opt.always_on then
+		UpdateTargetHealth()
 		UpdateCombat()
 		clawPanel:Show()
 		return true
@@ -2281,7 +2340,6 @@ function events:PLAYER_ENTERING_WORLD()
 	local _
 	_, var.instance = IsInInstance()
 	var.player = UnitGUID('player')
-	UpdateVars()
 end
 
 clawPanel.button:SetScript('OnClick', function(self, button, down)
@@ -2297,8 +2355,10 @@ clawPanel.button:SetScript('OnClick', function(self, button, down)
 end)
 
 clawPanel:SetScript('OnUpdate', function(self, elapsed)
-	abilityTimer = abilityTimer + elapsed
-	if abilityTimer >= Opt.frequency then
+	timer.combat = timer.combat + elapsed
+	timer.display = timer.display + elapsed
+	timer.health = timer.health + elapsed
+	if timer.combat >= Opt.frequency then
 		trackAuras:purge()
 		if Opt.auto_aoe then
 			local _, ability
@@ -2308,6 +2368,12 @@ clawPanel:SetScript('OnUpdate', function(self, elapsed)
 			autoAoe:purge()
 		end
 		UpdateCombat()
+	end
+	if timer.display >= 0.05 then
+		UpdateDisplay()
+	end
+	if timer.health >= 0.2 then
+		UpdateTargetHealth()
 	end
 end)
 
@@ -2394,10 +2460,9 @@ function SlashCmdList.Claw(msg, editbox)
 	end
 	if startsWith(msg[1], 'freq') then
 		if msg[2] then
-			Opt.frequency = tonumber(msg[2]) or 0.05
-			UpdateHealthArray()
+			Opt.frequency = tonumber(msg[2]) or 0.2
 		end
-		return print('Claw - Calculation frequency: Every |cFFFFD000' .. Opt.frequency .. '|r seconds')
+		return print('Claw - Calculation frequency (max time to wait between each update): Every |cFFFFD000' .. Opt.frequency .. '|r seconds')
 	end
 	if startsWith(msg[1], 'glow') then
 		if msg[2] == 'main' then
@@ -2566,7 +2631,7 @@ function SlashCmdList.Claw(msg, editbox)
 		'snap |cFF00C000above|r/|cFF00C000below|r/|cFFC00000off|r - snap the Claw UI to the Blizzard combat resources frame',
 		'scale |cFFFFD000prev|r/|cFFFFD000main|r/|cFFFFD000cd|r/|cFFFFD000interrupt|r/|cFFFFD000extra|r/|cFFFFD000glow|r - adjust the scale of the Claw UI icons',
 		'alpha |cFFFFD000[percent]|r - adjust the transparency of the Claw UI icons',
-		'frequency |cFFFFD000[number]|r - set the calculation frequency (default is every 0.05 seconds)',
+		'frequency |cFFFFD000[number]|r - set the calculation frequency (default is every 0.2 seconds)',
 		'glow |cFFFFD000main|r/|cFFFFD000cd|r/|cFFFFD000interrupt|r/|cFFFFD000extra|r/|cFFFFD000blizzard|r |cFF00C000on|r/|cFFC00000off|r - glowing ability buttons on action bars',
 		'glow color |cFFF000000.0-1.0|r |cFF00FF000.1-1.0|r |cFF0000FF0.0-1.0|r - adjust the color of the ability button glow',
 		'previous |cFF00C000on|r/|cFFC00000off|r - previous ability icon',
