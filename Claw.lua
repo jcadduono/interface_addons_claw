@@ -675,9 +675,23 @@ function Ability:trackAuras()
 	self.aura_targets = {}
 end
 
-function Ability:applyAura(guid) end
+function Ability:applyAura(timeStamp, guid)
+	local aura = {
+		expires = timeStamp + self:duration()
+	}
+	self.aura_targets[guid] = aura
+end
 
-function Ability:refreshAura(guid) end
+function Ability:refreshAura(timeStamp, guid)
+	local aura = self.aura_targets[guid]
+	if not aura then
+		self:applyAura(timeStamp, guid)
+		return
+	end
+	local remains = aura.expires - timeStamp
+	local duration = self:duration()
+	aura.expires = timeStamp + min(duration * 1.3, remains + duration)
+end
 
 function Ability:removeAura(guid)
 	if self.aura_targets[guid] then
