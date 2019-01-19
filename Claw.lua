@@ -509,9 +509,9 @@ end
 
 function Ability:ticking()
 	if self.aura_targets then
-		local count, guid, expires = 0
-		for guid, expires in next, self.aura_targets do
-			if expires - var.time > var.execute_remains then
+		local count, guid, aura = 0
+		for guid, aura in next, self.aura_targets do
+			if aura.expires - (var.time - var.time_diff) > var.execute_remains then
 				count = count + 1
 			end
 		end
