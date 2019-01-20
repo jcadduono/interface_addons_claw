@@ -2084,23 +2084,8 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 			autoAoe:add(dstGUID, true)
 		end
 	end
-	if srcGUID ~= var.player then
-		return
-	end
-	local castedAbility = abilities.bySpellId[spellId]
-	if not castedAbility then
-		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', eventType, spellName, spellId))
-		return
-	end
-	var.time_diff = GetTime() - timeStamp
---[[ DEBUG ]
-	print(format('EVENT %s TRACK CHECK FOR %s ID %d', eventType, spellName, spellId))
-	if eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH' or eventType == 'SPELL_PERIODIC_DAMAGE' or eventType == 'SPELL_DAMAGE' then
-		print(format('%s: %s - time: %.2f - time since last: %.2f', eventType, spellName, timeStamp, timeStamp - (castedAbility.last_trigger or timeStamp)))
-		castedAbility.last_trigger = timeStamp
-	end
---[ DEBUG ]]
-	if eventType == 'SPELL_CAST_START' or
+	if srcGUID ~= var.player or not (
+	   eventType == 'SPELL_CAST_START' or
 	   eventType == 'SPELL_CAST_SUCCESS' or
 	   eventType == 'SPELL_CAST_FAILED' or
 	   eventType == 'SPELL_AURA_REMOVED' or
@@ -2109,10 +2094,24 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 	   eventType == 'SPELL_MISSED' or
 	   eventType == 'SPELL_AURA_APPLIED' or
 	   eventType == 'SPELL_AURA_REFRESH' or
-	   eventType == 'SPELL_AURA_REMOVED'
+	   eventType == 'SPELL_AURA_REMOVED')
 	then
-		UpdateCombatWithin(0.05)
+		return
 	end
+	local castedAbility = abilities.bySpellId[spellId]
+	if not castedAbility then
+		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', eventType, spellName, spellId))
+		return
+	end
+--[[ DEBUG ]
+	print(format('EVENT %s TRACK CHECK FOR %s ID %d', eventType, spellName, spellId))
+	if eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH' or eventType == 'SPELL_PERIODIC_DAMAGE' or eventType == 'SPELL_DAMAGE' then
+		print(format('%s: %s - time: %.2f - time since last: %.2f', eventType, spellName, timeStamp, timeStamp - (castedAbility.last_trigger or timeStamp)))
+		castedAbility.last_trigger = timeStamp
+	end
+--[ DEBUG ]]
+	var.time_diff = GetTime() - timeStamp
+	UpdateCombatWithin(0.05)
 	if eventType == 'SPELL_CAST_SUCCESS' then
 		var.last_ability = castedAbility
 		if castedAbility.triggers_gcd then
@@ -2139,12 +2138,12 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 			castedAbility:removeAura(dstGUID)
 		end
 	end
-	if eventType == 'SPELL_DAMAGE' and Sabertooth.known and castedAbility == FerociousBite and Rip.aura_targets[dstGUID] then
-		Rip:refreshAura(timeStamp, dstGUID)
-	end
 	if eventType == 'SPELL_MISSED' or eventType == 'SPELL_DAMAGE' or eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH' then
 		if castedAbility.travel_start and castedAbility.travel_start[dstGUID] then
 			castedAbility.travel_start[dstGUID] = nil
+		end
+		if eventType == 'SPELL_DAMAGE' and Sabertooth.known and castedAbility == FerociousBite and Rip.aura_targets[dstGUID] then
+			Rip:refreshAura(timeStamp, dstGUID)
 		end
 		if Opt.auto_aoe then
 			if castedAbility.auto_aoe then
