@@ -310,14 +310,14 @@ function autoAoe:add(guid, update)
 		return
 	end
 	local new = not self.targets[guid]
-	self.targets[guid] = GetTime()
+	self.targets[guid] = var.time
 	if update and new then
 		self:update()
 	end
 end
 
 function autoAoe:remove(guid)
-	self.blacklist[guid] = GetTime()
+	self.blacklist[guid] = var.time
 	if self.targets[guid] then
 		self.targets[guid] = nil
 		self:update()
@@ -352,16 +352,15 @@ end
 
 function autoAoe:purge()
 	local update, guid, t
-	local now = GetTime()
 	for guid, t in next, self.targets do
-		if now - t > Opt.auto_aoe_ttl then
+		if var.time - t > Opt.auto_aoe_ttl then
 			self.targets[guid] = nil
 			update = true
 		end
 	end
 	-- blacklist enemies for 2 seconds when they die to prevent out of order events from re-adding them
 	for guid, t in next, self.blacklist do
-		if now - t > 2 then
+		if var.time - t > 2 then
 			self.blacklist[guid] = nil
 		end
 	end
@@ -531,6 +530,9 @@ function Ability:cooldownDuration()
 end
 
 function Ability:cooldown()
+	if self.cooldown_duration > 0 and self:casting() then
+		return self.cooldown_duration
+	end
 	local start, duration = GetSpellCooldown(self.spellId)
 	if start == 0 then
 		return 0
@@ -618,7 +620,7 @@ function Ability:tickTime()
 end
 
 function Ability:previous()
-	if self:channeling() then
+	if self:casting() or self:channeling() then
 		return true
 	end
 	return PreviousGCD[1] == self or var.last_ability == self
@@ -635,14 +637,14 @@ function Ability:autoAoe()
 end
 
 function Ability:recordTargetHit(guid)
-	self.targets_hit[guid] = GetTime()
+	self.targets_hit[guid] = var.time
 	if not self.first_hit_time then
 		self.first_hit_time = self.targets_hit[guid]
 	end
 end
 
 function Ability:updateTargetsHit()
-	if self.first_hit_time and GetTime() - self.first_hit_time >= 0.3 then
+	if self.first_hit_time and var.time - self.first_hit_time >= 0.3 then
 		self.first_hit_time = nil
 		autoAoe:clear()
 		local guid
@@ -659,7 +661,7 @@ end
 local trackAuras = {}
 
 function trackAuras:purge()
-	local now = GetTime() - var.time_diff
+	local now = var.time - var.time_diff
 	local _, ability, guid, expires
 	for _, ability in next, abilities.trackAuras do
 		for guid, aura in next, ability.aura_targets do
@@ -1720,7 +1722,6 @@ local function ShouldHide()
 		   (currentSpec == SPEC.FERAL and Opt.hide.feral) or
 		   (currentSpec == SPEC.GUARDIAN and Opt.hide.guardian) or
 		   (currentSpec == SPEC.RESTORATION and Opt.hide.restoration))
-
 end
 
 local function Disappear()
@@ -1916,6 +1917,7 @@ end
 local function UpdateCombat()
 	timer.combat = 0
 	local _, start, duration, remains, spellId
+	var.time = GetTime()
 	var.last_main = var.main
 	var.last_cd = var.cd
 	var.last_extra = var.extra
@@ -1923,7 +1925,6 @@ local function UpdateCombat()
 	var.cd = nil
 	var.extra = nil
 	var.pool_energy = nil
-	var.time = GetTime()
 	start, duration = GetSpellCooldown(61304)
 	var.gcd_remains = start > 0 and duration - (var.time - start) or 0
 	_, _, _, _, remains, _, _, _, spellId = UnitCastingInfo('player')
@@ -1936,6 +1937,7 @@ local function UpdateCombat()
 		var.energy_max = UnitPowerMax('player', 3)
 		var.energy = UnitPower('player', 3) + (var.energy_regen * var.execute_remains)
 		var.energy = min(max(var.energy, 0), var.energy_max)
+		var.combo_points = UnitPower('player', 4)
 	else
 		var.mana_regen = GetPowerRegen()
 		var.gcd = 1.5 * var.haste_factor
@@ -1948,6 +1950,15 @@ local function UpdateCombat()
 		var.mana = var.mana - var.ability_casting:manaCost()
 	end
 	var.mana = min(max(var.mana, 0), var.mana_max)
+
+	trackAuras:purge()
+	if Opt.auto_aoe then
+		local ability
+		for _, ability in next, abilities.autoAoe do
+			ability:updateTargetsHit()
+		end
+		autoAoe:purge()
+	end
 
 	var.main = APL[currentSpec]:main()
 	if var.main ~= var.last_main then
@@ -2008,11 +2019,40 @@ function events:SPELL_UPDATE_COOLDOWN()
 end
 
 function events:UNIT_POWER_UPDATE(srcName, powerType)
-	if srcName ~= 'player' or powerType ~= 'COMBO_POINTS' then
+	if srcName == 'player' and powerType == 'COMBO_POINTS' then
+		UpdateCombatWithin(0.05)
+	end
+end
+
+function events:UNIT_SPELLCAST_START(srcName)
+	if Opt.interrupt and srcName == 'target' then
+		UpdateCombatWithin(0.05)
+	end
+end
+
+function events:UNIT_SPELLCAST_STOP(srcName)
+	if Opt.interrupt and srcName == 'target' then
+		UpdateCombatWithin(0.05)
+	end
+end
+
+function events:UNIT_SPELLCAST_SENT(srcName, destName, castId, spellId)
+	if srcName ~= 'player' then
 		return
 	end
-	var.combo_points = UnitPower('player', 4)
-	UpdateCombatWithin(0.05)
+	local castedAbility = abilities.bySpellId[spellId]
+	if not castedAbility then
+		return
+	end
+	if castedAbility == Rip or castedAbility == PrimalWrath or (Sabertooth.known and castedAbility == FerociousBite) then
+		Rip.next_applied_by = castedAbility
+		Rip.next_combo_points = UnitPower('player', 4)
+		Rip.next_multiplier = Rip:nextMultiplier()
+	elseif castedAbility == Rake then
+		Rake.next_multiplier = Rake:nextMultiplier()
+	elseif castedAbility == Thrash then
+		Thrash.next_multiplier = Thrash:nextMultiplier()
+	end
 end
 
 function events:ADDON_LOADED(name)
@@ -2038,39 +2078,9 @@ function events:ADDON_LOADED(name)
 	end
 end
 
-function events:UNIT_SPELLCAST_SENT(srcName, destName, castId, spellId)
-	if srcName ~= 'player' then
-		return
-	end
-	local castedAbility = abilities.bySpellId[spellId]
-	if not castedAbility then
-		return
-	end
-	if castedAbility == Rip or castedAbility == PrimalWrath or (Sabertooth.known and castedAbility == FerociousBite) then
-		Rip.next_applied_by = castedAbility
-		Rip.next_combo_points = UnitPower('player', 4)
-		Rip.next_multiplier = Rip:nextMultiplier()
-	elseif castedAbility == Rake then
-		Rake.next_multiplier = Rake:nextMultiplier()
-	elseif castedAbility == Thrash then
-		Thrash.next_multiplier = Thrash:nextMultiplier()
-	end
-end
-
-function events:UNIT_SPELLCAST_START(srcName)
-	if Opt.interrupt and srcName == 'target' then
-		UpdateCombatWithin(0.05)
-	end
-end
-
-function events:UNIT_SPELLCAST_STOP(srcName)
-	if Opt.interrupt and srcName == 'target' then
-		UpdateCombatWithin(0.05)
-	end
-end
-
 function events:COMBAT_LOG_EVENT_UNFILTERED()
 	local timeStamp, eventType, hideCaster, srcGUID, srcName, srcFlags, srcRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellId, spellName = CombatLogGetCurrentEventInfo()
+	var.time = GetTime()
 	if eventType == 'UNIT_DIED' or eventType == 'UNIT_DESTROYED' or eventType == 'UNIT_DISSIPATES' or eventType == 'SPELL_INSTAKILL' or eventType == 'PARTY_KILL' then
 		trackAuras:remove(dstGUID)
 		if Opt.auto_aoe then
@@ -2110,7 +2120,7 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 		castedAbility.last_trigger = timeStamp
 	end
 --[ DEBUG ]]
-	var.time_diff = GetTime() - timeStamp
+	var.time_diff = var.time - timeStamp
 	UpdateCombatWithin(0.05)
 	if eventType == 'SPELL_CAST_SUCCESS' then
 		var.last_ability = castedAbility
@@ -2119,7 +2129,7 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 			table.insert(PreviousGCD, 1, castedAbility)
 		end
 		if castedAbility.travel_start then
-			castedAbility.travel_start[dstGUID] = GetTime()
+			castedAbility.travel_start[dstGUID] = var.time
 		end
 		if Opt.previous and clawPanel:IsVisible() then
 			clawPreviousPanel.ability = castedAbility
@@ -2179,6 +2189,9 @@ local function UpdateTargetInfo()
 			UpdateCombat()
 			clawPanel:Show()
 			return true
+		end
+		if Opt.previous and combatStartTime == 0 then
+			clawPreviousPanel:Hide()
 		end
 		return
 	end
@@ -2358,14 +2371,6 @@ clawPanel:SetScript('OnUpdate', function(self, elapsed)
 	timer.display = timer.display + elapsed
 	timer.health = timer.health + elapsed
 	if timer.combat >= Opt.frequency then
-		trackAuras:purge()
-		if Opt.auto_aoe then
-			local _, ability
-			for _, ability in next, abilities.autoAoe do
-				ability:updateTargetsHit()
-			end
-			autoAoe:purge()
-		end
 		UpdateCombat()
 	end
 	if timer.display >= 0.05 then
