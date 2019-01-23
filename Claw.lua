@@ -1551,6 +1551,10 @@ actions.opener+=/moonfire_cat,if=!ticking
 # no need to wait for 5 CPs anymore, just rip and we are up and running
 actions.opener+=/rip,if=!ticking
 ]]
+	if ComboPoints() == 5 then
+		var.opener_done = true
+		return self:main()
+	end
 	if TigersFury:usable() then
 		UseCooldown(TigersFury)
 	end
