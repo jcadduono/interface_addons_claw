@@ -1364,8 +1364,13 @@ actions+=/run_action_list,name=generators
 	if Sabertooth.known and FerociousBite:usable(true) and Rip:up() and Rip:remains() < 3 and Target.timeToDie > 10 and (Enemies() < 3 or Rip:lowestRemainsOthers() > 8) then
 		return Pool(FerociousBite, Rip:remains() < 1 and 0 or 25)
 	end
-	if Bloodtalons.known and Regrowth:usable() and ComboPoints() == 5 and PredatorySwiftness:up() and Bloodtalons:down() and (IncarnationKingOfTheJungle:down() or Rip:remains() < 8) then
-		return Regrowth
+	if Bloodtalons.known and Regrowth:usable() and PredatorySwiftness:up() and Bloodtalons:down() then
+		if ComboPoints() == 5 and (IncarnationKingOfTheJungle:down() or Rip:remains() < 8) then
+			return Regrowth
+		end
+		if PredatorySwiftness:remains() < 1.5 and (EnergyTimeToMax() > GCD() or ComboPoints() >= 4) then
+			return Regrowth
+		end
 	end
 	if ComboPoints() == 5 then
 		return self:finishers()
