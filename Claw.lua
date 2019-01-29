@@ -781,6 +781,12 @@ Maim.cp_cost = 1
 ------ Talents
 local Bloodtalons = Ability.add(155672, true, true, 145152)
 Bloodtalons.buff_duration = 30
+local BrutalSlash = Ability.add(202028, false, true)
+BrutalSlash.cooldown_duration = 8
+BrutalSlash.energy_cost = 25
+BrutalSlash.hasted_cooldown = true
+BrutalSlash.requires_charge = true
+BrutalSlash:autoAoe()
 local FeralFrenzy = Ability.add(274837, false, true, 274838)
 FeralFrenzy.buff_duration = 6
 FeralFrenzy.cooldown_duration = 45
@@ -1501,6 +1507,9 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 			return Pool(Thrash)
 		end
 	end
+	if BrutalSlash:usable() and Enemies() > 2 and (Energy() < 50 or ComboPoints() < 4) then
+		return BrutalSlash
+	end
 	if ScentOfBlood.known and Swipe:usable(true) and ScentOfBlood:up() then
 		return Pool(Swipe)
 	end
@@ -1524,6 +1533,9 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 		if Moonfire:refreshable() then
 			return Moonfire
 		end
+	end
+	if BrutalSlash:usable() and EnergyTimeToMax() > 1.5 and (TigersFury:up() or BrutalSlash:chargesFractional() > 2.5) then
+		return BrutalSlash
 	end
 	if Thrash:usable(true) and Thrash:refreshable() and (Enemies() > 1 or Target.timeToDie > (Thrash:remains() + 4)) then
 		if IncarnationKingOfTheJungle:down() or WildFleshrending.known or Enemies() > 1 then
@@ -2286,7 +2298,7 @@ local function UpdateAbilityData()
 	end
 	WildChargeCat.known = WildCharge.known
 	if currentSpec == SPEC.FERAL then
-		Swipe.known = true
+		Swipe.known = not BrutalSlash.known
 		Thrash.known = true
 		var.rip_multiplier_max = Rip:multiplierMax()
 	end
