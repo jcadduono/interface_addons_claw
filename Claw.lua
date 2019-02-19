@@ -88,6 +88,7 @@ local function InitializeOpts()
 		auto_aoe = false,
 		auto_aoe_ttl = 10,
 		pot = false,
+		frenzied_threshold = 60,
 	})
 end
 
@@ -430,10 +431,10 @@ function Ability:usable(pool)
 		if self:manaCost() > var.mana then
 			return false
 		end
-		if self:energyCost() > var.energy then
+		if currentForm == FORM.CAT and self:energyCost() > var.energy then
 			return false
 		end
-		if self:rageCost() > var.rage then
+		if currentForm == FORM.BEAR and self:rageCost() > var.rage then
 			return false
 		end
 	end
@@ -711,22 +712,31 @@ end
 
 -- Druid Abilities
 ---- Multiple Specializations
+local Barkskin = Ability.add(22812, true, true)
+Barkskin.buff_duration = 12
+Barkskin.cooldown_duration = 90
+Barkskin.tiggers_gcd = false
+local BearForm = Ability.add(5487, true, true)
 local CatForm = Ability.add(768, true, true)
+local Growl = Ability.add(6795, false, true)
+Growl.buff_duration = 3
+Growl.cooldown_duration = 8
 local SkullBash = Ability.add(106839, false, true)
 SkullBash.cooldown_duration = 15
 SkullBash.triggers_gcd = false
 local Prowl = Ability.add(5215, true, true)
 Prowl.cooldown_duration = 6
+local Rebirth = Ability.add(20484, true, true)
+Rebirth.cooldown_duration = 600
+Rebirth.rage_cost = 30
 local Regrowth = Ability.add(8936, true, true)
 Regrowth.buff_duration = 12
 Regrowth.mana_cost = 14
 Regrowth.tick_interval = 2
 Regrowth.hasted_ticks = true
-local Moonfire = Ability.add(8921, false, true, 164812)
-Moonfire.buff_duration = 18
-Moonfire.energy_cost = 30
-Moonfire.tick_interval = 2
-Moonfire.hasted_ticks = true
+local SurvivalInstincts = Ability.add(61336, true, true)
+SurvivalInstincts.buff_duration = 6
+SurvivalInstincts.cooldown_duration = 240
 ------ Procs
 
 ------ Talents
@@ -761,16 +771,16 @@ Shred.energy_cost = 40
 local FerociousBite = Ability.add(22568, false, true)
 FerociousBite.cp_cost = 1
 FerociousBite.energy_cost = 25
-local Thrash = Ability.add(106830, false, true)
-Thrash.buff_duration = 15
-Thrash.energy_cost = 40
-Thrash.tick_interval = 3
-Thrash.hasted_ticks = true
-Thrash:autoAoe()
-Thrash:trackAuras()
-local Swipe = Ability.add(106785, false, true)
-Swipe.energy_cost = 35
-Swipe:autoAoe()
+local ThrashCat = Ability.add(106830, false, true)
+ThrashCat.buff_duration = 15
+ThrashCat.energy_cost = 40
+ThrashCat.tick_interval = 3
+ThrashCat.hasted_ticks = true
+ThrashCat:autoAoe()
+ThrashCat:trackAuras()
+local SwipeCat = Ability.add(106785, false, true)
+SwipeCat.energy_cost = 35
+SwipeCat:autoAoe()
 local TigersFury = Ability.add(5217, true, true)
 TigersFury.cooldown_duration = 30
 TigersFury.triggers_gcd = false
@@ -778,6 +788,11 @@ local Maim = Ability.add(22570, false, true, 203123)
 Maim.cooldown_duration = 20
 Maim.energy_cost = 30
 Maim.cp_cost = 1
+local MoonfireCat = Ability.add(8921, false, true, 164812)
+MoonfireCat.buff_duration = 18
+MoonfireCat.energy_cost = 30
+MoonfireCat.tick_interval = 2
+MoonfireCat.hasted_ticks = true
 ------ Talents
 local Bloodtalons = Ability.add(155672, true, true, 145152)
 Bloodtalons.buff_duration = 30
@@ -816,9 +831,58 @@ Clearcasting.buff_duration = 15
 local PredatorySwiftness = Ability.add(16974, true, true, 69369)
 PredatorySwiftness.buff_duration = 12
 ---- Guardian
-
+local FrenziedRegeneration = Ability.add(22842, true, true)
+FrenziedRegeneration.buff_duration = 3
+FrenziedRegeneration.cooldown_duration = 36
+FrenziedRegeneration.rage_cost = 10
+FrenziedRegeneration.tick_interval = 1
+FrenziedRegeneration.hasted_cooldown = true
+FrenziedRegeneration.requires_charge = true
+local IncapacitatingRoar = Ability.add(99, false, true)
+IncapacitatingRoar.buff_duration = 3
+IncapacitatingRoar.cooldown_duration = 30
+local Ironfur = Ability.add(192081, true, true)
+Ironfur.buff_duration = 7
+Ironfur.cooldown_duration = 0.5
+Ironfur.rage_cost = 45
+local Mangle = Ability.add(33917, false, true)
+Mangle.rage_cost = -8
+Mangle.cooldown_duration = 6
+Mangle.hasted_cooldown = true
+local Maul = Ability.add(6807, false, true)
+Maul.rage_cost = 45
+local MoonfireBear = Ability.add(8921, false, true, 164812)
+MoonfireCat.buff_duration = 16
+MoonfireCat.tick_interval = 2
+MoonfireCat.hasted_ticks = true
+local Thrash = Ability.add(77758, false, true, 192090)
+Thrash.buff_duration = 15
+Thrash.cooldown_duration = 6
+Thrash.rage_cost = -5
+Thrash.tick_interval = 3
+Thrash.hasted_cooldown = true
+Thrash.hasted_ticks = true
+Thrash:autoAoe()
+local Swipe = Ability.add(213771, false, true)
+Swipe:autoAoe()
 ------ Talents
-
+local Brambles = Ability.add(203953, false, true, 213709)
+Brambles.tick_interval = 1
+Brambles:autoAoe()
+local BristlingFur = Ability.add(155835, true, true)
+BristlingFur.buff_duration = 8
+BristlingFur.cooldown_duration = 40
+local GalacticGuardian = Ability.add(203964, false, true, 213708)
+GalacticGuardian.buff_duration = 15
+local IncarnationGuardianOfUrsoc = Ability.add(102558, true, true)
+IncarnationGuardianOfUrsoc.buff_duration = 30
+IncarnationGuardianOfUrsoc.cooldown_duration = 180
+local LunarBeam = Ability.add(204066, false, true, 204069)
+LunarBeam.buff_duration = 8.5
+LunarBeam.cooldown_duration = 75
+LunarBeam.tick_interval = 1
+local Pulverize = Ability.add(80313, true, true, 158792)
+Pulverize.buff_duration = 20
 ------ Procs
 
 ---- Restoration
@@ -828,7 +892,11 @@ PredatorySwiftness.buff_duration = 12
 ------ Procs
 
 -- Azerite Traits
+local GuardiansWrath = Ability.add(278511, true, true, 279541)
+GuardiansWrath.buff_duration = 30
 local IronJaws = Ability.add(276021, true, true)
+local LayeredMane = Ability.add(279552, true, true)
+local PowerOfTheMoon = Ability.add(273367, true, true)
 local WildFleshrending = Ability.add(279527, false, true)
 -- Racials
 local Shadowmeld = Ability.add(58984, true, true)
@@ -972,6 +1040,14 @@ local function Rage()
 	return var.rage
 end
 
+local function RageDeficit()
+	return var.rage_max - var.rage
+end
+
+local function HealthPct()
+	return UnitHealth('player') / UnitHealthMax('player') * 100
+end
+
 local function GCD()
 	return var.gcd
 end
@@ -1035,12 +1111,20 @@ end
 function Ability:energyCost()
 	local cost  = self.energy_cost
 	if currentSpec == SPEC.FERAL then
-		if (self == Shred or self == Thrash or self == Swipe) and Clearcasting:up() then
+		if (self == Shred or self == ThrashCat or self == SwipeCat) and Clearcasting:up() then
 			return 0
 		end
 		if Berserk:up() then
 			cost = cost - (cost * 0.40)
 		end
+	end
+	return cost
+end
+
+function Ironfur:rageCost()
+	local cost  = self.rage_cost
+	if GuardiansWrath.known then
+		cost = cost - (GuardiansWrath:stack() * 15)
 	end
 	return cost
 end
@@ -1200,7 +1284,7 @@ function Rip:multiplierMax()
 	return multiplier
 end
 
-function Thrash:applyAura(timeStamp, guid)
+function ThrashCat:applyAura(timeStamp, guid)
 	local aura = {
 		expires = timeStamp + self.buff_duration,
 		multiplier = self.next_multiplier
@@ -1208,7 +1292,7 @@ function Thrash:applyAura(timeStamp, guid)
 	self.aura_targets[guid] = aura
 end
 
-function Thrash:refreshAura(timeStamp, guid)
+function ThrashCat:refreshAura(timeStamp, guid)
 	local aura = self.aura_targets[guid]
 	if not aura then
 		self:applyAura(timeStamp, guid)
@@ -1219,12 +1303,12 @@ function Thrash:refreshAura(timeStamp, guid)
 	aura.multiplier = self.next_multiplier
 end
 
-function Thrash:multiplier()
+function ThrashCat:multiplier()
 	local aura = self.aura_targets[Target.guid]
 	return aura and aura.multiplier or 0
 end
 
-function Thrash:nextMultiplier()
+function ThrashCat:nextMultiplier()
 	local multiplier = 1.00
 	local _, i, id
 	for i = 1, 40 do
@@ -1499,19 +1583,19 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 			return Regrowth
 		end
 	end
-	if Thrash:usable(true) then
-		if Thrash:refreshable() and Enemies() > 2 then
-			return Pool(Thrash)
+	if ThrashCat:usable(true) then
+		if ThrashCat:refreshable() and Enemies() > 2 then
+			return Pool(ThrashCat)
 		end
 		if ScentOfBlood.known and ScentOfBlood:down() and Enemies() > 3 then
-			return Pool(Thrash)
+			return Pool(ThrashCat)
 		end
 	end
 	if BrutalSlash:usable() and Enemies() > 2 and (Energy() < 50 or ComboPoints() < 4) then
 		return BrutalSlash
 	end
-	if ScentOfBlood.known and Swipe:usable(true) and ScentOfBlood:up() then
-		return Pool(Swipe)
+	if ScentOfBlood.known and SwipeCat:usable(true) and ScentOfBlood:up() then
+		return Pool(SwipeCat)
 	end
 	if Rake:usable(true) then
 		if Rake:down() then
@@ -1526,27 +1610,27 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 			end
 		end
 	end
-	if LunarInspiration.known and Moonfire:usable() then
+	if LunarInspiration.known and MoonfireCat:usable() then
 		if Bloodtalons:up() and PredatorySwiftness:down() and ComboPoints() < 5 then
-			return Moonfire
+			return MoonfireCat
 		end
-		if Moonfire:refreshable() then
-			return Moonfire
+		if MoonfireCat:refreshable() then
+			return MoonfireCat
 		end
 	end
 	if BrutalSlash:usable() and EnergyTimeToMax() > 1.5 and (TigersFury:up() or BrutalSlash:chargesFractional() > 2.5) then
 		return BrutalSlash
 	end
-	if Thrash:usable(true) and Thrash:refreshable() and (Enemies() > 1 or Target.timeToDie > (Thrash:remains() + 4)) then
+	if ThrashCat:usable(true) and ThrashCat:refreshable() and (Enemies() > 1 or Target.timeToDie > (ThrashCat:remains() + 4)) then
 		if IncarnationKingOfTheJungle:down() or WildFleshrending.known or Enemies() > 1 then
-			return Pool(Thrash)
+			return Pool(ThrashCat)
 		end
 		if Clearcasting:up() and (IncarnationKingOfTheJungle:down() or WildFleshrending.known) then
-			return Thrash
+			return ThrashCat
 		end
 	end
-	if Swipe:usable(true) and Enemies() > 1 then
-		return Pool(Swipe)
+	if SwipeCat:usable(true) and Enemies() > 1 then
+		return Pool(SwipeCat)
 	end
 	if Shred:usable() and (Clearcasting:up() or Rake:remains() > ((Shred:energyCost() + Rake:energyCost() - Energy()) / EnergyRegen())) then
 		return Shred
@@ -1582,8 +1666,8 @@ actions.opener+=/rip,if=!ticking
 		var.opener_done = true
 		return self:main()
 	end
-	if LunarInspiration.known and Moonfire:down() then
-		return Moonfire
+	if LunarInspiration.known and MoonfireCat:down() then
+		return MoonfireCat
 	end
 	if ComboPoints() >= ((Berserk:remains() > 6 or TigersFury:ready()) and 3 or 5) and PrimalWrath:usable() then
 		return PrimalWrath
@@ -1594,7 +1678,98 @@ actions.opener+=/rip,if=!ticking
 end
 
 APL[SPEC.GUARDIAN].main = function(self)
+--[[
+actions=auto_attack
+actions+=/call_action_list,name=cooldowns
+actions+=/maul,if=rage.deficit<10&active_enemies<4
+actions+=/ironfur,if=cost=0|(rage>cost&azerite.layered_mane.enabled&active_enemies>2)
+actions+=/pulverize,target_if=dot.thrash_bear.stack=dot.thrash_bear.max_stacks
+actions+=/moonfire,target_if=dot.moonfire.refreshable&active_enemies<2
+actions+=/incarnation
+actions+=/thrash,if=(buff.incarnation.down&active_enemies>1)|(buff.incarnation.up&active_enemies>4)
+actions+=/swipe,if=buff.incarnation.down&active_enemies>4
+actions+=/mangle,if=dot.thrash_bear.ticking
+actions+=/moonfire,target_if=buff.galactic_guardian.up&active_enemies<2
+actions+=/thrash
+actions+=/maul
+# Fill with Moonfire with PotMx2
+actions+=/moonfire,if=azerite.power_of_the_moon.rank>1&active_enemies=1
+actions+=/swipe
+]]
+	if BearForm:down() then
+		return BearForm
+	end
+	self:cooldowns()
+	if Maul:usable() and RageDeficit() < 10 and Enemies() < 4 then
+		return Maul
+	end
+	if Ironfur:usable() and (Ironfur:rageCost() == 0 or (Rage() > Ironfur:rageCost() and LayeredMane.known and Enemies() > 2)) then
+		UseExtra(Ironfur)
+	end
+	if Pulverize:usable() and Thrash:stack() == 3 then
+		return Pulverize
+	end
+	if MoonfireBear:usable() and MoonfireBear:refreshable() and Enemies() < 2 then
+		return MoonfireBear
+	end
+	if IncarnationGuardianOfUrsoc:usable() then
+		UseCooldown(IncarnationGuardianOfUrsoc)
+	end
+	if Thrash:usable() and ((Enemies() > 1 and (not IncarnationGuardianOfUrsoc.known or IncarnationGuardianOfUrsoc:down())) or (Enemies() > 4 and IncarnationGuardianOfUrsoc.known and IncarnationGuardianOfUrsoc:up())) then
+		return Thrash
+	end
+	if Swipe:usable() and Enemies() > 4 and (not IncarnationGuardianOfUrsoc.known or IncarnationGuardianOfUrsoc:down()) then
+		return Swipe
+	end
+	if Mangle:usable() and Thrash:up() then
+		return Mangle
+	end
+	if GalacticGuardian.known and MoonfireBear:usable() and Enemies() < 2 and GalacticGuardian:up() then
+		return MoonfireBear
+	end
+	if Thrash:usable() then
+		return Thrash
+	end
+	if Maul:usable() and (RageDeficit() < 30 or (GuardiansWrath.known and GuardiansWrath:stack() < 3)) then
+		return Maul
+	end
+	if MoonfireBear:usable() and Enemies() == 1 and PowerOfTheMoon:azeriteRank() > 1 then
+		return MoonfireBear
+	end
+	if Swipe:usable() then
+		return Swipe
+	end
+end
 
+APL[SPEC.GUARDIAN].cooldowns = function(self)
+--[[
+actions.cooldowns=potion
+actions.cooldowns+=/blood_fury
+actions.cooldowns+=/berserking
+actions.cooldowns+=/arcane_torrent
+actions.cooldowns+=/lights_judgment
+actions.cooldowns+=/fireblood
+actions.cooldowns+=/ancestral_call
+actions.cooldowns+=/barkskin,if=buff.bear_form.up
+actions.cooldowns+=/lunar_beam,if=buff.bear_form.up
+actions.cooldowns+=/bristling_fur,if=buff.bear_form.up
+actions.cooldowns+=/use_items
+]]
+	if BearForm:down() then
+		return
+	end
+	if FrenziedRegeneration:usable() and HealthPct() <= Opt.frenzied_threshold then
+		UseExtra(FrenziedRegeneration)
+	end
+	if Barkskin:usable() then
+		return UseCooldown(Barkskin)
+	end
+	if LunarBeam:usable() then
+		return UseCooldown(LunarBeam)
+	end
+	if BristlingFur:usable() then
+		return UseCooldown(BristlingFur)
+	end
 end
 
 APL[SPEC.RESTORATION].main = function(self)
@@ -2071,8 +2246,8 @@ function events:UNIT_SPELLCAST_SENT(srcName, destName, castId, spellId)
 		Rip.next_multiplier = Rip:nextMultiplier()
 	elseif castedAbility == Rake then
 		Rake.next_multiplier = Rake:nextMultiplier()
-	elseif castedAbility == Thrash then
-		Thrash.next_multiplier = Thrash:nextMultiplier()
+	elseif castedAbility == ThrashCat then
+		ThrashCat.next_multiplier = ThrashCat:nextMultiplier()
 	end
 end
 
@@ -2298,9 +2473,12 @@ local function UpdateAbilityData()
 	end
 	WildChargeCat.known = WildCharge.known
 	if currentSpec == SPEC.FERAL then
-		Swipe.known = not BrutalSlash.known
-		Thrash.known = true
+		SwipeCat.known = not BrutalSlash.known
+		ThrashCat.known = true
 		var.rip_multiplier_max = Rip:multiplierMax()
+	end
+	if currentSpec == SPEC.GUARDIAN then
+		Swipe.known = true
 	end
 	abilities.bySpellId = {}
 	abilities.velocity = {}
@@ -2643,6 +2821,12 @@ function SlashCmdList.Claw(msg, editbox)
 		end
 		return print('Claw - Show Battle potions in cooldown UI: ' .. (Opt.pot and '|cFF00C000On' or '|cFFC00000Off'))
 	end
+	if startsWith(msg[1], 'fr') then
+		if msg[2] then
+			Opt.frenzied_threshold = tonumber(msg[2]) or 60
+		end
+		return print('Claw - Health threshold to recommend Frenzied Regeneration at in Bear Form: |cFFFFD000' .. Opt.frenzied_threshold .. '%|r')
+	end
 	if msg[1] == 'reset' then
 		clawPanel:ClearAllPoints()
 		clawPanel:SetPoint('CENTER', 0, -169)
@@ -2672,6 +2856,7 @@ function SlashCmdList.Claw(msg, editbox)
 		'auto |cFF00C000on|r/|cFFC00000off|r  - automatically change target mode on AoE spells',
 		'ttl |cFFFFD000[seconds]|r  - time target exists in auto AoE after being hit (default is 10 seconds)',
 		'pot |cFF00C000on|r/|cFFC00000off|r - show Battle potions in cooldown UI',
+		'frenzied |cFFFFD000[health]|r  - health threshold to recommend Frenzied Regeneration at in Bear Form (default is 60%)',
 		'|cFFFFD000reset|r - reset the location of the Claw UI to default',
 	} do
 		print('  ' .. SLASH_Claw1 .. ' ' .. cmd)
