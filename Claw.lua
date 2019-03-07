@@ -1228,7 +1228,7 @@ end
 function Rip:lowestRemainsOthers()
 	local guid, aura, lowest
 	for guid, aura in next, self.aura_targets do
-		if guid ~= Target.guid and (not lowest or aura.expires < lowest) then
+		if guid ~= Target.guid and autoAoe.targets[guid] and (not lowest or aura.expires < lowest) then
 			lowest = aura.expires
 		end
 	end
@@ -1244,9 +1244,11 @@ function Rip:multiplier()
 end
 
 function Rip:multiplierSum()
-	local sum, aura, _ = 0
-	for _, aura in next, self.aura_targets do
-		sum = sum + (aura.multiplier or 0)
+	local sum, guid, aura = 0
+	for guid, aura in next, self.aura_targets do
+		if autoAoe.targets[guid] then
+			sum = sum + (aura.multiplier or 0)
+		end
 	end
 	return sum
 end
@@ -1575,6 +1577,9 @@ actions.generators+=/pool_resource,for_next=1
 actions.generators+=/swipe_cat,if=spell_targets.swipe_cat>1
 actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.cost-energy)%energy.regen|buff.clearcasting.react
 ]]
+	if Sabertooth.known and Enemies() == 1 and ComboPoints() >= 2 and Rip:down() and Rip:usable() and Rip:nextMultiplier() >= var.rip_multiplier_max and (TigersFury:remains() < 1.5 or Bloodtalons:remains() < 1.5 or Bloodtalons:stack() == 1) then
+		return Rip
+	end
 	if Bloodtalons.known and Regrowth:usable() and PredatorySwiftness:up() and Bloodtalons:down() then
 		if ComboPoints() == 4 and Rake:remains() < 4 then
 			return Regrowth
@@ -1597,25 +1602,27 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 	if ScentOfBlood.known and SwipeCat:usable(true) and ScentOfBlood:up() then
 		return Pool(SwipeCat)
 	end
-	if Rake:usable(true) then
-		if Rake:down() then
-			return Pool(Rake)
-		end
-		if Target.timeToDie > 4 then
-			if not Bloodtalons.known and Rake:refreshable() then
+	if Enemies() < 6 or not PrimalWrath.known then
+		if Rake:usable(true) then
+			if Rake:down() then
 				return Pool(Rake)
 			end
-			if Bloodtalons.known and Bloodtalons:up() and Rake:remains() < 7 and Rake:nextMultiplier() > (Rake:multiplier() * 0.85) then
-				return Pool(Rake)
+			if Target.timeToDie > 4 then
+				if not Bloodtalons.known and Rake:refreshable() then
+					return Pool(Rake)
+				end
+				if Bloodtalons.known and Bloodtalons:up() and Rake:remains() < 7 and Rake:nextMultiplier() > (Rake:multiplier() * 0.85) then
+					return Pool(Rake)
+				end
 			end
 		end
-	end
-	if LunarInspiration.known and MoonfireCat:usable() then
-		if Bloodtalons:up() and PredatorySwiftness:down() and ComboPoints() < 5 then
-			return MoonfireCat
-		end
-		if MoonfireCat:refreshable() then
-			return MoonfireCat
+		if LunarInspiration.known and MoonfireCat:usable() then
+			if Bloodtalons:up() and PredatorySwiftness:down() and ComboPoints() < 5 then
+				return MoonfireCat
+			end
+			if MoonfireCat:refreshable() then
+				return MoonfireCat
+			end
 		end
 	end
 	if BrutalSlash:usable() and EnergyTimeToMax() > 1.5 and (TigersFury:up() or BrutalSlash:chargesFractional() > 2.5) then
