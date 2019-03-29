@@ -325,7 +325,7 @@ function autoAoe:remove(guid)
 	end
 end
 
-function autoAoe:clear(guid)
+function autoAoe:clear()
 	local guid
 	for guid in next, self.targets do
 		self.targets[guid] = nil
@@ -631,27 +631,30 @@ function Ability:azeriteRank()
 	return Azerite.traits[self.spellId] or 0
 end
 
-function Ability:autoAoe()
-	self.auto_aoe = true
-	self.first_hit_time = nil
-	self.targets_hit = {}
+function Ability:autoAoe(removeUnaffected)
+	self.auto_aoe = {
+		remove = removeUnaffected,
+		targets = {}
+	}
 end
 
 function Ability:recordTargetHit(guid)
-	self.targets_hit[guid] = var.time
-	if not self.first_hit_time then
-		self.first_hit_time = self.targets_hit[guid]
+	self.auto_aoe.targets[guid] = var.time
+	if not self.auto_aoe.start_time then
+		self.auto_aoe.start_time = self.auto_aoe.targets[guid]
 	end
 end
 
 function Ability:updateTargetsHit()
-	if self.first_hit_time and var.time - self.first_hit_time >= 0.3 then
-		self.first_hit_time = nil
-		autoAoe:clear()
+	if self.auto_aoe.start_time and var.time - self.auto_aoe.start_time >= 0.3 then
+		self.auto_aoe.start_time = nil
+		if self.auto_aoe.remove then
+			autoAoe:clear()
+		end
 		local guid
-		for guid in next, self.targets_hit do
+		for guid in next, self.auto_aoe.targets do
 			autoAoe:add(guid)
-			self.targets_hit[guid] = nil
+			self.auto_aoe.targets[guid] = nil
 		end
 		autoAoe:update()
 	end
@@ -685,6 +688,9 @@ function Ability:trackAuras()
 end
 
 function Ability:applyAura(timeStamp, guid)
+	if autoAoe.blacklist[guid] then
+		return
+	end
 	local aura = {
 		expires = timeStamp + self:duration()
 	}
@@ -692,6 +698,9 @@ function Ability:applyAura(timeStamp, guid)
 end
 
 function Ability:refreshAura(timeStamp, guid)
+	if autoAoe.blacklist[guid] then
+		return
+	end
 	local aura = self.aura_targets[guid]
 	if not aura then
 		self:applyAura(timeStamp, guid)
@@ -776,11 +785,11 @@ ThrashCat.buff_duration = 15
 ThrashCat.energy_cost = 40
 ThrashCat.tick_interval = 3
 ThrashCat.hasted_ticks = true
-ThrashCat:autoAoe()
+ThrashCat:autoAoe(true)
 ThrashCat:trackAuras()
 local SwipeCat = Ability.add(106785, false, true)
 SwipeCat.energy_cost = 35
-SwipeCat:autoAoe()
+SwipeCat:autoAoe(true)
 local TigersFury = Ability.add(5217, true, true)
 TigersFury.cooldown_duration = 30
 TigersFury.triggers_gcd = false
@@ -801,7 +810,7 @@ BrutalSlash.cooldown_duration = 8
 BrutalSlash.energy_cost = 25
 BrutalSlash.hasted_cooldown = true
 BrutalSlash.requires_charge = true
-BrutalSlash:autoAoe()
+BrutalSlash:autoAoe(true)
 local FeralFrenzy = Ability.add(274837, false, true, 274838)
 FeralFrenzy.buff_duration = 6
 FeralFrenzy.cooldown_duration = 45
@@ -824,7 +833,7 @@ ScentOfBlood.buff_duration = 6
 local PrimalWrath = Ability.add(285381, false, true)
 PrimalWrath.energy_cost = 1
 PrimalWrath.cp_cost = 1
-PrimalWrath:autoAoe()
+PrimalWrath:autoAoe(true)
 ------ Procs
 local Clearcasting = Ability.add(16864, true, true, 135700)
 Clearcasting.buff_duration = 15
@@ -862,9 +871,9 @@ Thrash.rage_cost = -5
 Thrash.tick_interval = 3
 Thrash.hasted_cooldown = true
 Thrash.hasted_ticks = true
-Thrash:autoAoe()
+Thrash:autoAoe(true)
 local Swipe = Ability.add(213771, false, true)
-Swipe:autoAoe()
+Swipe:autoAoe(true)
 ------ Talents
 local Brambles = Ability.add(203953, false, true, 213709)
 Brambles.tick_interval = 1
@@ -1008,6 +1017,18 @@ end
 
 -- Start Helpful Functions
 
+local function Health()
+	return var.health
+end
+
+local function HealthMax()
+	return var.health_max
+end
+
+local function HealthPct()
+	return var.health / var.health_max * 100
+end
+
 local function Mana()
 	return var.mana
 end
@@ -1042,10 +1063,6 @@ end
 
 local function RageDeficit()
 	return var.rage_max - var.rage
-end
-
-local function HealthPct()
-	return UnitHealth('player') / UnitHealthMax('player') * 100
 end
 
 local function GCD()
@@ -1085,7 +1102,7 @@ local function BloodlustActive()
 end
 
 local function TargetIsStunnable()
-	if UnitIsPlayer('target') then
+	if Target.player then
 		return true
 	end
 	if Target.boss then
@@ -1094,7 +1111,7 @@ local function TargetIsStunnable()
 	if var.instance == 'raid' then
 		return false
 	end
-	if UnitHealthMax('target') > UnitHealthMax('player') * 25 then
+	if Target.healthMax > var.health_max * 10 then
 		return false
 	end
 	return true
@@ -1942,21 +1959,13 @@ local function Disappear()
 	UpdateGlows()
 end
 
-function Equipped(name, slot)
-	local function SlotMatches(name, slot)
-		local ilink = GetInventoryItemLink('player', slot)
-		if ilink then
-			local iname = ilink:match('%[(.*)%]')
-			return (iname and iname:find(name))
-		end
-		return false
-	end
+function Equipped(itemID, slot)
 	if slot then
-		return SlotMatches(name, slot)
+		return GetInventoryItemID('player', slot) == itemId
 	end
 	local i
 	for i = 1, 19 do
-		if SlotMatches(name, i) then
+		if GetInventoryItemID('player', i) == itemID then
 			return true
 		end
 	end
@@ -2085,7 +2094,7 @@ local function UpdateTargetHealth()
 	Target.health = UnitHealth('target')
 	table.remove(Target.healthArray, 1)
 	Target.healthArray[15] = Target.health
-	Target.timeToDieMax = Target.health / UnitHealthMax('player') * 10
+	Target.timeToDieMax = Target.health / UnitHealthMax('player') * 15
 	Target.healthPercentage = Target.healthMax > 0 and (Target.health / Target.healthMax * 100) or 100
 	Target.healthLostPerSec = (Target.healthArray[1] - Target.health) / 3
 	Target.timeToDie = Target.healthLostPerSec > 0 and min(Target.timeToDieMax, Target.health / Target.healthLostPerSec) or Target.timeToDieMax
@@ -2148,6 +2157,8 @@ local function UpdateCombat()
 	if currentForm == FORM.BEAR then
 		var.rage = UnitPower('player', 1)
 	end
+	var.health = UnitHealth('player')
+	var.health_max = UnitHealthMax('player')
 	var.mana = UnitPower('player', 0) + (var.mana_regen * var.execute_remains)
 	if var.ability_casting then
 		var.mana = var.mana - var.ability_casting:manaCost()
@@ -2282,7 +2293,7 @@ function events:ADDON_LOADED(name)
 end
 
 function events:COMBAT_LOG_EVENT_UNFILTERED()
-	local timeStamp, eventType, hideCaster, srcGUID, srcName, srcFlags, srcRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellId, spellName = CombatLogGetCurrentEventInfo()
+	local timeStamp, eventType, _, srcGUID, _, _, _, dstGUID, _, _, _, spellId, spellName, _, missType = CombatLogGetCurrentEventInfo()
 	var.time = GetTime()
 	if eventType == 'UNIT_DIED' or eventType == 'UNIT_DESTROYED' or eventType == 'UNIT_DISSIPATES' or eventType == 'SPELL_INSTAKILL' or eventType == 'PARTY_KILL' then
 		trackAuras:remove(dstGUID)
@@ -2293,7 +2304,7 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 	if Opt.auto_aoe and (eventType == 'SWING_DAMAGE' or eventType == 'SWING_MISSED') then
 		if dstGUID == var.player then
 			autoAoe:add(srcGUID, true)
-		elseif srcGUID == var.player then
+		elseif srcGUID == var.player and not (missType == 'EVADE' or missType == 'IMMUNE') then
 			autoAoe:add(dstGUID, true)
 		end
 	end
@@ -2303,6 +2314,7 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 	   eventType == 'SPELL_CAST_FAILED' or
 	   eventType == 'SPELL_AURA_REMOVED' or
 	   eventType == 'SPELL_DAMAGE' or
+	   eventType == 'SPELL_PERIODIC_DAMAGE' or
 	   eventType == 'SPELL_HEAL' or
 	   eventType == 'SPELL_MISSED' or
 	   eventType == 'SPELL_AURA_APPLIED' or
@@ -2359,7 +2371,9 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 			Rip:refreshAura(timeStamp, dstGUID)
 		end
 		if Opt.auto_aoe then
-			if castedAbility.auto_aoe then
+			if missType == 'EVADE' or missType == 'IMMUNE' then
+				autoAoe:remove(dstGUID)
+			elseif castedAbility.auto_aoe then
 				castedAbility:recordTargetHit(dstGUID)
 			end
 			if castedAbility == Shred then
@@ -2381,6 +2395,7 @@ local function UpdateTargetInfo()
 	if not guid then
 		Target.guid = nil
 		Target.boss = false
+		Target.player = false
 		Target.hostile = true
 		Target.healthMax = 0
 		local i
@@ -2407,7 +2422,8 @@ local function UpdateTargetInfo()
 	end
 	Target.level = UnitLevel('target')
 	Target.healthMax = UnitHealthMax('target')
-	if UnitIsPlayer('target') then
+	Target.player = UnitIsPlayer('target')
+	if Target.player then
 		Target.boss = false
 	elseif Target.level == -1 then
 		Target.boss = true
@@ -2454,10 +2470,14 @@ function events:PLAYER_REGEN_ENABLED()
 		end
 	end
 	if Opt.auto_aoe then
-		for guid in next, autoAoe.targets do
-			autoAoe.targets[guid] = nil
+		for _, ability in next, abilities.autoAoe do
+			ability.auto_aoe.start_time = nil
+			for guid in next, ability.auto_aoe.targets do
+				ability.auto_aoe.targets[guid] = nil
+			end
 		end
-		SetTargetMode(1)
+		autoAoe:clear()
+		autoAoe:update()
 	end
 	if var.last_ability then
 		var.last_ability = nil
@@ -2868,5 +2888,5 @@ function SlashCmdList.Claw(msg, editbox)
 	} do
 		print('  ' .. SLASH_Claw1 .. ' ' .. cmd)
 	end
-	print('Got ideas for improvement or found a bug? Contact |cFFFF7D0AKilobyte|cFFFFD000-Dalaran|r or |cFFFFD000Spy#1955|r (the author of this addon)')
+	print('Got ideas for improvement or found a bug? Contact |cFFFF7D0ACheatah|cFFFFD000-Zul\'jin|r or |cFFFFD000Spy#1955|r (the author of this addon)')
 end
