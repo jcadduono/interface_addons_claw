@@ -2578,6 +2578,10 @@ function events:PLAYER_SPECIALIZATION_CHANGED(unitName)
 	end
 end
 
+function events:PLAYER_PVP_TALENT_UPDATE()
+	UpdateAbilityData()
+end
+
 function events:PLAYER_ENTERING_WORLD()
 	events:PLAYER_EQUIPMENT_CHANGED()
 	events:PLAYER_SPECIALIZATION_CHANGED('player')
