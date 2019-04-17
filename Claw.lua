@@ -2111,28 +2111,22 @@ end
 
 local function UpdateDisplay()
 	timer.display = 0
+	local text, dim = false, false
 	if Opt.dimmer then
-		if not var.main then
-			clawPanel.dimmer:Hide()
-		elseif var.main.spellId and IsUsableSpell(var.main.spellId) then
-			clawPanel.dimmer:Hide()
-		elseif var.main.itemId and IsUsableItem(var.main.itemId) then
-			clawPanel.dimmer:Hide()
-		else
-			clawPanel.dimmer:Show()
-		end
+		dim = not ((not var.main) or
+		           (var.main.spellId and IsUsableSpell(var.main.spellId)) or
+		           (var.main.itemId and IsUsableItem(var.main.itemId)))
 	end
 	if var.pool_energy then
 		local deficit = var.pool_energy - UnitPower('player', 3)
 		if deficit > 0 then
 			clawPanel.text:SetText(format('POOL %d', deficit))
-			clawPanel.text:Show()
-		else
-			clawPanel.text:Hide()
+			text = true
+			dim = Opt.dimmer
 		end
-	else
-		clawPanel.text:Hide()
 	end
+	clawPanel.dimmer:SetShown(dim)
+	clawPanel.text:SetShown(text)
 end
 
 local function UpdateCombat()
