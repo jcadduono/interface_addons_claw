@@ -490,7 +490,7 @@ function Ability:up()
 end
 
 function Ability:down()
-	return self:remains() <= 0
+	return not self:up()
 end
 
 function Ability:setVelocity(velocity)
@@ -719,9 +719,8 @@ function Ability:refreshAura(guid)
 		self:applyAura(guid)
 		return
 	end
-	local remains = aura.expires - Player.time
 	local duration = self:duration()
-	aura.expires = Player.time + min(duration * 1.3, remains + duration)
+	aura.expires = Player.time + min(duration * 1.3, (aura.expires - Player.time) + duration)
 end
 
 function Ability:removeAura(guid)
@@ -1172,8 +1171,7 @@ function Rake:refreshAura(guid)
 		self:applyAura(guid)
 		return
 	end
-	local remains = aura.expires - Player.time
-	aura.expires = Player.time + min(1.3 * self.buff_duration, remains + self.buff_duration)
+	aura.expires = Player.time + min(1.3 * self.buff_duration, (aura.expires - Player.time) + self.buff_duration)
 	aura.multiplier = self.next_multiplier
 end
 
@@ -1229,7 +1227,6 @@ function Rip:refreshAura(guid)
 		self:applyAura(guid)
 		return
 	end
-	local remains = aura.expires - Player.time
 	local duration, max_duration
 	if self.next_applied_by == Rip then
 		duration = 4 + (4 * self.next_combo_points)
@@ -1243,7 +1240,7 @@ function Rip:refreshAura(guid)
 		duration = 4 * self.next_combo_points
 		max_duration = 1.3 * (4 + (4 * Player.combo_points_max))
 	end
-	aura.expires = Player.time + min(max_duration, remains + duration)
+	aura.expires = Player.time + min(max_duration, (aura.expires - Player.time) + duration)
 end
 
 -- this will return the lowest remaining duration Rip on an enemy that isn't main target
@@ -1322,8 +1319,7 @@ function ThrashCat:refreshAura(guid)
 		self:applyAura(guid)
 		return
 	end
-	local remains = aura.expires - Player.time
-	aura.expires = Player.time + min(1.3 * self.buff_duration, remains + self.buff_duration)
+	aura.expires = Player.time + min(1.3 * self.buff_duration, (aura.expires - Player.time) + self.buff_duration)
 	aura.multiplier = self.next_multiplier
 end
 
@@ -2113,7 +2109,7 @@ end
 
 local function UpdateDisplay()
 	timer.display = 0
-	local text_center, dim = false, false
+	local dim, text_center
 	if Opt.dimmer then
 		dim = not ((not Player.main) or
 		           (Player.main.spellId and IsUsableSpell(Player.main.spellId)) or
@@ -2397,10 +2393,12 @@ local function UpdateTargetInfo()
 	if not guid then
 		Target.guid = nil
 		Target.boss = false
+		Target.stunnable = true
+		Target.classification = 'normal'
 		Target.player = false
-		Target.hostile = true
-		Target.stunnable = false
+		Target.level = UnitLevel('player')
 		Target.healthMax = 0
+		Target.hostile = true
 		local i
 		for i = 1, 15 do
 			Target.healthArray[i] = 0
@@ -2425,10 +2423,12 @@ local function UpdateTargetInfo()
 	end
 	Target.boss = false
 	Target.stunnable = true
+	Target.classification = UnitClassification('target')
+	Target.player = UnitIsPlayer('target')
 	Target.level = UnitLevel('target')
 	Target.healthMax = UnitHealthMax('target')
-	Target.player = UnitIsPlayer('target')
-	if not Target.player then
+	Target.hostile = UnitCanAttack('player', 'target') and not UnitIsDead('target')
+	if not Target.player and Target.classification ~= 'minus' and Target.classification ~= 'normal' then
 		if Target.level == -1 or (Player.instance == 'party' and Target.level >= UnitLevel('player') + 2) then
 			Target.boss = true
 			Target.stunnable = false
@@ -2436,7 +2436,6 @@ local function UpdateTargetInfo()
 			Target.stunnable = false
 		end
 	end
-	Target.hostile = UnitCanAttack('player', 'target') and not UnitIsDead('target')
 	if Target.hostile or Opt.always_on then
 		UpdateTargetHealth()
 		UpdateCombat()
@@ -2552,11 +2551,11 @@ end
 function events:PLAYER_EQUIPMENT_CHANGED()
 	Azerite:update()
 	UpdateAbilityData()
-	Trinket1.itemId = GetInventoryItemID('player', 13)
-	Trinket2.itemId = GetInventoryItemID('player', 14)
+	Trinket1.itemId = GetInventoryItemID('player', 13) or 0
+	Trinket2.itemId = GetInventoryItemID('player', 14) or 0
 	local _, i, equipType, hasCooldown
 	for i = 1, #inventoryItems do
-		inventoryItems[i].name, _, _, _, _, _, _, _, equipType, inventoryItems[i].icon = GetItemInfo(inventoryItems[i].itemId)
+		inventoryItems[i].name, _, _, _, _, _, _, _, equipType, inventoryItems[i].icon = GetItemInfo(inventoryItems[i].itemId or 0)
 		inventoryItems[i].can_use = inventoryItems[i].name and true or false
 		if equipType and equipType ~= '' then
 			hasCooldown = 0
