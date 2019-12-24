@@ -954,6 +954,11 @@ local PowerOfTheMoon = Ability:Add(273367, true, true)
 local WildFleshrending = Ability:Add(279527, false, true)
 -- Heart of Azeroth
 ---- Major Essences
+local BloodOfTheEnemy = Ability:Add(298277, false, true)
+BloodOfTheEnemy.buff_duration = 10
+BloodOfTheEnemy.cooldown_duration = 120
+BloodOfTheEnemy.essence_id = 23
+BloodOfTheEnemy.essence_major = true
 local ConcentratedFlame = Ability:Add(295373, true, true, 295378)
 ConcentratedFlame.buff_duration = 180
 ConcentratedFlame.cooldown_duration = 30
@@ -1022,7 +1027,8 @@ local RealityShift = Ability:Add(302952, true, true)
 RealityShift.buff_duration = 20
 RealityShift.cooldown_duration = 30
 RealityShift.essence_id = 15
-local RecklessForce = Ability:Add(302917, true, true)
+local RecklessForce = Ability:Add(302932, true, true)
+RecklessForce.buff_duration = 3
 RecklessForce.essence_id = 28
 local StriveForPerfection = Ability:Add(299369, true, true)
 StriveForPerfection.essence_id = 22
@@ -1706,15 +1712,16 @@ APL[SPEC.FERAL].main = function(self)
 actions.precombat=flask
 actions.precombat+=/food
 actions.precombat+=/augmentation
-actions.precombat+=/regrowth,if=talent.balancetalons.enabled
+# Snapshot raid buffed stats before combat begins and pre-potting is done.
+actions.precombat+=/snapshot_stats
 # It is worth it for almost everyone to maintain thrash
 actions.precombat+=/variable,name=use_thrash,value=0
 actions.precombat+=/variable,name=use_thrash,value=2,if=azerite.wild_fleshrending.enabled
+actions.precombat+=/regrowth,if=talent.bloodtalons.enabled
+actions.precombat+=/use_item,name=azsharas_font_of_power
 actions.precombat+=/cat_form
 actions.precombat+=/prowl
-# Snapshot raid buffed stats before combat begins and pre-potting is done.
-actions.precombat+=/snapshot_stats
-actions.precombat+=/potion
+actions.precombat+=/potion,dynamic_prepot=1
 actions.precombat+=/berserk
 ]]
 		if Prowl:Usable() then
@@ -1744,7 +1751,7 @@ actions+=/cat_form,if=!buff.cat_form.up
 actions+=/rake,if=buff.prowl.up|buff.shadowmeld.up
 actions+=/call_action_list,name=cooldowns
 actions+=/ferocious_bite,target_if=dot.rip.ticking&dot.rip.remains<3&target.time_to_die>10&(talent.sabertooth.enabled)
-actions+=/regrowth,if=combo_points=5&buff.predatory_swiftness.up&talent.balancetalons.enabled&buff.balancetalons.down&(!buff.incarnation.up|dot.rip.remains<8)
+actions+=/regrowth,if=combo_points=5&buff.predatory_swiftness.up&talent.bloodtalons.enabled&buff.bloodtalons.down&(!buff.incarnation.up|dot.rip.remains<8)
 actions+=/run_action_list,name=finishers,if=combo_points>4
 actions+=/run_action_list,name=generators
 ]]
@@ -1780,11 +1787,23 @@ APL[SPEC.FERAL].cooldowns = function(self)
 actions.cooldowns=berserk,if=energy>=30&(cooldown.tigers_fury.remains>5|buff.tigers_fury.up)
 actions.cooldowns+=/tigers_fury,if=energy.deficit>=60
 actions.cooldowns+=/berserking
+actions.cooldowns+=/thorns,if=active_enemies>desired_targets|raid_event.adds.in>45
+actions.cooldowns+=/guardian_of_azeroth
+actions.cooldowns+=/the_unbound_force,if=buff.reckless_force.up|buff.tigers_fury.up
+actions.cooldowns+=/memory_of_lucid_dreams,if=(buff.tigers_fury.up|cooldown.tigers_fury.remains<2)&buff.berserk.down
+actions.cooldowns+=/blood_of_the_enemy,if=buff.tigers_fury.up
 actions.cooldowns+=/feral_frenzy,if=combo_points=0
+actions.cooldowns+=/focused_azerite_beam,if=active_enemies>desired_targets|(raid_event.adds.in>90&energy.deficit>=50)
+actions.cooldowns+=/purifying_blast,if=active_enemies>desired_targets|raid_event.adds.in>60
+actions.cooldowns+=/worldvein_resonance,if=buff.lifeblood.stack<4
 actions.cooldowns+=/incarnation,if=energy>=30&(cooldown.tigers_fury.remains>15|buff.tigers_fury.up)
-actions.cooldowns+=/potion,name=battle_potion_of_agility,if=target.time_to_die<65|(time_to_die<180&(buff.berserk.up|buff.incarnation.up))
-actions.cooldowns+=/shadowmeld,if=combo_points<5&energy>=action.rake.cost&dot.rake.pmultiplier<2.1&buff.tigers_fury.up&(buff.balancetalons.up|!talent.balancetalons.enabled)&(!talent.incarnation.enabled|cooldown.incarnation.remains>18)&!buff.incarnation.up
-actions.cooldowns+=/use_items
+actions.cooldowns+=/potion,if=target.time_to_die<65|(time_to_die<180&(buff.berserk.up|buff.incarnation.up))
+actions.cooldowns+=/shadowmeld,if=combo_points<5&energy>=action.rake.cost&dot.rake.pmultiplier<2.1&buff.tigers_fury.up&(buff.bloodtalons.up|!talent.bloodtalons.enabled)&(!talent.incarnation.enabled|cooldown.incarnation.remains>18)&!buff.incarnation.up
+actions.cooldowns+=/use_item,name=ashvanes_razor_coral,if=debuff.razor_coral_debuff.down|debuff.conductive_ink_debuff.up&target.time_to_pct_30<1.5|!debuff.conductive_ink_debuff.up&(debuff.razor_coral_debuff.stack>=25-10*debuff.blood_of_the_enemy.up|target.time_to_die<40)&buff.tigers_fury.remains>10
+actions.cooldowns+=/use_item,effect_name=cyclotronic_blast,if=(energy.deficit>=energy.regen*3)&buff.tigers_fury.down&!azerite.jungle_fury.enabled
+actions.cooldowns+=/use_item,effect_name=cyclotronic_blast,if=buff.tigers_fury.up&azerite.jungle_fury.enabled
+actions.cooldowns+=/use_item,effect_name=azsharas_font_of_power,if=energy.deficit>=50
+actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 ]]
 	if Berserk:Usable() and Player:Energy() >= 30 and (TigersFury:Cooldown() > 5 or TigersFury:Up()) then
 		return UseCooldown(Berserk)
@@ -1792,8 +1811,29 @@ actions.cooldowns+=/use_items
 	if TigersFury:Usable() and Player:EnergyDeficit() >= 60 then
 		return UseCooldown(TigersFury)
 	end
+	if GuardianOfAzeroth:Usable() then
+		return UseCooldown(GuardianOfAzeroth)
+	end
+	if TheUnboundForce:Usable() and RecklessForce:Up() then
+		return UseCooldown(TheUnboundForce)
+	end
+	if MemoryOfLucidDreams:Usable() and (TigersFury:Up() or TigersFury:Ready(2)) and Berserk:Down() then
+		return UseCooldown(MemoryOfLucidDreams)
+	end
+	if BloodOfTheEnemy:Usable() and TigersFury:Up() then
+		return UseCooldown(BloodOfTheEnemy)
+	end
 	if FeralFrenzy:Usable() and Player:ComboPoints() == 0 then
 		return UseCooldown(FeralFrenzy)
+	end
+	if FocusedAzeriteBeam:Usable() and (Enemies() >= 3 or (Rake:Remains() > 6 and Rip:Remains() > 8)) then
+		return UseCooldown(FocusedAzeriteBeam)
+	end
+	if PurifyingBlast:Usable() and Enemies() >= 2 then
+		return UseCooldown(PurifyingBlast)
+	end
+	if WorldveinResonance:Usable() and Lifeblood:stack() < 4 then
+		return UseCooldown(WorldveinResonance)
 	end
 	if IncarnationKingOfTheJungle:Usable() and Player:Energy() >= 30 and (TigersFury:Cooldown() > 15 or TigersFury:Up()) then
 		return UseCooldown(IncarnationKingOfTheJungle)
@@ -1804,7 +1844,7 @@ actions.cooldowns+=/use_items
 	if Shadowmeld:Usable() and Player:ComboPoints() < 5 and Player:Energy() >= Rake:EnergyCost() and Rake:Multiplier() < 2.1 and TigersFury:Up() and (not Bloodtalons.known or Bloodtalons:Up()) and (not IncarnationKingOfTheJungle.known or (IncarnationKingOfTheJungle:Down() and IncarnationKingOfTheJungle:Cooldown() > 18)) then
 		return UseCooldown(Shadowmeld)
 	end
-	if Opt.trinket then
+	if Opt.trinket and (Target.timeToDie < 20 or TigersFury:Up()) then
 		if Trinket1:Usable() then
 			UseCooldown(Trinket1)
 		elseif Trinket2:Usable() then
@@ -1827,7 +1867,7 @@ actions.finishers+=/pool_resource,for_next=1
 actions.finishers+=/savage_roar,if=buff.savage_roar.remains<12
 actions.finishers+=/pool_resource,for_next=1
 actions.finishers+=/maim,if=buff.iron_jaws.up
-actions.finishers+=/ferocious_bite,max_energy=1
+actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_gained_on_refresh
 ]]
 	if SavageRoar:Usable(true) and SavageRoar:Down() then
 		return Pool(SavageRoar)
@@ -1865,21 +1905,21 @@ end
 
 APL[SPEC.FERAL].generators = function(self)
 --[[
-actions.generators=regrowth,if=talent.balancetalons.enabled&buff.predatory_swiftness.up&buff.balancetalons.down&combo_points=4&dot.rake.remains<4
-actions.generators+=/regrowth,if=talent.balancetalons.enabled&buff.balancetalons.down&buff.predatory_swiftness.up&talent.lunar_inspiration.enabled&dot.rake.remains<1
+actions.generators=regrowth,if=talent.bloodtalons.enabled&buff.predatory_swiftness.up&buff.bloodtalons.down&combo_points=4&dot.rake.remains<4
+actions.generators+=/regrowth,if=talent.bloodtalons.enabled&buff.bloodtalons.down&buff.predatory_swiftness.up&talent.lunar_inspiration.enabled&dot.rake.remains<1
 actions.generators+=/brutal_slash,if=spell_targets.brutal_slash>desired_targets
 actions.generators+=/pool_resource,for_next=1
 actions.generators+=/thrash_cat,if=(refreshable)&(spell_targets.thrash_cat>2)
 actions.generators+=/pool_resource,for_next=1
-actions.generators+=/thrash_cat,if=(talent.scent_of_balance.enabled&buff.scent_of_balance.down)&spell_targets.thrash_cat>3
+actions.generators+=/thrash_cat,if=(talent.scent_of_blood.enabled&buff.scent_of_blood.down)&spell_targets.thrash_cat>3
 actions.generators+=/pool_resource,for_next=1
-actions.generators+=/swipe_cat,if=buff.scent_of_balance.up
+actions.generators+=/swipe_cat,if=buff.scent_of_blood.up|(action.swipe_cat.damage*spell_targets.swipe_cat>(action.rake.damage+(action.rake_bleed.tick_damage*5)))
 actions.generators+=/pool_resource,for_next=1
-actions.generators+=/rake,target_if=!ticking|(!talent.balancetalons.enabled&remains<duration*0.3)&target.time_to_die>4
+actions.generators+=/rake,target_if=!ticking|(!talent.bloodtalons.enabled&remains<duration*0.3)&target.time_to_die>4
 actions.generators+=/pool_resource,for_next=1
-actions.generators+=/rake,target_if=talent.balancetalons.enabled&buff.balancetalons.up&((remains<=7)&persistent_multiplier>dot.rake.pmultiplier*0.85)&target.time_to_die>4
+actions.generators+=/rake,target_if=talent.bloodtalons.enabled&buff.bloodtalons.up&((remains<=7)&persistent_multiplier>dot.rake.pmultiplier*0.85)&target.time_to_die>4
 # With LI & BT, we can use moonfire to save BT charges, allowing us to better refresh rake
-actions.generators+=/moonfire_cat,if=buff.balancetalons.up&buff.predatory_swiftness.down&combo_points<5
+actions.generators+=/moonfire_cat,if=buff.bloodtalons.up&buff.predatory_swiftness.down&combo_points<5
 actions.generators+=/brutal_slash,if=(buff.tigers_fury.up&(raid_event.adds.in>(1+max_charges-charges_fractional)*recharge_time))
 actions.generators+=/moonfire_cat,target_if=refreshable
 actions.generators+=/pool_resource,for_next=1
@@ -1948,6 +1988,9 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 			return ThrashCat
 		end
 	end
+	if ConcentratedFlame:Usable() and ConcentratedFlame.dot:Down() and (ConcentratedFlame:WontCapEnergy() or ConcentratedFlame:Charges() > 1.8) then
+		return ConcentratedFlame
+	end
 	if SwipeCat:Usable(true) and Player.enemies > 1 then
 		return Pool(SwipeCat)
 	end
@@ -1958,6 +2001,7 @@ end
 
 APL[SPEC.FERAL].opener = function(self)
 --[[
+# The opener generally follow the logic of the rest of the apl, but is separated out here for logical clarity
 # We will open with TF, you can safely cast this from stealth without breaking it.
 actions.opener=tigers_fury
 # Always open with rake, consuming stealth and one BT charge (if talented)
@@ -2073,11 +2117,11 @@ end
 APL[SPEC.GUARDIAN].cooldowns = function(self)
 --[[
 actions.cooldowns=potion
-actions.cooldowns+=/balance_fury
+actions.cooldowns+=/blood_fury
 actions.cooldowns+=/berserking
 actions.cooldowns+=/arcane_torrent
 actions.cooldowns+=/lights_judgment
-actions.cooldowns+=/firebalance
+actions.cooldowns+=/fireblood
 actions.cooldowns+=/ancestral_call
 actions.cooldowns+=/barkskin,if=buff.bear_form.up
 actions.cooldowns+=/lunar_beam,if=buff.bear_form.up
