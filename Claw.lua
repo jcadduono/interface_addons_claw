@@ -148,6 +148,7 @@ local Player = {
 	rage_max = 100,
 	combo_points = 0,
 	combo_points_max = 5,
+	last_swing_taken = 0,
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
 	},
@@ -1034,6 +1035,10 @@ local StriveForPerfection = Ability:Add(299369, true, true)
 StriveForPerfection.essence_id = 22
 -- Racials
 local Shadowmeld = Ability:Add(58984, true, true)
+-- PvP talents
+local Thorns = Ability:Add(305497, true, true)
+Thorns.buff_duration = 12
+Thorns.cooldown_duration = 45
 -- Trinket Effects
 
 -- End Abilities
@@ -1224,6 +1229,10 @@ end
 
 function Player:RageDeficit()
 	return self.rage_max - self.rage
+end
+
+function Player:UnderAttack()
+	return (Player.time - self.last_swing_taken) < 3
 end
 
 function Player:TimeInCombat()
@@ -1811,6 +1820,9 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if TigersFury:Usable() and Player:EnergyDeficit() >= 60 then
 		return UseCooldown(TigersFury)
 	end
+	if Thorns:Usable() and Player:UnderAttack() and Thorns:WontCapEnergy() then
+		return UseCooldown(Thorns)
+	end
 	if GuardianOfAzeroth:Usable() then
 		return UseCooldown(GuardianOfAzeroth)
 	end
@@ -2133,6 +2145,9 @@ actions.cooldowns+=/use_items
 	end
 	if FrenziedRegeneration:Usable() and Player:HealthPct() <= Opt.frenzied_threshold then
 		UseExtra(FrenziedRegeneration)
+	end
+	if Thorns:Usable() and Player:UnderAttack() and Player:HealthPct() > 60 then
+		return UseCooldown(Thorns)
 	end
 	if Barkskin:Usable() then
 		return UseCooldown(Barkskin)
@@ -2546,11 +2561,16 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 			autoAoe:Remove(dstGUID)
 		end
 	end
-	if Opt.auto_aoe and (eventType == 'SWING_DAMAGE' or eventType == 'SWING_MISSED') then
-		if dstGUID == Player.guid or dstGUID == Player.pet then
-			autoAoe:Add(srcGUID, true)
-		elseif (srcGUID == Player.guid or srcGUID == Player.pet) and not (missType == 'EVADE' or missType == 'IMMUNE') then
-			autoAoe:Add(dstGUID, true)
+	if eventType == 'SWING_DAMAGE' or eventType == 'SWING_MISSED' then
+		if dstGUID == Player.guid then
+			Player.last_swing_taken = Player.time
+		end
+		if Opt.auto_aoe then
+			if dstGUID == Player.guid then
+				autoAoe:Add(srcGUID, true)
+			elseif srcGUID == Player.guid and not (missType == 'EVADE' or missType == 'IMMUNE') then
+				autoAoe:Add(dstGUID, true)
+			end
 		end
 	end
 
@@ -2657,6 +2677,7 @@ end
 
 function events:PLAYER_REGEN_ENABLED()
 	Player.combat_start = 0
+	Player.last_swing_taken = 0
 	Target.estimated_range = 30
 	Player.previous_gcd = {}
 	if Player.last_ability then
