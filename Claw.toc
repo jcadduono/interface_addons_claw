@@ -1,7 +1,7 @@
-## Interface: 80205
+## Interface: 80300
 ## Title: Claw
 ## Notes: Claw is an addon for druids that simplifies gameplay and maximizes DPS by doing all the decision making for you
 ## Author: jcadduono @ curseforge.com or Spy#1955 @ BattleTag
 ## SavedVariablesPerCharacter: Claw
-## Version: 8.2.5-1
+## Version: 8.3.0-0
 Claw.lua

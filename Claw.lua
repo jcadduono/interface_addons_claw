@@ -187,9 +187,22 @@ clawPanel.swipe = CreateFrame('Cooldown', nil, clawPanel, 'CooldownFrameTemplate
 clawPanel.swipe:SetAllPoints(clawPanel)
 clawPanel.text = CreateFrame('Frame', nil, clawPanel)
 clawPanel.text:SetAllPoints(clawPanel)
+clawPanel.text.tl = clawPanel.text:CreateFontString(nil, 'OVERLAY')
+clawPanel.text.tl:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
+clawPanel.text.tl:SetPoint('TOPLEFT', clawPanel, 'TOPLEFT', 2.5, -3)
+clawPanel.text.tl:SetJustifyH('LEFT')
+clawPanel.text.tr = clawPanel.text:CreateFontString(nil, 'OVERLAY')
+clawPanel.text.tr:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
+clawPanel.text.tr:SetPoint('TOPRIGHT', clawPanel, 'TOPRIGHT', -2.5, -3)
+clawPanel.text.tr:SetJustifyH('RIGHT')
+clawPanel.text.bl = clawPanel.text:CreateFontString(nil, 'OVERLAY')
+clawPanel.text.bl:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
+clawPanel.text.bl:SetPoint('BOTTOMLEFT', clawPanel, 'BOTTOMLEFT', 2.5, 3)
+clawPanel.text.bl:SetJustifyH('LEFT')
 clawPanel.text.br = clawPanel.text:CreateFontString(nil, 'OVERLAY')
 clawPanel.text.br:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-clawPanel.text.br:SetPoint('BOTTOMRIGHT', clawPanel, 'BOTTOMRIGHT', -1.5, 3)
+clawPanel.text.br:SetPoint('BOTTOMRIGHT', clawPanel, 'BOTTOMRIGHT', -2.5, 3)
+clawPanel.text.br:SetJustifyH('RIGHT')
 clawPanel.text.center = clawPanel.text:CreateFontString(nil, 'OVERLAY')
 clawPanel.text.center:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
 clawPanel.text.center:SetAllPoints(clawPanel.text)
@@ -990,6 +1003,10 @@ PurifyingBlast.cooldown_duration = 60
 PurifyingBlast.essence_id = 6
 PurifyingBlast.essence_major = true
 PurifyingBlast:AutoAoe(true)
+local ReapingFlames = Ability:Add(311195, false, true)
+ReapingFlames.cooldown_duration = 45
+ReapingFlames.essence_id = 35
+ReapingFlames.essence_major = true
 local RippleInSpace = Ability:Add(302731, true, true)
 RippleInSpace.buff_duration = 2
 RippleInSpace.cooldown_duration = 60
@@ -1156,6 +1173,7 @@ function Azerite:Update()
 							self.traits[pid] = 1 + (self.traits[pid] or 0)
 							pinfo = C_AzeriteEmpoweredItem.GetPowerInfo(pid)
 							if pinfo and pinfo.spellID then
+								--print('Azerite found:', pinfo.azeritePowerID, GetSpellInfo(pinfo.spellID))
 								self.traits[pinfo.spellID] = self.traits[pid]
 							end
 						end
@@ -1346,11 +1364,12 @@ end
 function Target:UpdateHealth()
 	timer.health = 0
 	self.health = UnitHealth('target')
+	self.health_max = UnitHealthMax('target')
 	table.remove(self.healthArray, 1)
-	self.healthArray[15] = self.health
-	self.timeToDieMax = self.health / UnitHealthMax('player') * 15
-	self.healthPercentage = self.healthMax > 0 and (self.health / self.healthMax * 100) or 100
-	self.healthLostPerSec = (self.healthArray[1] - self.health) / 3
+	self.healthArray[25] = self.health
+	self.timeToDieMax = self.health / Player.health_max * 15
+	self.healthPercentage = self.health_max > 0 and (self.health / self.health_max * 100) or 100
+	self.healthLostPerSec = (self.healthArray[1] - self.health) / 5
 	self.timeToDie = self.healthLostPerSec > 0 and min(self.timeToDieMax, self.health / self.healthLostPerSec) or self.timeToDieMax
 end
 
@@ -1367,14 +1386,13 @@ function Target:Update()
 		self.classification = 'normal'
 		self.player = false
 		self.level = UnitLevel('player')
-		self.healthMax = 0
 		self.hostile = true
 		local i
-		for i = 1, 15 do
+		for i = 1, 25 do
 			self.healthArray[i] = 0
 		end
+		self:UpdateHealth()
 		if Opt.always_on then
-			self:UpdateHealth()
 			UI:UpdateCombat()
 			clawPanel:Show()
 			return true
@@ -1387,7 +1405,7 @@ function Target:Update()
 	if guid ~= self.guid then
 		self.guid = guid
 		local i
-		for i = 1, 15 do
+		for i = 1, 25 do
 			self.healthArray[i] = UnitHealth('target')
 		end
 	end
@@ -1396,18 +1414,17 @@ function Target:Update()
 	self.classification = UnitClassification('target')
 	self.player = UnitIsPlayer('target')
 	self.level = UnitLevel('target')
-	self.healthMax = UnitHealthMax('target')
 	self.hostile = UnitCanAttack('player', 'target') and not UnitIsDead('target')
+	self:UpdateHealth()
 	if not self.player and self.classification ~= 'minus' and self.classification ~= 'normal' then
 		if self.level == -1 or (Player.instance == 'party' and self.level >= UnitLevel('player') + 2) then
 			self.boss = true
 			self.stunnable = false
-		elseif Player.instance == 'raid' or (self.healthMax > Player.health_max * 10) then
+		elseif Player.instance == 'raid' or (self.health_max > Player.health_max * 10) then
 			self.stunnable = false
 		end
 	end
 	if self.hostile or Opt.always_on then
-		self:UpdateHealth()
 		UI:UpdateCombat()
 		clawPanel:Show()
 		return true
@@ -2003,6 +2020,9 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 	if ConcentratedFlame:Usable() and ConcentratedFlame.dot:Down() and (ConcentratedFlame:WontCapEnergy() or ConcentratedFlame:Charges() > 1.8) then
 		return ConcentratedFlame
 	end
+	if ReapingFlames:Usable() and ReapingFlames:WontCapEnergy() then
+		return ReapingFlames
+	end
 	if SwipeCat:Usable(true) and Player.enemies > 1 then
 		return Pool(SwipeCat)
 	end
@@ -2428,13 +2448,13 @@ function UI:UpdateDisplay()
 	if Player.pool_energy then
 		local deficit = Player.pool_energy - UnitPower('player', 3)
 		if deficit > 0 then
-			clawPanel.text.center:SetText(format('POOL %d', deficit))
-			text_center = true
+			text_center = format('POOL %d', deficit)
 			dim = Opt.dimmer
 		end
 	end
 	clawPanel.dimmer:SetShown(dim)
-	clawPanel.text.center:SetShown(text_center)
+	clawPanel.text.center:SetText(text_center)
+	--clawPanel.text.bl:SetText(format('%.1fs', Target.timeToDie))
 end
 
 function UI:UpdateCombat()
