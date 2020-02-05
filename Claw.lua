@@ -1778,6 +1778,7 @@ actions+=/rake,if=buff.prowl.up|buff.shadowmeld.up
 actions+=/call_action_list,name=cooldowns
 actions+=/ferocious_bite,target_if=dot.rip.ticking&dot.rip.remains<3&target.time_to_die>10&(talent.sabertooth.enabled)
 actions+=/regrowth,if=combo_points=5&buff.predatory_swiftness.up&talent.bloodtalons.enabled&buff.bloodtalons.down&(!buff.incarnation.up|dot.rip.remains<8)
+actions+=/heart_essence,if=buff.tigers_fury.up
 actions+=/run_action_list,name=finishers,if=combo_points>4
 actions+=/run_action_list,name=generators
 ]]
@@ -1800,6 +1801,14 @@ actions+=/run_action_list,name=generators
 		end
 		if PredatorySwiftness:Remains() < 1.5 and (Player:EnergyTimeToMax() > Player.gcd or Player:ComboPoints() >= 4) then
 			return Regrowth
+		end
+	end
+	if TigersFury:Up() then
+		if ConcentratedFlame:Usable() and ConcentratedFlame.dot:Down() and (ConcentratedFlame:WontCapEnergy() or ConcentratedFlame:Charges() > 1.8) then
+			return ConcentratedFlame
+		end
+		if ReapingFlames:Usable() and ReapingFlames:WontCapEnergy() then
+			return ReapingFlames
 		end
 	end
 	if Player:ComboPoints() == 5 then
@@ -2016,12 +2025,6 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 		if Clearcasting:Up() and (IncarnationKingOfTheJungle:Down() or WildFleshrending.known) then
 			return ThrashCat
 		end
-	end
-	if ConcentratedFlame:Usable() and ConcentratedFlame.dot:Down() and (ConcentratedFlame:WontCapEnergy() or ConcentratedFlame:Charges() > 1.8) then
-		return ConcentratedFlame
-	end
-	if ReapingFlames:Usable() and ReapingFlames:WontCapEnergy() then
-		return ReapingFlames
 	end
 	if SwipeCat:Usable(true) and Player.enemies > 1 then
 		return Pool(SwipeCat)
