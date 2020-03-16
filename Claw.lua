@@ -1864,10 +1864,10 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if FeralFrenzy:Usable() and Player:ComboPoints() == 0 then
 		return UseCooldown(FeralFrenzy)
 	end
-	if FocusedAzeriteBeam:Usable() and (Enemies() >= 3 or (Rake:Remains() > 6 and Rip:Remains() > 8)) then
+	if FocusedAzeriteBeam:Usable() and (Player.enemies >= 3 or (Rake:Remains() > 6 and Rip:Remains() > 8)) then
 		return UseCooldown(FocusedAzeriteBeam)
 	end
-	if PurifyingBlast:Usable() and Enemies() >= 2 then
+	if PurifyingBlast:Usable() and Player.enemies >= 2 then
 		return UseCooldown(PurifyingBlast)
 	end
 	if WorldveinResonance:Usable() and Lifeblood:stack() < 4 then
@@ -2975,12 +2975,12 @@ function SlashCmdList.Claw(msg, editbox)
 			end
 			return Status('Interrupt ability icon scale', Opt.scale.interrupt, 'times')
 		end
-		if startsWith(msg[2], 'ex') or startsWith(msg[2], 'pet') then
+		if startsWith(msg[2], 'ex') then
 			if msg[3] then
 				Opt.scale.extra = tonumber(msg[3]) or 0.4
 				UI:UpdateScale()
 			end
-			return Status('Extra/Pet cooldown ability icon scale', Opt.scale.extra, 'times')
+			return Status('Extra cooldown ability icon scale', Opt.scale.extra, 'times')
 		end
 		if msg[2] == 'glow' then
 			if msg[3] then
@@ -2989,7 +2989,7 @@ function SlashCmdList.Claw(msg, editbox)
 			end
 			return Status('Action button glow scale', Opt.scale.glow, 'times')
 		end
-		return Status('Default icon scale options', '|cFFFFD000prev 0.7|r, |cFFFFD000main 1|r, |cFFFFD000cd 0.7|r, |cFFFFD000interrupt 0.4|r, |cFFFFD000pet 0.4|r, and |cFFFFD000glow 1|r')
+		return Status('Default icon scale options', '|cFFFFD000prev 0.7|r, |cFFFFD000main 1|r, |cFFFFD000cd 0.7|r, |cFFFFD000interrupt 0.4|r, |cFFFFD000extra 0.4|r, and |cFFFFD000glow 1|r')
 	end
 	if msg[1] == 'alpha' then
 		if msg[2] then
@@ -3026,12 +3026,12 @@ function SlashCmdList.Claw(msg, editbox)
 			end
 			return Status('Glowing ability buttons (interrupt icon)', Opt.glow.interrupt)
 		end
-		if startsWith(msg[2], 'ex') or startsWith(msg[2], 'pet') then
+		if startsWith(msg[2], 'ex') then
 			if msg[3] then
 				Opt.glow.extra = msg[3] == 'on'
 				UI:UpdateGlows()
 			end
-			return Status('Glowing ability buttons (extra/pet cooldown icon)', Opt.glow.extra)
+			return Status('Glowing ability buttons (extra cooldown icon)', Opt.glow.extra)
 		end
 		if startsWith(msg[2], 'bliz') then
 			if msg[3] then
@@ -3049,7 +3049,7 @@ function SlashCmdList.Claw(msg, editbox)
 			end
 			return Status('Glow color', '|cFFFF0000' .. Opt.glow.color.r, '|cFF00FF00' .. Opt.glow.color.g, '|cFF0000FF' .. Opt.glow.color.b)
 		end
-		return Status('Possible glow options', '|cFFFFD000main|r, |cFFFFD000cd|r, |cFFFFD000interrupt|r, |cFFFFD000pet|r, |cFFFFD000blizzard|r, and |cFFFFD000color')
+		return Status('Possible glow options', '|cFFFFD000main|r, |cFFFFD000cd|r, |cFFFFD000interrupt|r, |cFFFFD000extra|r, |cFFFFD000blizzard|r, and |cFFFFD000color')
 	end
 	if startsWith(msg[1], 'prev') then
 		if msg[2] then
