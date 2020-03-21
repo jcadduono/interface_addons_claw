@@ -1328,7 +1328,7 @@ function Player:UpdateAbilities()
 	if self.spec == SPEC.FERAL then
 		SwipeCat.known = not BrutalSlash.known
 		ThrashCat.known = true
-		self.rip_multiplier_max = Rip:MaxMultiplier()
+		self.rip_multiplier_max = Rip:MultiplierMax()
 	end
 	if self.spec == SPEC.GUARDIAN then
 		Swipe.known = true
@@ -1565,7 +1565,7 @@ function Rip:LowestRemainsOthers()
 		end
 	end
 	if lowest then
-		return lowest - (Player.time - Player.time_diff)
+		return lowest - Player.time
 	end
 	return 0
 end
@@ -1585,6 +1585,20 @@ function Rip:MultiplierSum()
 	return sum
 end
 
+function Rip:MultiplierMax()
+	local multiplier = 1.00
+	if TigersFury.known then
+		multiplier = multiplier * 1.15
+	end
+	if SavageRoar.known then
+		multiplier = multiplier * 1.10
+	end
+	if Bloodtalons.known then
+		multiplier = multiplier * 1.25
+	end
+	return multiplier
+end
+
 function Rip:NextMultiplier()
 	local multiplier = 1.00
 	local _, i, id
@@ -1600,20 +1614,6 @@ function Rip:NextMultiplier()
 		elseif Bloodtalons:Match(id) then
 			multiplier = multiplier * 1.25
 		end
-	end
-	return multiplier
-end
-
-function Rip:MaxMultiplier()
-	local multiplier = 1.00
-	if TigersFury.known then
-		multiplier = multiplier * 1.15
-	end
-	if SavageRoar.known then
-		multiplier = multiplier * 1.10
-	end
-	if Bloodtalons.known then
-		multiplier = multiplier * 1.25
 	end
 	return multiplier
 end
@@ -1911,7 +1911,7 @@ actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_ga
 		return Pool(SavageRoar)
 	end
 	if Target.timeToDie > max(8, Rip:Remains() + 4) and Rip:Multiplier() < Player.rip_multiplier_max and Rip:NextMultiplier() >= Player.rip_multiplier_max then
-		if Sabertooth.known and PrimalWrath:Usable(true) then
+		if PrimalWrath:Usable(true) and (Sabertooth.known or Player.enemies >= 3) then
 			return Pool(PrimalWrath)
 		elseif Rip:Usable(true) then
 			return Pool(Rip)
@@ -1920,11 +1920,11 @@ actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_ga
 	if Sabertooth.known and FerociousBite:Usable(true) and Rip:Up() and between(Player.enemies, 2, 3) and Rip:LowestRemainsOthers() > (((Berserk:Up() or IncarnationKingOfTheJungle:Up()) and 5 or 8) * (Player.enemies - 1)) then
 		return Pool(FerociousBite, Rip:Remains() < 1 and 0 or 25)
 	end
-	if PrimalWrath:Usable(true) and Player.enemies > 1 and (Player.enemies >= 5 or Rip:NextMultiplier() > (Rip:MultiplierSum() / Player.enemies) or Rip:LowestRemainsOthers() < ((Berserk:Up() or IncarnationKingOfTheJungle:Up()) and 5 or 8)) then
+	if PrimalWrath:Usable(true) and Player.enemies > 1 and (Player.enemies >= 5 or Rip:NextMultiplier() > (Rip:MultiplierSum() / Player.enemies) or Rip:LowestRemainsOthers() < ((Berserk:Up() or IncarnationKingOfTheJungle:Up()) and 3.6 or 7.2)) then
 		return Pool(PrimalWrath)
 	end
-	if Rip:Down() or (Target.timeToDie > 8 and ((Rip:Refreshable() and not Sabertooth.known) or (Rip:Remains() <= Rip:Duration() * 0.8 and Rip:NextMultiplier() > Rip:Multiplier()))) then
-		if Sabertooth.known and PrimalWrath:Usable(true) then
+	if Target.timeToDie > 8 and (Player.enemies == 1 or not PrimalWrath.known) and (Rip:Down() or (not Sabertooth.known and Rip:Remains() < 7.2) or (Rip:Remains() < 19.2 and Rip:NextMultiplier() > Rip:Multiplier())) then
+		if PrimalWrath:Usable(true) and Sabertooth.known then
 			return Pool(PrimalWrath)
 		elseif Rip:Usable(true) then
 			return Pool(Rip)
@@ -2054,7 +2054,7 @@ actions.opener+=/rip,if=!ticking
 		Player.opener_done = true
 		return self:main()
 	end
-	if TigersFury:Usable() then
+	if TigersFury:Usable() and TigersFury:Remains() < 4 then
 		UseCooldown(TigersFury)
 	end
 	if Rake:Usable() and (Rake:Down() or Prowl:Up()) then
