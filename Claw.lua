@@ -2111,7 +2111,7 @@ actions+=/swipe
 	if Maul:Usable() and Player:RageDeficit() < 10 and Player.enemies < 4 then
 		return Maul
 	end
-	if Ironfur:Usable() and (Ironfur:RageCost() == 0 or (Rage() > Ironfur:RageCost() and LayeredMane.known and Player.enemies > 2)) then
+	if Ironfur:Usable() and (Ironfur:RageCost() == 0 or (Player:Rage() > Ironfur:RageCost() and LayeredMane.known and Player.enemies > 2)) then
 		UseExtra(Ironfur)
 	end
 	if Pulverize:Usable() and Thrash:Stack() == 3 then
@@ -2350,39 +2350,47 @@ end
 
 UI.anchor_points = {
 	blizzard = { -- Blizzard Personal Resource Display (Default)
-		[SPEC.BALANCE] = {
+		[FORM.NONE] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 42 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -18 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -9 }
 		},
-		[SPEC.FERAL] = {
+		[FORM.MOONKIN] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 42 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -18 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -9 }
 		},
-		[SPEC.GUARDIAN] = {
+		[FORM.CAT] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 42 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -18 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -24 }
 		},
-		[SPEC.RESTORATION] = {
+		[FORM.BEAR] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 42 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -18 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -9 }
+		},
+		[FORM.TRAVEL] = {
+			['above'] = { 'BOTTOM', 'TOP', 0, 42 },
+			['below'] = { 'TOP', 'BOTTOM', 0, -9 }
 		},
 	},
 	kui = { -- Kui Nameplates
-		[SPEC.BALANCE] = {
+		[FORM.NONE] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 30 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -4 }
+			['below'] = { 'TOP', 'BOTTOM', 0, 4 }
 		},
-		[SPEC.FERAL] = {
+		[FORM.MOONKIN] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 30 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -4 }
+			['below'] = { 'TOP', 'BOTTOM', 0, 4 }
 		},
-		[SPEC.GUARDIAN] = {
+		[FORM.CAT] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 30 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -4 }
+			['below'] = { 'TOP', 'BOTTOM', 0, 4 }
 		},
-		[SPEC.RESTORATION] = {
+		[FORM.BEAR] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 30 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -4 }
+			['below'] = { 'TOP', 'BOTTOM', 0, 4 }
+		},
+		[FORM.TRAVEL] = {
+			['above'] = { 'BOTTOM', 'TOP', 0, 30 },
+			['below'] = { 'TOP', 'BOTTOM', 0, 4 }
 		},
 	},
 }
@@ -2395,7 +2403,7 @@ end
 
 function UI.OnResourceFrameShow()
 	if Opt.snap then
-		local p = UI.anchor.points[Player.spec][Opt.snap]
+		local p = UI.anchor.points[Player.form][Opt.snap]
 		clawPanel:ClearAllPoints()
 		clawPanel:SetPoint(p[1], UI.anchor.frame, p[2], p[3], p[4])
 		UI:SnapAllPanels()
@@ -2410,7 +2418,7 @@ function UI:HookResourceFrame()
 		self.anchor.frame = KuiNameplatesPlayerAnchor
 	else
 		self.anchor.points = self.anchor_points.blizzard
-		self.anchor.frame = NamePlateDriverFrame:GetClassNameplateBar()
+		self.anchor.frame = NamePlateDriverFrame:GetClassNameplateManaBar()
 	end
 	if self.anchor.frame then
 		self.anchor.frame:HookScript('OnHide', self.OnResourceFrameHide)
@@ -2834,6 +2842,7 @@ function events:UPDATE_SHAPESHIFT_FORM()
 	else
 		Player.form = FORM.NONE
 	end
+	UI.OnResourceFrameShow()
 end
 
 function events:PLAYER_PVP_TALENT_UPDATE()
