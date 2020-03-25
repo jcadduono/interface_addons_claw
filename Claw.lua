@@ -1882,7 +1882,7 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if Shadowmeld:Usable() and Player:ComboPoints() < 5 and Player:Energy() >= Rake:EnergyCost() and Rake:Multiplier() < 2.1 and TigersFury:Up() and (not Bloodtalons.known or Bloodtalons:Up()) and (not IncarnationKingOfTheJungle.known or (IncarnationKingOfTheJungle:Down() and IncarnationKingOfTheJungle:Cooldown() > 18)) then
 		return UseCooldown(Shadowmeld)
 	end
-	if Opt.trinket and (Target.timeToDie < 20 or TigersFury:Up()) then
+	if Opt.trinket and ((Target.boss and Target.timeToDie < 20) or TigersFury:Up()) then
 		if Trinket1:Usable() then
 			UseCooldown(Trinket1)
 		elseif Trinket2:Usable() then
