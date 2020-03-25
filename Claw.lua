@@ -963,6 +963,7 @@ Pulverize.buff_duration = 20
 local GuardiansWrath = Ability:Add(278511, true, true, 279541)
 GuardiansWrath.buff_duration = 30
 local IronJaws = Ability:Add(276021, true, true)
+local JungleFury = Ability:Add(274424, true, true, 274426)
 local LayeredMane = Ability:Add(279552, true, true)
 local PowerOfTheMoon = Ability:Add(273367, true, true)
 local WildFleshrending = Ability:Add(279527, false, true)
@@ -1161,7 +1162,7 @@ function Azerite:Update()
 		self.essences[pid] = nil
 	end
 	if UnitEffectiveLevel('player') < 110 then
-		print('disabling azerite, player is effectively level', UnitEffectiveLevel('player'))
+		--print('disabling azerite, player is effectively level', UnitEffectiveLevel('player'))
 		return -- disable all Azerite/Essences for players scaled under 110
 	end
 	for _, loc in next, self.locations do
@@ -1864,7 +1865,7 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if FeralFrenzy:Usable() and Player:ComboPoints() == 0 then
 		return UseCooldown(FeralFrenzy)
 	end
-	if FocusedAzeriteBeam:Usable() and (Player.enemies >= 3 or (Rake:Remains() > 6 and Rip:Remains() > 8)) then
+	if FocusedAzeriteBeam:Usable() and ((Target.boss and Target.timeToDie < 6) or (JungleFury:AzeriteRank() < 2 or TigersFury:Remains() > (4.5 * Player.haste_factor)) and (Player.enemies >= 3 or (Rake:Remains() > (6 * Player.haste_factor) and Rip:Remains() > (8 * Player.haste_factor)))) then
 		return UseCooldown(FocusedAzeriteBeam)
 	end
 	if PurifyingBlast:Usable() and Player.enemies >= 2 then
