@@ -2402,7 +2402,7 @@ function UI.OnResourceFrameHide()
 end
 
 function UI.OnResourceFrameShow()
-	if Opt.snap then
+	if Opt.snap and UI.anchor.points then
 		local p = UI.anchor.points[Player.form][Opt.snap]
 		clawPanel:ClearAllPoints()
 		clawPanel:SetPoint(p[1], UI.anchor.frame, p[2], p[3], p[4])
