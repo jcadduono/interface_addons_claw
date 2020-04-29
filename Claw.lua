@@ -1871,7 +1871,7 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if PurifyingBlast:Usable() and Player.enemies >= 2 then
 		return UseCooldown(PurifyingBlast)
 	end
-	if WorldveinResonance:Usable() and Lifeblood:stack() < 4 then
+	if WorldveinResonance:Usable() and Lifeblood:Stack() < 4 then
 		return UseCooldown(WorldveinResonance)
 	end
 	if IncarnationKingOfTheJungle:Usable() and Player:Energy() >= 30 and (TigersFury:Cooldown() > 15 or TigersFury:Up()) then
