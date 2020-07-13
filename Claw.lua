@@ -151,6 +151,8 @@ local Player = {
 	last_swing_taken = 0,
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
+		[165581] = true, -- Crest of Pa'ku (Horde)
+		[174044] = true, -- Humming Black Dragonscale (parachute)
 	},
 }
 
@@ -346,6 +348,7 @@ local autoAoe = {
 	blacklist = {},
 	ignored_units = {
 		[120651] = true, -- Explosives (Mythic+ affix)
+		[161895] = true, -- Thing From Beyond (40+ Corruption)
 	},
 }
 
@@ -969,7 +972,7 @@ local PowerOfTheMoon = Ability:Add(273367, true, true)
 local WildFleshrending = Ability:Add(279527, false, true)
 -- Heart of Azeroth
 ---- Major Essences
-local BloodOfTheEnemy = Ability:Add(298277, false, true)
+local BloodOfTheEnemy = Ability:Add(297108, false, true)
 BloodOfTheEnemy.buff_duration = 10
 BloodOfTheEnemy.cooldown_duration = 120
 BloodOfTheEnemy.essence_id = 23
@@ -1004,7 +1007,7 @@ PurifyingBlast.cooldown_duration = 60
 PurifyingBlast.essence_id = 6
 PurifyingBlast.essence_major = true
 PurifyingBlast:AutoAoe(true)
-local ReapingFlames = Ability:Add(311195, false, true)
+local ReapingFlames = Ability:Add(310690, false, true)
 ReapingFlames.cooldown_duration = 45
 ReapingFlames.essence_id = 35
 ReapingFlames.essence_major = true
