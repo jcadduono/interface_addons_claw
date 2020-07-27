@@ -843,7 +843,7 @@ Shred.energy_cost = 40
 local FerociousBite = Ability:Add(22568, false, true)
 FerociousBite.cp_cost = 1
 FerociousBite.energy_cost = 25
-local ThrashCat = Ability:Add(106830, false, true)
+local ThrashCat = Ability:Add(106832, false, true, 106830)
 ThrashCat.buff_duration = 15
 ThrashCat.energy_cost = 40
 ThrashCat.tick_interval = 3
@@ -1334,7 +1334,6 @@ function Player:UpdateAbilities()
 	WildChargeCat.known = WildCharge.known
 	if self.spec == SPEC.FERAL then
 		SwipeCat.known = not BrutalSlash.known
-		ThrashCat.known = true
 		self.rip_multiplier_max = Rip:MultiplierMax()
 	end
 	if self.spec == SPEC.GUARDIAN then
@@ -2850,6 +2849,7 @@ function events:UPDATE_SHAPESHIFT_FORM()
 	else
 		Player.form = FORM.NONE
 	end
+	Player:UpdateAbilities()
 	UI.OnResourceFrameShow()
 end
 
