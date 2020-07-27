@@ -854,6 +854,7 @@ local SwipeCat = Ability:Add(106785, false, true)
 SwipeCat.energy_cost = 35
 SwipeCat:AutoAoe(true)
 local TigersFury = Ability:Add(5217, true, true)
+TigersFury.buff_duration = 12
 TigersFury.cooldown_duration = 30
 TigersFury.triggers_gcd = false
 local Maim = Ability:Add(22570, false, true, 203123)
