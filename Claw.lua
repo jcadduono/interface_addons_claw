@@ -434,7 +434,8 @@ local abilities = {
 
 function Ability:Add(spellId, buff, player, spellId2)
 	local ability = {
-		spellId = spellId,
+		spellIds = type(spellId) == 'table' and spellId or { spellId },
+		spellId = 0,
 		spellId2 = spellId2,
 		name = false,
 		icon = false,
@@ -972,12 +973,12 @@ local PowerOfTheMoon = Ability:Add(273367, true, true)
 local WildFleshrending = Ability:Add(279527, false, true)
 -- Heart of Azeroth
 ---- Major Essences
-local BloodOfTheEnemy = Ability:Add(297108, false, true)
+local BloodOfTheEnemy = Ability:Add({297108, 298273, 298277} , false, true)
 BloodOfTheEnemy.buff_duration = 10
 BloodOfTheEnemy.cooldown_duration = 120
 BloodOfTheEnemy.essence_id = 23
 BloodOfTheEnemy.essence_major = true
-local ConcentratedFlame = Ability:Add(295373, true, true, 295378)
+local ConcentratedFlame = Ability:Add({295373, 299349, 299353}, true, true, 295378)
 ConcentratedFlame.buff_duration = 180
 ConcentratedFlame.cooldown_duration = 30
 ConcentratedFlame.requires_charge = true
@@ -989,42 +990,42 @@ ConcentratedFlame.dot.buff_duration = 6
 ConcentratedFlame.dot.tick_interval = 2
 ConcentratedFlame.dot.essence_id = 12
 ConcentratedFlame.dot.essence_major = true
-local GuardianOfAzeroth = Ability:Add(295840, false, true)
+local GuardianOfAzeroth = Ability:Add({295840, 299355, 299358}, false, true)
 GuardianOfAzeroth.cooldown_duration = 180
 GuardianOfAzeroth.essence_id = 14
 GuardianOfAzeroth.essence_major = true
-local FocusedAzeriteBeam = Ability:Add(295258, false, true)
+local FocusedAzeriteBeam = Ability:Add({295258, 299336, 299338}, false, true)
 FocusedAzeriteBeam.cooldown_duration = 90
 FocusedAzeriteBeam.essence_id = 5
 FocusedAzeriteBeam.essence_major = true
-local MemoryOfLucidDreams = Ability:Add(298357, true, true)
+local MemoryOfLucidDreams = Ability:Add({298357, 299372, 299374}, true, true)
 MemoryOfLucidDreams.buff_duration = 15
 MemoryOfLucidDreams.cooldown_duration = 120
 MemoryOfLucidDreams.essence_id = 27
 MemoryOfLucidDreams.essence_major = true
-local PurifyingBlast = Ability:Add(295337, false, true, 295338)
+local PurifyingBlast = Ability:Add({295337, 299345, 299347}, false, true, 295338)
 PurifyingBlast.cooldown_duration = 60
 PurifyingBlast.essence_id = 6
 PurifyingBlast.essence_major = true
 PurifyingBlast:AutoAoe(true)
-local ReapingFlames = Ability:Add(310690, false, true)
+local ReapingFlames = Ability:Add({310690, 311194, 311195}, false, true)
 ReapingFlames.cooldown_duration = 45
 ReapingFlames.essence_id = 35
 ReapingFlames.essence_major = true
-local RippleInSpace = Ability:Add(302731, true, true)
+local RippleInSpace = Ability:Add({302731, 302982, 302983}, true, true)
 RippleInSpace.buff_duration = 2
 RippleInSpace.cooldown_duration = 60
 RippleInSpace.essence_id = 15
 RippleInSpace.essence_major = true
-local TheUnboundForce = Ability:Add(298452, false, true)
+local TheUnboundForce = Ability:Add({298452, 299376,299378}, false, true)
 TheUnboundForce.cooldown_duration = 45
 TheUnboundForce.essence_id = 28
 TheUnboundForce.essence_major = true
-local VisionOfPerfection = Ability:Add(299370, true, true, 303345)
+local VisionOfPerfection = Ability:Add({296325, 299368, 299370}, true, true, 303345)
 VisionOfPerfection.buff_duration = 10
 VisionOfPerfection.essence_id = 22
 VisionOfPerfection.essence_major = true
-local WorldveinResonance = Ability:Add(295186, true, true)
+local WorldveinResonance = Ability:Add({295186, 298628, 299334}, true, true)
 WorldveinResonance.cooldown_duration = 60
 WorldveinResonance.essence_id = 4
 WorldveinResonance.essence_major = true
@@ -1308,17 +1309,19 @@ function Player:UpdateAbilities()
 	self.rage_max = UnitPowerMax('player', 1)
 	self.combo_points_max = UnitPowerMax('player', 4)
 
-	local _, ability
+	local _, ability, spellId
 
 	for _, ability in next, abilities.all do
-		ability.name, _, ability.icon = GetSpellInfo(ability.spellId)
 		ability.known = false
-		if C_LevelLink.IsSpellLocked(ability.spellId) or (ability.spellId2 and C_LevelLink.IsSpellLocked(ability.spellId2)) then
-			-- spell is locked, do not mark as known
-		elseif IsPlayerSpell(ability.spellId) or (ability.spellId2 and IsPlayerSpell(ability.spellId2)) then
-			ability.known = true
-		elseif Azerite.traits[ability.spellId] then
-			ability.known = true
+		for _, spellId in next, ability.spellIds do
+			ability.spellId, ability.name, _, ability.icon = spellId, GetSpellInfo(spellId)
+			if IsPlayerSpell(spellId) or Azerite.traits[spellId] then
+				ability.known = true
+				break
+			end
+		end
+		if C_LevelLink.IsSpellLocked(ability.spellId) then
+			ability.known = false -- spell is locked, do not mark as known
 		elseif ability.essence_id and Azerite.essences[ability.essence_id] then
 			if ability.essence_major then
 				ability.known = Azerite.essences[ability.essence_id].major
