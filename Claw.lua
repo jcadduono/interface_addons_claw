@@ -2625,6 +2625,7 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 	   eventType == 'SPELL_CAST_FAILED' or
 	   eventType == 'SPELL_AURA_REMOVED' or
 	   eventType == 'SPELL_DAMAGE' or
+	   eventType == 'SPELL_ABSORBED' or
 	   eventType == 'SPELL_PERIODIC_DAMAGE' or
 	   eventType == 'SPELL_MISSED' or
 	   eventType == 'SPELL_AURA_APPLIED' or
@@ -2677,11 +2678,11 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 			Player:SetTargetMode(1)
 		end
 	end
-	if eventType == 'SPELL_MISSED' or eventType == 'SPELL_DAMAGE' or eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH' then
+	if eventType == 'SPELL_ABSORBED' or eventType == 'SPELL_MISSED' or eventType == 'SPELL_DAMAGE' or eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH' then
 		if ability.travel_start and ability.travel_start[dstGUID] then
 			ability.travel_start[dstGUID] = nil
 		end
-		if eventType == 'SPELL_DAMAGE' and Sabertooth.known and ability == FerociousBite and Rip.aura_targets[dstGUID] then
+		if Sabertooth.known and ability == FerociousBite and Rip.aura_targets[dstGUID] and (eventType == 'SPELL_DAMAGE' or eventType == 'SPELL_ABSORBED') then
 			Rip:RefreshAura(dstGUID)
 		end
 		if Opt.previous and Opt.miss_effect and eventType == 'SPELL_MISSED' and clawPanel:IsVisible() and ability == clawPreviousPanel.ability then
