@@ -974,11 +974,16 @@ local PowerOfTheMoon = Ability:Add(273367, true, true)
 local WildFleshrending = Ability:Add(279527, false, true)
 -- Heart of Azeroth
 ---- Major Essences
+local AnimaOfDeath = Ability:Add({294926, 300002, 300003}, false, true)
+AnimaOfDeath.cooldown_duration = 120
+AnimaOfDeath.essence_id = 24
+AnimaOfDeath.essence_major = true
 local BloodOfTheEnemy = Ability:Add({297108, 298273, 298277} , false, true)
 BloodOfTheEnemy.buff_duration = 10
 BloodOfTheEnemy.cooldown_duration = 120
 BloodOfTheEnemy.essence_id = 23
 BloodOfTheEnemy.essence_major = true
+BloodOfTheEnemy:AutoAoe(true)
 local ConcentratedFlame = Ability:Add({295373, 299349, 299353}, true, true, 295378)
 ConcentratedFlame.buff_duration = 180
 ConcentratedFlame.cooldown_duration = 30
@@ -999,6 +1004,7 @@ local FocusedAzeriteBeam = Ability:Add({295258, 299336, 299338}, false, true)
 FocusedAzeriteBeam.cooldown_duration = 90
 FocusedAzeriteBeam.essence_id = 5
 FocusedAzeriteBeam.essence_major = true
+FocusedAzeriteBeam:AutoAoe()
 local MemoryOfLucidDreams = Ability:Add({298357, 299372, 299374}, true, true)
 MemoryOfLucidDreams.buff_duration = 15
 MemoryOfLucidDreams.cooldown_duration = 120
@@ -1054,6 +1060,8 @@ RealityShift.essence_id = 15
 local RecklessForce = Ability:Add(302932, true, true)
 RecklessForce.buff_duration = 3
 RecklessForce.essence_id = 28
+RecklessForce.counter = Ability:Add(302917, true, true)
+RecklessForce.counter.essence_id = 28
 local StriveForPerfection = Ability:Add(299369, true, true)
 StriveForPerfection.essence_id = 22
 -- Racials
