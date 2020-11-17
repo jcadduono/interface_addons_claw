@@ -1174,10 +1174,6 @@ function Azerite:Update()
 	for pid in next, self.essences do
 		self.essences[pid] = nil
 	end
-	if UnitEffectiveLevel('player') < 110 then
-		--print('disabling azerite, player is effectively level', UnitEffectiveLevel('player'))
-		return -- disable all Azerite/Essences for players scaled under 110
-	end
 	for _, loc in next, self.locations do
 		if GetInventoryItemID('player', loc:GetEquipmentSlot()) and C_AzeriteEmpoweredItem.IsAzeriteEmpoweredItem(loc) then
 			for _, slot in next, C_AzeriteEmpoweredItem.GetAllTierInfo(loc) do
@@ -1261,6 +1257,10 @@ end
 
 function Player:RageDeficit()
 	return self.rage_max - self.rage
+end
+
+function Player:Stealthed()
+	return Prowl:Up() or (Shadowmeld.known and Shadowmeld:Up()) or (IncarnationKingOfTheJungle.known and IncarnationKingOfTheJungle:Up())
 end
 
 function Player:UnderAttack()
@@ -1523,12 +1523,10 @@ function Rake:NextMultiplier()
 			multiplier = multiplier * 1.15
 		elseif SavageRoar:Match(id) then
 			multiplier = multiplier * 1.10
-		elseif Bloodtalons:Match(id) then
-			multiplier = multiplier * 1.25
 		end
 	end
 	if stealthed then
-		multiplier = multiplier * 2.00
+		multiplier = multiplier * 1.60
 	end
 	return multiplier
 end
@@ -1609,7 +1607,7 @@ function Rip:MultiplierMax()
 		multiplier = multiplier * 1.10
 	end
 	if Bloodtalons.known then
-		multiplier = multiplier * 1.25
+		multiplier = multiplier * 1.30
 	end
 	return multiplier
 end
@@ -1627,7 +1625,7 @@ function Rip:NextMultiplier()
 		elseif SavageRoar:Match(id) then
 			multiplier = multiplier * 1.10
 		elseif Bloodtalons:Match(id) then
-			multiplier = multiplier * 1.25
+			multiplier = multiplier * 1.30
 		end
 	end
 	return multiplier
@@ -1668,18 +1666,9 @@ function ThrashCat:NextMultiplier()
 			multiplier = multiplier * 1.15
 		elseif SavageRoar:Match(id) then
 			multiplier = multiplier * 1.10
-		elseif Bloodtalons:Match(id) then
-			multiplier = multiplier * 1.25
 		end
 	end
 	return multiplier
-end
-
-function Bloodtalons:Remains()
-	if self.known and Regrowth:Casting() then
-		return self:Duration()
-	end
-	return Ability.Remains(self)
 end
 
 function Prowl:Usable()
@@ -1758,7 +1747,6 @@ actions.precombat+=/snapshot_stats
 # It is worth it for almost everyone to maintain thrash
 actions.precombat+=/variable,name=use_thrash,value=0
 actions.precombat+=/variable,name=use_thrash,value=2,if=azerite.wild_fleshrending.enabled
-actions.precombat+=/regrowth,if=talent.bloodtalons.enabled
 actions.precombat+=/use_item,name=azsharas_font_of_power
 actions.precombat+=/cat_form
 actions.precombat+=/prowl
@@ -1770,9 +1758,6 @@ actions.precombat+=/berserk
 		elseif CatForm:Down() then
 			UseCooldown(CatForm)
 		end
-		if Bloodtalons.known and Bloodtalons:Remains() < 6 then
-			return Regrowth
-		end
 		if Opt.pot and not Player:InArenaOrBattleground() then
 			if GreaterFlaskOfTheCurrents:Usable() and GreaterFlaskOfTheCurrents.buff:Remains() < 300 then
 				UseCooldown(GreaterFlaskOfTheCurrents)
@@ -1781,7 +1766,7 @@ actions.precombat+=/berserk
 				UseCooldown(PotionOfUnbridledFury)
 			end
 		end
-		if Berserk:Usable() then
+		if Berserk:Usable() and Target.timeToDie > 9 then
 			UseCooldown(Berserk)
 		end
 	end
@@ -1792,7 +1777,6 @@ actions+=/cat_form,if=!buff.cat_form.up
 actions+=/rake,if=buff.prowl.up|buff.shadowmeld.up
 actions+=/call_action_list,name=cooldowns
 actions+=/ferocious_bite,target_if=dot.rip.ticking&dot.rip.remains<3&target.time_to_die>10&(talent.sabertooth.enabled)
-actions+=/regrowth,if=combo_points=5&buff.predatory_swiftness.up&talent.bloodtalons.enabled&buff.bloodtalons.down&(!buff.incarnation.up|dot.rip.remains<8)
 actions+=/heart_essence,if=buff.tigers_fury.up
 actions+=/run_action_list,name=finishers,if=combo_points>4
 actions+=/run_action_list,name=generators
@@ -1810,14 +1794,6 @@ actions+=/run_action_list,name=generators
 	if Sabertooth.known and FerociousBite:Usable(true) and Rip:Up() and Rip:Remains() < 3 and Target.timeToDie > 10 and (Player.enemies < 3 or Rip:LowestRemainsOthers() > 8) then
 		return Pool(FerociousBite, Rip:Remains() < 1 and 0 or 25)
 	end
-	if Bloodtalons.known and Regrowth:Usable() and PredatorySwiftness:Up() and Bloodtalons:Down() then
-		if Player:ComboPoints() == 5 and (IncarnationKingOfTheJungle:Down() or Rip:Remains() < 8) then
-			return Regrowth
-		end
-		if PredatorySwiftness:Remains() < 1.5 and (Player:EnergyTimeToMax() > Player.gcd or Player:ComboPoints() >= 4) then
-			return Regrowth
-		end
-	end
 	if TigersFury:Up() then
 		if ConcentratedFlame:Usable() and ConcentratedFlame.dot:Down() and (ConcentratedFlame:WontCapEnergy() or ConcentratedFlame:Charges() > 1.8) then
 			return ConcentratedFlame
@@ -1825,6 +1801,9 @@ actions+=/run_action_list,name=generators
 		if ReapingFlames:Usable() and ReapingFlames:WontCapEnergy() then
 			return ReapingFlames
 		end
+	end
+	if Player:HealthPct() < 65 and Regrowth:Usable() and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() and not Player:Stealthed() then
+		UseExtra(Regrowth)
 	end
 	if Player:ComboPoints() == 5 then
 		return self:finishers()
@@ -1848,7 +1827,7 @@ actions.cooldowns+=/purifying_blast,if=active_enemies>desired_targets|raid_event
 actions.cooldowns+=/worldvein_resonance,if=buff.lifeblood.stack<4
 actions.cooldowns+=/incarnation,if=energy>=30&(cooldown.tigers_fury.remains>15|buff.tigers_fury.up)
 actions.cooldowns+=/potion,if=target.time_to_die<65|(time_to_die<180&(buff.berserk.up|buff.incarnation.up))
-actions.cooldowns+=/shadowmeld,if=combo_points<5&energy>=action.rake.cost&dot.rake.pmultiplier<2.1&buff.tigers_fury.up&(buff.bloodtalons.up|!talent.bloodtalons.enabled)&(!talent.incarnation.enabled|cooldown.incarnation.remains>18)&!buff.incarnation.up
+actions.cooldowns+=/shadowmeld,if=combo_points<5&energy>=action.rake.cost&dot.rake.pmultiplier<1.7&buff.tigers_fury.up&(!talent.incarnation.enabled|cooldown.incarnation.remains>18)&!buff.incarnation.up
 actions.cooldowns+=/use_item,name=ashvanes_razor_coral,if=debuff.razor_coral_debuff.down|debuff.conductive_ink_debuff.up&target.time_to_pct_30<1.5|!debuff.conductive_ink_debuff.up&(debuff.razor_coral_debuff.stack>=25-10*debuff.blood_of_the_enemy.up|target.time_to_die<40)&buff.tigers_fury.remains>10
 actions.cooldowns+=/use_item,effect_name=cyclotronic_blast,if=(energy.deficit>=energy.regen*3)&buff.tigers_fury.down&!azerite.jungle_fury.enabled
 actions.cooldowns+=/use_item,effect_name=cyclotronic_blast,if=buff.tigers_fury.up&azerite.jungle_fury.enabled
@@ -1894,7 +1873,7 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if Opt.pot and Target.boss and PotionOfUnbridledFury:Usable() and (Target.timeToDie < 65 or (Target.timeToDie < 180 and (Berserk:Up() or IncarnationKingOfTheJungle:Up()))) then
 		return UseCooldown(PotionOfUnbridledFury)
 	end
-	if Shadowmeld:Usable() and Player:ComboPoints() < 5 and Player:Energy() >= Rake:EnergyCost() and Rake:Multiplier() < 2.1 and TigersFury:Up() and (not Bloodtalons.known or Bloodtalons:Up()) and (not IncarnationKingOfTheJungle.known or (IncarnationKingOfTheJungle:Down() and IncarnationKingOfTheJungle:Cooldown() > 18)) then
+	if Shadowmeld:Usable() and Player:ComboPoints() < 5 and Player:Energy() >= Rake:EnergyCost() and Rake:Multiplier() < 1.7 and TigersFury:Up() and (not IncarnationKingOfTheJungle.known or (IncarnationKingOfTheJungle:Down() and IncarnationKingOfTheJungle:Cooldown() > 18)) then
 		return UseCooldown(Shadowmeld)
 	end
 	if Opt.trinket and ((Target.boss and Target.timeToDie < 20) or TigersFury:Up()) then
@@ -1958,8 +1937,6 @@ end
 
 APL[SPEC.FERAL].generators = function(self)
 --[[
-actions.generators=regrowth,if=talent.bloodtalons.enabled&buff.predatory_swiftness.up&buff.bloodtalons.down&combo_points=4&dot.rake.remains<4
-actions.generators+=/regrowth,if=talent.bloodtalons.enabled&buff.bloodtalons.down&buff.predatory_swiftness.up&talent.lunar_inspiration.enabled&dot.rake.remains<1
 actions.generators+=/brutal_slash,if=spell_targets.brutal_slash>desired_targets
 actions.generators+=/pool_resource,for_next=1
 actions.generators+=/thrash_cat,if=(refreshable)&(spell_targets.thrash_cat>2)
@@ -1968,11 +1945,7 @@ actions.generators+=/thrash_cat,if=(talent.scent_of_blood.enabled&buff.scent_of_
 actions.generators+=/pool_resource,for_next=1
 actions.generators+=/swipe_cat,if=buff.scent_of_blood.up|(action.swipe_cat.damage*spell_targets.swipe_cat>(action.rake.damage+(action.rake_bleed.tick_damage*5)))
 actions.generators+=/pool_resource,for_next=1
-actions.generators+=/rake,target_if=!ticking|(!talent.bloodtalons.enabled&remains<duration*0.3)&target.time_to_die>4
-actions.generators+=/pool_resource,for_next=1
-actions.generators+=/rake,target_if=talent.bloodtalons.enabled&buff.bloodtalons.up&((remains<=7)&persistent_multiplier>dot.rake.pmultiplier*0.85)&target.time_to_die>4
-# With LI & BT, we can use moonfire to save BT charges, allowing us to better refresh rake
-actions.generators+=/moonfire_cat,if=buff.bloodtalons.up&buff.predatory_swiftness.down&combo_points<5
+actions.generators+=/rake,target_if=!ticking|refreshable&target.time_to_die>4
 actions.generators+=/brutal_slash,if=(buff.tigers_fury.up&(raid_event.adds.in>(1+max_charges-charges_fractional)*recharge_time))
 actions.generators+=/moonfire_cat,target_if=refreshable
 actions.generators+=/pool_resource,for_next=1
@@ -1984,14 +1957,6 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 ]]
 	if Sabertooth.known and Player.enemies == 1 and Player:ComboPoints() >= 2 and Rip:Down() and Rip:Usable() and Rip:NextMultiplier() >= Player.rip_multiplier_max and (TigersFury:Remains() < 1.5 or Bloodtalons:Remains() < 1.5 or Bloodtalons:Stack() == 1) then
 		return Rip
-	end
-	if Bloodtalons.known and Regrowth:Usable() and PredatorySwiftness:Up() and Bloodtalons:Down() then
-		if Player:ComboPoints() == 4 and Rake:Remains() < 4 then
-			return Regrowth
-		end
-		if LunarInspiration.known and Rake:Remains() < 1 then
-			return Regrowth
-		end
 	end
 	if ThrashCat:Usable(true) then
 		if ThrashCat:Refreshable() and Player.enemies > 2 then
@@ -2008,26 +1973,11 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 		return Pool(SwipeCat)
 	end
 	if Player.enemies < 6 or not PrimalWrath.known then
-		if Rake:Usable(true) then
-			if Rake:Down() then
-				return Pool(Rake)
-			end
-			if Target.timeToDie > 4 then
-				if not Bloodtalons.known and Rake:Refreshable() then
-					return Pool(Rake)
-				end
-				if Bloodtalons.known and Bloodtalons:Up() and Rake:Remains() < 7 and Rake:NextMultiplier() > (Rake:Multiplier() * 0.85) then
-					return Pool(Rake)
-				end
-			end
+		if Rake:Usable(true) and (Rake:Down() or Target.timeToDie > 4 and Rake:Refreshable()) then
+			return Pool(Rake)
 		end
-		if LunarInspiration.known and MoonfireCat:Usable() then
-			if Bloodtalons:Up() and PredatorySwiftness:Down() and Player:ComboPoints() < 5 then
-				return MoonfireCat
-			end
-			if MoonfireCat:Refreshable() then
-				return MoonfireCat
-			end
+		if LunarInspiration.known and MoonfireCat:Usable() and MoonfireCat:Refreshable() then
+			return MoonfireCat
 		end
 	end
 	if BrutalSlash:Usable() and Player:EnergyTimeToMax() > 1.5 and (TigersFury:Up() or BrutalSlash:ChargesFractional() > 2.5) then
@@ -2583,8 +2533,8 @@ function events:ADDON_LOADED(name)
 			print('It looks like this is your first time running ' .. name .. ', why don\'t you take some time to familiarize yourself with the commands?')
 			print('Type |cFFFFD000' .. SLASH_Claw1 .. '|r for a list of commands.')
 		end
-		if UnitLevel('player') < 110 then
-			print('[|cFFFFD000Warning|r] ' .. name .. ' is not designed for players under level 110, and almost certainly will not operate properly!')
+		if UnitLevel('player') < 10 then
+			print('[|cFFFFD000Warning|r] ' .. name .. ' is not designed for players under level 10, and almost certainly will not operate properly!')
 		end
 		InitOpts()
 		Azerite:Init()
