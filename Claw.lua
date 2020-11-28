@@ -165,9 +165,6 @@ local Target = {
 	estimated_range = 30,
 }
 
--- Azerite trait API access
-local Azerite = {}
-
 local clawPanel = CreateFrame('Frame', 'clawPanel', UIParent)
 clawPanel:SetPoint('CENTER', 0, -169)
 clawPanel:SetFrameStrata('BACKGROUND')
@@ -284,26 +281,26 @@ Player.target_modes = {
 		{1, ''},
 		{2, '2'},
 		{3, '3'},
-		{4, '4+'}
+		{4, '4+'},
 	},
 	[SPEC.FERAL] = {
 		{1, ''},
 		{2, '2'},
 		{3, '3'},
 		{4, '4'},
-		{5, '5+'}
+		{5, '5+'},
 	},
 	[SPEC.GUARDIAN] = {
 		{1, ''},
 		{2, '2'},
 		{3, '3'},
-		{4, '4+'}
+		{4, '4+'},
 	},
 	[SPEC.RESTORATION] = {
 		{1, ''},
 		{2, '2'},
 		{3, '3'},
-		{4, '4+'}
+		{4, '4+'},
 	},
 }
 
@@ -454,6 +451,7 @@ function Ability:Add(spellId, buff, player, spellId2)
 		tick_interval = 0,
 		max_range = 40,
 		velocity = 0,
+		last_used = 0,
 		auraTarget = buff and 'player' or 'target',
 		auraFilter = (buff and 'HELPFUL' or 'HARMFUL') .. (player and '|PLAYER' or '')
 	}
@@ -510,8 +508,7 @@ function Ability:Remains()
 		_, _, _, _, _, expires, _, _, _, id = UnitAura(self.auraTarget, i, self.auraFilter)
 		if not id then
 			return 0
-		end
-		if self:Match(id) then
+		elseif self:Match(id) then
 			if expires == 0 then
 				return 600 -- infinite duration
 			end
@@ -597,8 +594,7 @@ function Ability:Stack()
 		_, _, count, _, _, expires, _, _, _, id = UnitAura(self.auraTarget, i, self.auraFilter)
 		if not id then
 			return 0
-		end
-		if self:Match(id) then
+		elseif self:Match(id) then
 			return (expires == 0 or expires - Player.ctime > Player.execute_remains) and count or 0
 		end
 	end
@@ -683,10 +679,6 @@ function Ability:Previous(n)
 		i = i - 1
 	end
 	return Player.previous_gcd[i] == self
-end
-
-function Ability:AzeriteRank()
-	return Azerite.traits[self.spellId] or 0
 end
 
 function Ability:AutoAoe(removeUnaffected, trigger)
@@ -964,106 +956,8 @@ Pulverize.buff_duration = 20
 
 ------ Procs
 
--- Azerite Traits
-local GuardiansWrath = Ability:Add(278511, true, true, 279541)
-GuardiansWrath.buff_duration = 30
-local IronJaws = Ability:Add(276021, true, true)
-local JungleFury = Ability:Add(274424, true, true, 274426)
-local LayeredMane = Ability:Add(279552, true, true)
-local PowerOfTheMoon = Ability:Add(273367, true, true)
-local WildFleshrending = Ability:Add(279527, false, true)
--- Heart of Azeroth
----- Major Essences
-local AnimaOfDeath = Ability:Add({294926, 300002, 300003}, false, true)
-AnimaOfDeath.cooldown_duration = 120
-AnimaOfDeath.essence_id = 24
-AnimaOfDeath.essence_major = true
-local BloodOfTheEnemy = Ability:Add({297108, 298273, 298277} , false, true)
-BloodOfTheEnemy.buff_duration = 10
-BloodOfTheEnemy.cooldown_duration = 120
-BloodOfTheEnemy.essence_id = 23
-BloodOfTheEnemy.essence_major = true
-BloodOfTheEnemy:AutoAoe(true)
-local ConcentratedFlame = Ability:Add({295373, 299349, 299353}, true, true, 295378)
-ConcentratedFlame.buff_duration = 180
-ConcentratedFlame.cooldown_duration = 30
-ConcentratedFlame.requires_charge = true
-ConcentratedFlame.essence_id = 12
-ConcentratedFlame.essence_major = true
-ConcentratedFlame:SetVelocity(40)
-ConcentratedFlame.dot = Ability:Add(295368, false, true)
-ConcentratedFlame.dot.buff_duration = 6
-ConcentratedFlame.dot.tick_interval = 2
-ConcentratedFlame.dot.essence_id = 12
-ConcentratedFlame.dot.essence_major = true
-local GuardianOfAzeroth = Ability:Add({295840, 299355, 299358}, false, true)
-GuardianOfAzeroth.cooldown_duration = 180
-GuardianOfAzeroth.essence_id = 14
-GuardianOfAzeroth.essence_major = true
-local FocusedAzeriteBeam = Ability:Add({295258, 299336, 299338}, false, true)
-FocusedAzeriteBeam.cooldown_duration = 90
-FocusedAzeriteBeam.essence_id = 5
-FocusedAzeriteBeam.essence_major = true
-FocusedAzeriteBeam:AutoAoe()
-local MemoryOfLucidDreams = Ability:Add({298357, 299372, 299374}, true, true)
-MemoryOfLucidDreams.buff_duration = 15
-MemoryOfLucidDreams.cooldown_duration = 120
-MemoryOfLucidDreams.essence_id = 27
-MemoryOfLucidDreams.essence_major = true
-local PurifyingBlast = Ability:Add({295337, 299345, 299347}, false, true, 295338)
-PurifyingBlast.cooldown_duration = 60
-PurifyingBlast.essence_id = 6
-PurifyingBlast.essence_major = true
-PurifyingBlast:AutoAoe(true)
-local ReapingFlames = Ability:Add({310690, 311194, 311195}, false, true)
-ReapingFlames.cooldown_duration = 45
-ReapingFlames.essence_id = 35
-ReapingFlames.essence_major = true
-local RippleInSpace = Ability:Add({302731, 302982, 302983}, true, true)
-RippleInSpace.buff_duration = 2
-RippleInSpace.cooldown_duration = 60
-RippleInSpace.essence_id = 15
-RippleInSpace.essence_major = true
-local TheUnboundForce = Ability:Add({298452, 299376,299378}, false, true)
-TheUnboundForce.cooldown_duration = 45
-TheUnboundForce.essence_id = 28
-TheUnboundForce.essence_major = true
-local VisionOfPerfection = Ability:Add({296325, 299368, 299370}, true, true, 303345)
-VisionOfPerfection.buff_duration = 10
-VisionOfPerfection.essence_id = 22
-VisionOfPerfection.essence_major = true
-local WorldveinResonance = Ability:Add({295186, 298628, 299334}, true, true)
-WorldveinResonance.cooldown_duration = 60
-WorldveinResonance.essence_id = 4
-WorldveinResonance.essence_major = true
----- Minor Essences
-local AncientFlame = Ability:Add(295367, false, true)
-AncientFlame.buff_duration = 10
-AncientFlame.essence_id = 12
-local CondensedLifeForce = Ability:Add(295367, false, true)
-CondensedLifeForce.essence_id = 14
-local FocusedEnergy = Ability:Add(295248, true, true)
-FocusedEnergy.buff_duration = 4
-FocusedEnergy.essence_id = 5
-local Lifeblood = Ability:Add(295137, true, true)
-Lifeblood.essence_id = 4
-local LucidDreams = Ability:Add(298343, true, true)
-LucidDreams.buff_duration = 8
-LucidDreams.essence_id = 27
-local PurificationProtocol = Ability:Add(295305, false, true)
-PurificationProtocol.essence_id = 6
-PurificationProtocol:AutoAoe()
-local RealityShift = Ability:Add(302952, true, true)
-RealityShift.buff_duration = 20
-RealityShift.cooldown_duration = 30
-RealityShift.essence_id = 15
-local RecklessForce = Ability:Add(302932, true, true)
-RecklessForce.buff_duration = 3
-RecklessForce.essence_id = 28
-RecklessForce.counter = Ability:Add(302917, true, true)
-RecklessForce.counter.essence_id = 28
-local StriveForPerfection = Ability:Add(299369, true, true)
-StriveForPerfection.essence_id = 22
+-- Covenant abilities
+
 -- Racials
 local Shadowmeld = Ability:Add(58984, true, true)
 -- PvP talents
@@ -1152,63 +1046,6 @@ local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
 -- End Inventory Items
 
--- Start Azerite Trait API
-
-Azerite.equip_slots = { 1, 3, 5 } -- Head, Shoulder, Chest
-
-function Azerite:Init()
-	self.locations = {}
-	self.traits = {}
-	self.essences = {}
-	local i
-	for i = 1, #self.equip_slots do
-		self.locations[i] = ItemLocation:CreateFromEquipmentSlot(self.equip_slots[i])
-	end
-end
-
-function Azerite:Update()
-	local _, loc, slot, pid, pinfo
-	for pid in next, self.traits do
-		self.traits[pid] = nil
-	end
-	for pid in next, self.essences do
-		self.essences[pid] = nil
-	end
-	for _, loc in next, self.locations do
-		if GetInventoryItemID('player', loc:GetEquipmentSlot()) and C_AzeriteEmpoweredItem.IsAzeriteEmpoweredItem(loc) then
-			for _, slot in next, C_AzeriteEmpoweredItem.GetAllTierInfo(loc) do
-				if slot.azeritePowerIDs then
-					for _, pid in next, slot.azeritePowerIDs do
-						if C_AzeriteEmpoweredItem.IsPowerSelected(loc, pid) then
-							self.traits[pid] = 1 + (self.traits[pid] or 0)
-							pinfo = C_AzeriteEmpoweredItem.GetPowerInfo(pid)
-							if pinfo and pinfo.spellID then
-								--print('Azerite found:', pinfo.azeritePowerID, GetSpellInfo(pinfo.spellID))
-								self.traits[pinfo.spellID] = self.traits[pid]
-							end
-						end
-					end
-				end
-			end
-		end
-	end
-	for _, loc in next, C_AzeriteEssence.GetMilestones() or {} do
-		if loc.slot then
-			pid = C_AzeriteEssence.GetMilestoneEssence(loc.ID)
-			if pid then
-				pinfo = C_AzeriteEssence.GetEssenceInfo(pid)
-				self.essences[pid] = {
-					id = pid,
-					rank = pinfo.rank,
-					major = loc.slot == 0,
-				}
-			end
-		end
-	end
-end
-
--- End Azerite Trait API
-
 -- Start Player API
 
 function Player:Health()
@@ -1278,7 +1115,9 @@ function Player:BloodlustActive()
 	local _, i, id
 	for i = 1, 40 do
 		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL')
-		if (
+		if not id then
+			return false
+		elseif (
 			id == 2825 or   -- Bloodlust (Horde Shaman)
 			id == 32182 or  -- Heroism (Alliance Shaman)
 			id == 80353 or  -- Time Warp (Mage)
@@ -1324,19 +1163,13 @@ function Player:UpdateAbilities()
 		ability.known = false
 		for _, spellId in next, ability.spellIds do
 			ability.spellId, ability.name, _, ability.icon = spellId, GetSpellInfo(spellId)
-			if IsPlayerSpell(spellId) or Azerite.traits[spellId] then
+			if IsPlayerSpell(spellId) then
 				ability.known = true
 				break
 			end
 		end
 		if C_LevelLink.IsSpellLocked(ability.spellId) then
 			ability.known = false -- spell is locked, do not mark as known
-		elseif ability.essence_id and Azerite.essences[ability.essence_id] then
-			if ability.essence_major then
-				ability.known = Azerite.essences[ability.essence_id].major
-			else
-				ability.known = true
-			end
 		end
 	end
 
@@ -1461,13 +1294,6 @@ function Ability:EnergyCost()
 		end
 	end
 	return cost
-end
-
-function ConcentratedFlame.dot:Remains()
-	if ConcentratedFlame:Traveling() then
-		return self:Duration()
-	end
-	return Ability.Remains(self)
 end
 
 function Ironfur:RageCost()
@@ -1746,7 +1572,6 @@ actions.precombat+=/augmentation
 actions.precombat+=/snapshot_stats
 # It is worth it for almost everyone to maintain thrash
 actions.precombat+=/variable,name=use_thrash,value=0
-actions.precombat+=/variable,name=use_thrash,value=2,if=azerite.wild_fleshrending.enabled
 actions.precombat+=/use_item,name=azsharas_font_of_power
 actions.precombat+=/cat_form
 actions.precombat+=/prowl
@@ -1777,7 +1602,6 @@ actions+=/cat_form,if=!buff.cat_form.up
 actions+=/rake,if=buff.prowl.up|buff.shadowmeld.up
 actions+=/call_action_list,name=cooldowns
 actions+=/ferocious_bite,target_if=dot.rip.ticking&dot.rip.remains<3&target.time_to_die>10&(talent.sabertooth.enabled)
-actions+=/heart_essence,if=buff.tigers_fury.up
 actions+=/run_action_list,name=finishers,if=combo_points>4
 actions+=/run_action_list,name=generators
 ]]
@@ -1794,14 +1618,6 @@ actions+=/run_action_list,name=generators
 	if Sabertooth.known and FerociousBite:Usable(true) and Rip:Up() and Rip:Remains() < 3 and Target.timeToDie > 10 and (Player.enemies < 3 or Rip:LowestRemainsOthers() > 8) then
 		return Pool(FerociousBite, Rip:Remains() < 1 and 0 or 25)
 	end
-	if TigersFury:Up() then
-		if ConcentratedFlame:Usable() and ConcentratedFlame.dot:Down() and (ConcentratedFlame:WontCapEnergy() or ConcentratedFlame:Charges() > 1.8) then
-			return ConcentratedFlame
-		end
-		if ReapingFlames:Usable() and ReapingFlames:WontCapEnergy() then
-			return ReapingFlames
-		end
-	end
 	if Player:HealthPct() < 65 and Regrowth:Usable() and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() and not Player:Stealthed() then
 		UseExtra(Regrowth)
 	end
@@ -1817,21 +1633,10 @@ actions.cooldowns=berserk,if=energy>=30&(cooldown.tigers_fury.remains>5|buff.tig
 actions.cooldowns+=/tigers_fury,if=energy.deficit>=60
 actions.cooldowns+=/berserking
 actions.cooldowns+=/thorns,if=active_enemies>desired_targets|raid_event.adds.in>45
-actions.cooldowns+=/guardian_of_azeroth
-actions.cooldowns+=/the_unbound_force,if=buff.reckless_force.up|buff.tigers_fury.up
-actions.cooldowns+=/memory_of_lucid_dreams,if=(buff.tigers_fury.up|cooldown.tigers_fury.remains<2)&buff.berserk.down
-actions.cooldowns+=/blood_of_the_enemy,if=buff.tigers_fury.up
 actions.cooldowns+=/feral_frenzy,if=combo_points=0
-actions.cooldowns+=/focused_azerite_beam,if=active_enemies>desired_targets|(raid_event.adds.in>90&energy.deficit>=50)
-actions.cooldowns+=/purifying_blast,if=active_enemies>desired_targets|raid_event.adds.in>60
-actions.cooldowns+=/worldvein_resonance,if=buff.lifeblood.stack<4
 actions.cooldowns+=/incarnation,if=energy>=30&(cooldown.tigers_fury.remains>15|buff.tigers_fury.up)
 actions.cooldowns+=/potion,if=target.time_to_die<65|(time_to_die<180&(buff.berserk.up|buff.incarnation.up))
 actions.cooldowns+=/shadowmeld,if=combo_points<5&energy>=action.rake.cost&dot.rake.pmultiplier<1.7&buff.tigers_fury.up&(!talent.incarnation.enabled|cooldown.incarnation.remains>18)&!buff.incarnation.up
-actions.cooldowns+=/use_item,name=ashvanes_razor_coral,if=debuff.razor_coral_debuff.down|debuff.conductive_ink_debuff.up&target.time_to_pct_30<1.5|!debuff.conductive_ink_debuff.up&(debuff.razor_coral_debuff.stack>=25-10*debuff.blood_of_the_enemy.up|target.time_to_die<40)&buff.tigers_fury.remains>10
-actions.cooldowns+=/use_item,effect_name=cyclotronic_blast,if=(energy.deficit>=energy.regen*3)&buff.tigers_fury.down&!azerite.jungle_fury.enabled
-actions.cooldowns+=/use_item,effect_name=cyclotronic_blast,if=buff.tigers_fury.up&azerite.jungle_fury.enabled
-actions.cooldowns+=/use_item,effect_name=azsharas_font_of_power,if=energy.deficit>=50
 actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 ]]
 	if Berserk:Usable() and Player:Energy() >= 30 and (TigersFury:Cooldown() > 5 or TigersFury:Up()) then
@@ -1843,29 +1648,8 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if Thorns:Usable() and Player:UnderAttack() and Thorns:WontCapEnergy() then
 		return UseCooldown(Thorns)
 	end
-	if GuardianOfAzeroth:Usable() then
-		return UseCooldown(GuardianOfAzeroth)
-	end
-	if TheUnboundForce:Usable() and RecklessForce:Up() then
-		return UseCooldown(TheUnboundForce)
-	end
-	if MemoryOfLucidDreams:Usable() and (TigersFury:Up() or TigersFury:Ready(2)) and Berserk:Down() then
-		return UseCooldown(MemoryOfLucidDreams)
-	end
-	if BloodOfTheEnemy:Usable() and TigersFury:Up() then
-		return UseCooldown(BloodOfTheEnemy)
-	end
 	if FeralFrenzy:Usable() and Player:ComboPoints() == 0 then
 		return UseCooldown(FeralFrenzy)
-	end
-	if FocusedAzeriteBeam:Usable() and ((Target.boss and Target.timeToDie < 6) or (JungleFury:AzeriteRank() < 2 or TigersFury:Remains() > (4.5 * Player.haste_factor)) and (Player.enemies >= 3 or (Rake:Remains() > (6 * Player.haste_factor) and Rip:Remains() > (8 * Player.haste_factor)))) then
-		return UseCooldown(FocusedAzeriteBeam)
-	end
-	if PurifyingBlast:Usable() and Player.enemies >= 2 then
-		return UseCooldown(PurifyingBlast)
-	end
-	if WorldveinResonance:Usable() and Lifeblood:Stack() < 4 then
-		return UseCooldown(WorldveinResonance)
 	end
 	if IncarnationKingOfTheJungle:Usable() and Player:Energy() >= 30 and (TigersFury:Cooldown() > 15 or TigersFury:Up()) then
 		return UseCooldown(IncarnationKingOfTheJungle)
@@ -1898,7 +1682,6 @@ actions.finishers+=/rip,target_if=!ticking|(remains<=duration*0.3)&(!talent.sabe
 actions.finishers+=/pool_resource,for_next=1
 actions.finishers+=/savage_roar,if=buff.savage_roar.remains<12
 actions.finishers+=/pool_resource,for_next=1
-actions.finishers+=/maim,if=buff.iron_jaws.up
 actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_gained_on_refresh
 ]]
 	if SavageRoar:Usable(true) and SavageRoar:Down() then
@@ -1927,9 +1710,6 @@ actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_ga
 	if SavageRoar:Usable(true) and SavageRoar:Remains() < 12 then
 		return Pool(SavageRoar)
 	end
-	if Maim:Usable(true) and IronJaws:Up() then
-		return Pool(Maim)
-	end
 	if FerociousBite:Usable(true) then
 		return Pool(FerociousBite, 25)
 	end
@@ -1949,8 +1729,7 @@ actions.generators+=/rake,target_if=!ticking|refreshable&target.time_to_die>4
 actions.generators+=/brutal_slash,if=(buff.tigers_fury.up&(raid_event.adds.in>(1+max_charges-charges_fractional)*recharge_time))
 actions.generators+=/moonfire_cat,target_if=refreshable
 actions.generators+=/pool_resource,for_next=1
-actions.generators+=/thrash_cat,if=refreshable&((variable.use_thrash=2&(!buff.incarnation.up|azerite.wild_fleshrending.enabled))|spell_targets.thrash_cat>1)
-actions.generators+=/thrash_cat,if=refreshable&variable.use_thrash=1&buff.clearcasting.react&(!buff.incarnation.up|azerite.wild_fleshrending.enabled)
+actions.generators+=/thrash_cat,if=refreshable&variable.use_thrash=1&buff.clearcasting.react&!buff.incarnation.up
 actions.generators+=/pool_resource,for_next=1
 actions.generators+=/swipe_cat,if=spell_targets.swipe_cat>1
 actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.cost-energy)%energy.regen|buff.clearcasting.react
@@ -1987,7 +1766,7 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 		if IncarnationKingOfTheJungle:Down() or WildFleshrending.known or Player.enemies > 1 then
 			return Pool(ThrashCat)
 		end
-		if Clearcasting:Up() and (IncarnationKingOfTheJungle:Down() or WildFleshrending.known) then
+		if Clearcasting:Up() and IncarnationKingOfTheJungle:Down() then
 			return ThrashCat
 		end
 	end
@@ -2055,7 +1834,7 @@ APL[SPEC.GUARDIAN].main = function(self)
 actions=auto_attack
 actions+=/call_action_list,name=cooldowns
 actions+=/maul,if=rage.deficit<10&active_enemies<4
-actions+=/ironfur,if=cost=0|(rage>cost&azerite.layered_mane.enabled&active_enemies>2)
+actions+=/ironfur,if=cost=0
 actions+=/pulverize,target_if=dot.thrash_bear.stack=dot.thrash_bear.max_stacks
 actions+=/moonfire,target_if=dot.moonfire.refreshable&active_enemies<2
 actions+=/incarnation
@@ -2065,8 +1844,6 @@ actions+=/mangle,if=dot.thrash_bear.ticking
 actions+=/moonfire,target_if=buff.galactic_guardian.up&active_enemies<2
 actions+=/thrash
 actions+=/maul
-# Fill with Moonfire with PotMx2
-actions+=/moonfire,if=azerite.power_of_the_moon.rank>1&active_enemies=1
 actions+=/swipe
 ]]
 	if BearForm:Down() then
@@ -2076,7 +1853,7 @@ actions+=/swipe
 	if Maul:Usable() and Player:RageDeficit() < 10 and Player.enemies < 4 then
 		return Maul
 	end
-	if Ironfur:Usable() and (Ironfur:RageCost() == 0 or (Player:Rage() > Ironfur:RageCost() and LayeredMane.known and Player.enemies > 2)) then
+	if Ironfur:Usable() and Ironfur:RageCost() == 0 then
 		UseExtra(Ironfur)
 	end
 	if Pulverize:Usable() and Thrash:Stack() == 3 then
@@ -2105,9 +1882,6 @@ actions+=/swipe
 	end
 	if Maul:Usable() and (Player:RageDeficit() < 30 or (GuardiansWrath.known and GuardiansWrath:Stack() < 3)) then
 		return Maul
-	end
-	if MoonfireBear:Usable() and Player.enemies == 1 and PowerOfTheMoon:AzeriteRank() > 1 then
-		return MoonfireBear
 	end
 	if Swipe:Usable() then
 		return Swipe
@@ -2338,24 +2112,24 @@ UI.anchor_points = {
 	},
 	kui = { -- Kui Nameplates
 		[FORM.NONE] = {
-			['above'] = { 'BOTTOM', 'TOP', 0, 30 },
-			['below'] = { 'TOP', 'BOTTOM', 0, 4 }
+			['above'] = { 'BOTTOM', 'TOP', 0, 24 },
+			['below'] = { 'TOP', 'BOTTOM', 0, -2 }
 		},
 		[FORM.MOONKIN] = {
-			['above'] = { 'BOTTOM', 'TOP', 0, 30 },
-			['below'] = { 'TOP', 'BOTTOM', 0, 4 }
+			['above'] = { 'BOTTOM', 'TOP', 0, 24 },
+			['below'] = { 'TOP', 'BOTTOM', 0, -2 }
 		},
 		[FORM.CAT] = {
-			['above'] = { 'BOTTOM', 'TOP', 0, 30 },
-			['below'] = { 'TOP', 'BOTTOM', 0, 4 }
+			['above'] = { 'BOTTOM', 'TOP', 0, 24 },
+			['below'] = { 'TOP', 'BOTTOM', 0, -2 }
 		},
 		[FORM.BEAR] = {
-			['above'] = { 'BOTTOM', 'TOP', 0, 30 },
-			['below'] = { 'TOP', 'BOTTOM', 0, 4 }
+			['above'] = { 'BOTTOM', 'TOP', 0, 24 },
+			['below'] = { 'TOP', 'BOTTOM', 0, -2 }
 		},
 		[FORM.TRAVEL] = {
-			['above'] = { 'BOTTOM', 'TOP', 0, 30 },
-			['below'] = { 'TOP', 'BOTTOM', 0, 4 }
+			['above'] = { 'BOTTOM', 'TOP', 0, 24 },
+			['below'] = { 'TOP', 'BOTTOM', 0, -2 }
 		},
 	},
 }
@@ -2537,7 +2311,6 @@ function events:ADDON_LOADED(name)
 			print('[|cFFFFD000Warning|r] ' .. name .. ' is not designed for players under level 10, and almost certainly will not operate properly!')
 		end
 		InitOpts()
-		Azerite:Init()
 		UI:UpdateDraggable()
 		UI:UpdateAlpha()
 		UI:UpdateScale()
@@ -2576,7 +2349,7 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 
 	local ability = spellId and abilities.bySpellId[spellId]
 	if not ability then
-		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', eventType, spellName, spellId))
+		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', eventType, spellName or 'Unknown', spellId or 0))
 		return
 	end
 
@@ -2598,21 +2371,20 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 
 	UI:UpdateCombatWithin(0.05)
 	if eventType == 'SPELL_CAST_SUCCESS' then
-		if srcGUID == Player.guid or ability.player_triggered then
-			Player.last_ability = ability
-			if ability.triggers_gcd then
-				Player.previous_gcd[10] = nil
-				table.insert(Player.previous_gcd, 1, ability)
-			end
-			if ability.travel_start then
-				ability.travel_start[dstGUID] = Player.time
-			end
-			if Opt.previous and clawPanel:IsVisible() then
-				clawPreviousPanel.ability = ability
-				clawPreviousPanel.border:SetTexture('Interface\\AddOns\\Claw\\border.blp')
-				clawPreviousPanel.icon:SetTexture(ability.icon)
-				clawPreviousPanel:Show()
-			end
+		Player.last_ability = ability
+		ability.last_used = Player.time
+		if ability.triggers_gcd then
+			Player.previous_gcd[10] = nil
+			table.insert(Player.previous_gcd, 1, ability)
+		end
+		if ability.travel_start then
+			ability.travel_start[dstGUID] = Player.time
+		end
+		if Opt.previous and clawPanel:IsVisible() then
+			clawPreviousPanel.ability = ability
+			clawPreviousPanel.border:SetTexture('Interface\\AddOns\\Claw\\border.blp')
+			clawPreviousPanel.icon:SetTexture(ability.icon)
+			clawPreviousPanel:Show()
 		end
 		return
 	end
@@ -2727,7 +2499,6 @@ function events:PLAYER_EQUIPMENT_CHANGED()
 			inventoryItems[i].can_use = false
 		end
 	end
-	Azerite:Update()
 	Player:UpdateAbilities()
 end
 
@@ -2813,11 +2584,6 @@ function events:UPDATE_SHAPESHIFT_FORM()
 end
 
 function events:PLAYER_PVP_TALENT_UPDATE()
-	Player:UpdateAbilities()
-end
-
-function events:AZERITE_ESSENCE_UPDATE()
-	Azerite:Update()
 	Player:UpdateAbilities()
 end
 
