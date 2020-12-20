@@ -1,7 +1,9 @@
+local ADDON = 'Claw'
 if select(2, UnitClass('player')) ~= 'DRUID' then
-	DisableAddOn('Claw')
+	DisableAddOn(ADDON)
 	return
 end
+local ADDON_PATH = 'Interface\\AddOns\\' .. ADDON .. '\\'
 
 -- copy heavily accessed global functions into local scope for performance
 local GetSpellCooldown = _G.GetSpellCooldown
@@ -28,7 +30,7 @@ Claw = {}
 local Opt -- use this as a local table reference to Claw
 
 SLASH_Claw1, SLASH_Claw2 = '/claw', '/cl'
-BINDING_HEADER_CLAW = 'Claw'
+BINDING_HEADER_CLAW = ADDON
 
 local function InitOpts()
 	local function SetDefaults(t, ref)
@@ -87,6 +89,7 @@ local function InitOpts()
 		aoe = false,
 		auto_aoe = false,
 		auto_aoe_ttl = 10,
+		cd_ttd = 8,
 		pot = false,
 		trinket = true,
 		frenzied_threshold = 60,
@@ -146,13 +149,15 @@ local Player = {
 	energy_regen = 0,
 	rage = 0,
 	rage_max = 100,
+	astral_power = 0,
+	astral_power_max = 100,
 	combo_points = 0,
 	combo_points_max = 5,
+	moving = false,
+	movement_speed = 100,
 	last_swing_taken = 0,
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
-		[165581] = true, -- Crest of Pa'ku (Horde)
-		[174044] = true, -- Humming Black Dragonscale (parachute)
 	},
 }
 
@@ -160,7 +165,7 @@ local Player = {
 local Target = {
 	boss = false,
 	guid = 0,
-	healthArray = {},
+	health_array = {},
 	hostile = false,
 	estimated_range = 30,
 }
@@ -176,7 +181,7 @@ clawPanel.icon:SetAllPoints(clawPanel)
 clawPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
 clawPanel.border = clawPanel:CreateTexture(nil, 'ARTWORK')
 clawPanel.border:SetAllPoints(clawPanel)
-clawPanel.border:SetTexture('Interface\\AddOns\\Claw\\border.blp')
+clawPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
 clawPanel.border:Hide()
 clawPanel.dimmer = clawPanel:CreateTexture(nil, 'BORDER')
 clawPanel.dimmer:SetAllPoints(clawPanel)
@@ -223,7 +228,7 @@ clawPreviousPanel.icon:SetAllPoints(clawPreviousPanel)
 clawPreviousPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
 clawPreviousPanel.border = clawPreviousPanel:CreateTexture(nil, 'ARTWORK')
 clawPreviousPanel.border:SetAllPoints(clawPreviousPanel)
-clawPreviousPanel.border:SetTexture('Interface\\AddOns\\Claw\\border.blp')
+clawPreviousPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
 local clawCooldownPanel = CreateFrame('Frame', 'clawCooldownPanel', UIParent)
 clawCooldownPanel:SetSize(64, 64)
 clawCooldownPanel:SetFrameStrata('BACKGROUND')
@@ -237,7 +242,7 @@ clawCooldownPanel.icon:SetAllPoints(clawCooldownPanel)
 clawCooldownPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
 clawCooldownPanel.border = clawCooldownPanel:CreateTexture(nil, 'ARTWORK')
 clawCooldownPanel.border:SetAllPoints(clawCooldownPanel)
-clawCooldownPanel.border:SetTexture('Interface\\AddOns\\Claw\\border.blp')
+clawCooldownPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
 clawCooldownPanel.cd = CreateFrame('Cooldown', nil, clawCooldownPanel, 'CooldownFrameTemplate')
 clawCooldownPanel.cd:SetAllPoints(clawCooldownPanel)
 local clawInterruptPanel = CreateFrame('Frame', 'clawInterruptPanel', UIParent)
@@ -253,7 +258,7 @@ clawInterruptPanel.icon:SetAllPoints(clawInterruptPanel)
 clawInterruptPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
 clawInterruptPanel.border = clawInterruptPanel:CreateTexture(nil, 'ARTWORK')
 clawInterruptPanel.border:SetAllPoints(clawInterruptPanel)
-clawInterruptPanel.border:SetTexture('Interface\\AddOns\\Claw\\border.blp')
+clawInterruptPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
 clawInterruptPanel.cast = CreateFrame('Cooldown', nil, clawInterruptPanel, 'CooldownFrameTemplate')
 clawInterruptPanel.cast:SetAllPoints(clawInterruptPanel)
 local clawExtraPanel = CreateFrame('Frame', 'clawExtraPanel', UIParent)
@@ -269,7 +274,7 @@ clawExtraPanel.icon:SetAllPoints(clawExtraPanel)
 clawExtraPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
 clawExtraPanel.border = clawExtraPanel:CreateTexture(nil, 'ARTWORK')
 clawExtraPanel.border:SetAllPoints(clawExtraPanel)
-clawExtraPanel.border:SetTexture('Interface\\AddOns\\Claw\\border.blp')
+clawExtraPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
 
 -- Start AoE
 
@@ -345,7 +350,6 @@ local autoAoe = {
 	blacklist = {},
 	ignored_units = {
 		[120651] = true, -- Explosives (Mythic+ affix)
-		[161895] = true, -- Thing From Beyond (40+ Corruption)
 	},
 }
 
@@ -444,6 +448,7 @@ function Ability:Add(spellId, buff, player, spellId2)
 		known = false,
 		mana_cost = 0,
 		energy_cost = 0,
+		ap_cost = 0,
 		cp_cost = 0,
 		rage_cost = 0,
 		cooldown_duration = 0,
@@ -475,7 +480,7 @@ function Ability:Ready(seconds)
 	return self:Cooldown() <= (seconds or 0)
 end
 
-function Ability:Usable(pool)
+function Ability:Usable(seconds, pool)
 	if not self.known then
 		return false
 	end
@@ -490,13 +495,16 @@ function Ability:Usable(pool)
 			return false
 		end
 	end
+	if Player.spec == SPEC.BALANCE and self:APCost() > Player.astral_power then
+		return false
+	end
 	if self:CPCost() > Player.combo_points then
 		return false
 	end
 	if self.requires_charge and self:Charges() == 0 then
 		return false
 	end
-	return self:Ready()
+	return self:Ready(seconds)
 end
 
 function Ability:Remains()
@@ -607,6 +615,10 @@ end
 
 function Ability:EnergyCost()
 	return self.energy_cost
+end
+
+function Ability:APCost()
+	return self.ap_cost
 end
 
 function Ability:CPCost()
@@ -785,6 +797,10 @@ local CatForm = Ability:Add(768, true, true)
 local Growl = Ability:Add(6795, false, true)
 Growl.buff_duration = 3
 Growl.cooldown_duration = 8
+local Moonfire = Ability:Add(8921, false, true, 164812)
+Moonfire.buff_duration = 16
+Moonfire.tick_interval = 2
+Moonfire.hasted_ticks = true
 local SkullBash = Ability:Add(106839, false, true)
 SkullBash.cooldown_duration = 15
 SkullBash.triggers_gcd = false
@@ -801,15 +817,28 @@ Regrowth.hasted_ticks = true
 local SurvivalInstincts = Ability:Add(61336, true, true)
 SurvivalInstincts.buff_duration = 6
 SurvivalInstincts.cooldown_duration = 240
+local Typhoon = Ability:Add(132469, false, true)
+Typhoon.buff_duration = 6
+Typhoon.cooldown_duration = 30
 ------ Procs
 
 ------ Talents
+local MightyBash = Ability:Add(5211, false, true)
+MightyBash.buff_duration = 4
+MightyBash.cooldown_duration = 60
 local WildCharge = Ability:Add(102401, false, true)
 WildCharge.cooldown_duration = 15
 local WildChargeCat = Ability:Add(49376, false, true)
 WildChargeCat.cooldown_duration = 15
 ---- Balance
-
+local Sunfire = Ability:Add(93402, false, true, 164815)
+Sunfire.buff_duration = 18
+Sunfire.tick_interval = 2
+Sunfire.hasted_ticks = true
+Sunfire:AutoAoe(false, 'apply')
+local SolarBeam = Ability:Add(78675, false, true, 81261)
+SolarBeam.buff_duration = 8
+SolarBeam.cooldown_duration = 60
 ------ Talents
 
 ------ Procs
@@ -853,11 +882,6 @@ local Maim = Ability:Add(22570, false, true, 203123)
 Maim.cooldown_duration = 20
 Maim.energy_cost = 30
 Maim.cp_cost = 1
-local MoonfireCat = Ability:Add(8921, false, true, 164812)
-MoonfireCat.buff_duration = 18
-MoonfireCat.energy_cost = 30
-MoonfireCat.tick_interval = 2
-MoonfireCat.hasted_ticks = true
 ------ Talents
 local Bloodtalons = Ability:Add(155672, true, true, 145152)
 Bloodtalons.buff_duration = 30
@@ -916,10 +940,6 @@ Mangle.cooldown_duration = 6
 Mangle.hasted_cooldown = true
 local Maul = Ability:Add(6807, false, true)
 Maul.rage_cost = 45
-local MoonfireBear = Ability:Add(8921, false, true, 164812)
-MoonfireCat.buff_duration = 16
-MoonfireCat.tick_interval = 2
-MoonfireCat.hasted_ticks = true
 local Thrash = Ability:Add(77758, false, true, 192090)
 Thrash.buff_duration = 15
 Thrash.cooldown_duration = 6
@@ -1072,16 +1092,16 @@ function Player:EnergyRegen()
 	return self.energy_regen
 end
 
-function Player:EnergyDeficit()
-	return self.energy_max - self.energy
+function Player:EnergyDeficit(energy)
+	return (energy or self.energy_max) - self.energy
 end
 
-function Player:EnergyTimeToMax()
-	local deficit = self.energy_max - self.energy
+function Player:EnergyTimeToMax(energy)
+	local deficit = self:EnergyDeficit(energy)
 	if deficit <= 0 then
 		return 0
 	end
-	return deficit / self.energy_regen
+	return deficit / self:EnergyRegen()
 end
 
 function Player:ComboPoints()
@@ -1147,6 +1167,24 @@ function Player:Equipped(itemID, slot)
 	return false
 end
 
+function Player:BonusIdEquipped(bonusId)
+	local i, id, link, item
+	for i = 1, 19 do
+		link = GetInventoryItemLink('player', i)
+		if link then
+			item = link:match('Hitem:%d+:([%d:]+)')
+			if item then
+				for id in item:gmatch('(%d+)') do
+					if tonumber(id) == bonusId then
+						return true
+					end
+				end
+			end
+		end
+	end
+	return false
+end
+
 function Player:InArenaOrBattleground()
 	return self.instance == 'arena' or self.instance == 'pvp'
 end
@@ -1170,6 +1208,12 @@ function Player:UpdateAbilities()
 		end
 		if C_LevelLink.IsSpellLocked(ability.spellId) then
 			ability.known = false -- spell is locked, do not mark as known
+		end
+		if ability.bonus_id then -- used for checking Legendary crafted effects
+			ability.known = self:BonusIdEquipped(ability.bonus_id)
+		end
+		if ability.conduit_id then
+			ability.known = C_Soulbinds.IsConduitInstalledInSoulbind(C_Soulbinds.GetActiveSoulbindID(), ability.conduit_id)
 		end
 	end
 
@@ -1213,11 +1257,11 @@ function Target:UpdateHealth()
 	timer.health = 0
 	self.health = UnitHealth('target')
 	self.health_max = UnitHealthMax('target')
-	table.remove(self.healthArray, 1)
-	self.healthArray[25] = self.health
+	table.remove(self.health_array, 1)
+	self.health_array[25] = self.health
 	self.timeToDieMax = self.health / Player.health_max * 15
 	self.healthPercentage = self.health_max > 0 and (self.health / self.health_max * 100) or 100
-	self.healthLostPerSec = (self.healthArray[1] - self.health) / 5
+	self.healthLostPerSec = (self.health_array[1] - self.health) / 5
 	self.timeToDie = self.healthLostPerSec > 0 and min(self.timeToDieMax, self.health / self.healthLostPerSec) or self.timeToDieMax
 end
 
@@ -1237,7 +1281,7 @@ function Target:Update()
 		self.hostile = true
 		local i
 		for i = 1, 25 do
-			self.healthArray[i] = 0
+			self.health_array[i] = 0
 		end
 		self:UpdateHealth()
 		if Opt.always_on then
@@ -1254,7 +1298,7 @@ function Target:Update()
 		self.guid = guid
 		local i
 		for i = 1, 25 do
-			self.healthArray[i] = UnitHealth('target')
+			self.health_array[i] = UnitHealth('target')
 		end
 	end
 	self.boss = false
@@ -1517,6 +1561,12 @@ function Maim:Usable()
 	end
 	return Ability.Usable(self)
 end
+MightyBash.Usable = Maim.Usable
+Typhoon.Usable = Maim.Usable
+
+function Moonfire:Duration()
+	return Ability:Duration(self) + 6
+end
 
 -- End Ability Modifications
 
@@ -1605,6 +1655,7 @@ actions+=/ferocious_bite,target_if=dot.rip.ticking&dot.rip.remains<3&target.time
 actions+=/run_action_list,name=finishers,if=combo_points>4
 actions+=/run_action_list,name=generators
 ]]
+	Player.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or (Berserk.known and Berserk:Up()) or (IncarnationKingOfTheJungle.known and IncarnationKingOfTheJungle:Up())
 	if not Player.opener_done then
 		return self:opener()
 	end
@@ -1615,7 +1666,7 @@ actions+=/run_action_list,name=generators
 		return Rake
 	end
 	self:cooldowns()
-	if Sabertooth.known and FerociousBite:Usable(true) and Rip:Up() and Rip:Remains() < 3 and Target.timeToDie > 10 and (Player.enemies < 3 or Rip:LowestRemainsOthers() > 8) then
+	if Sabertooth.known and FerociousBite:Usable(0, true) and Rip:Up() and Rip:Remains() < 3 and Target.timeToDie > 10 and (Player.enemies < 3 or Rip:LowestRemainsOthers() > 8) then
 		return Pool(FerociousBite, Rip:Remains() < 1 and 0 or 25)
 	end
 	if Player:HealthPct() < 65 and Regrowth:Usable() and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() and not Player:Stealthed() then
@@ -1639,7 +1690,7 @@ actions.cooldowns+=/potion,if=target.time_to_die<65|(time_to_die<180&(buff.berse
 actions.cooldowns+=/shadowmeld,if=combo_points<5&energy>=action.rake.cost&dot.rake.pmultiplier<1.7&buff.tigers_fury.up&(!talent.incarnation.enabled|cooldown.incarnation.remains>18)&!buff.incarnation.up
 actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 ]]
-	if Berserk:Usable() and Player:Energy() >= 30 and (TigersFury:Cooldown() > 5 or TigersFury:Up()) then
+	if Player.use_cds and Berserk:Usable() and Player:Energy() >= 30 and (TigersFury:Cooldown() > 5 or TigersFury:Up()) then
 		return UseCooldown(Berserk)
 	end
 	if TigersFury:Usable() and Player:EnergyDeficit() >= 60 then
@@ -1651,7 +1702,7 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if FeralFrenzy:Usable() and Player:ComboPoints() == 0 then
 		return UseCooldown(FeralFrenzy)
 	end
-	if IncarnationKingOfTheJungle:Usable() and Player:Energy() >= 30 and (TigersFury:Cooldown() > 15 or TigersFury:Up()) then
+	if Player.use_cds and IncarnationKingOfTheJungle:Usable() and Player:Energy() >= 30 and (TigersFury:Cooldown() > 15 or TigersFury:Up()) then
 		return UseCooldown(IncarnationKingOfTheJungle)
 	end
 	if Opt.pot and Target.boss and PotionOfUnbridledFury:Usable() and (Target.timeToDie < 65 or (Target.timeToDie < 180 and (Berserk:Up() or IncarnationKingOfTheJungle:Up()))) then
@@ -1660,7 +1711,7 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if Shadowmeld:Usable() and Player:ComboPoints() < 5 and Player:Energy() >= Rake:EnergyCost() and Rake:Multiplier() < 1.7 and TigersFury:Up() and (not IncarnationKingOfTheJungle.known or (IncarnationKingOfTheJungle:Down() and IncarnationKingOfTheJungle:Cooldown() > 18)) then
 		return UseCooldown(Shadowmeld)
 	end
-	if Opt.trinket and ((Target.boss and Target.timeToDie < 20) or TigersFury:Up()) then
+	if Opt.trinket and Player.use_cds and ((Target.boss and Target.timeToDie < 20) or TigersFury:Up()) then
 		if Trinket1:Usable() then
 			UseCooldown(Trinket1)
 		elseif Trinket2:Usable() then
@@ -1684,33 +1735,33 @@ actions.finishers+=/savage_roar,if=buff.savage_roar.remains<12
 actions.finishers+=/pool_resource,for_next=1
 actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_gained_on_refresh
 ]]
-	if SavageRoar:Usable(true) and SavageRoar:Down() then
+	if SavageRoar:Usable(0, true) and SavageRoar:Down() then
 		return Pool(SavageRoar)
 	end
 	if Target.timeToDie > max(8, Rip:Remains() + 4) and Rip:Multiplier() < Player.rip_multiplier_max and Rip:NextMultiplier() >= Player.rip_multiplier_max then
-		if PrimalWrath:Usable(true) and (Sabertooth.known or Player.enemies >= 3) then
+		if PrimalWrath:Usable(0, true) and (Sabertooth.known or Player.enemies >= 3) then
 			return Pool(PrimalWrath)
-		elseif Rip:Usable(true) then
+		elseif Rip:Usable(0, true) then
 			return Pool(Rip)
 		end
 	end
-	if Sabertooth.known and FerociousBite:Usable(true) and Rip:Up() and between(Player.enemies, 2, 3) and Rip:LowestRemainsOthers() > (((Berserk:Up() or IncarnationKingOfTheJungle:Up()) and 5 or 8) * (Player.enemies - 1)) then
+	if Sabertooth.known and FerociousBite:Usable(0, true) and Rip:Up() and between(Player.enemies, 2, 3) and Rip:LowestRemainsOthers() > (((Berserk:Up() or IncarnationKingOfTheJungle:Up()) and 5 or 8) * (Player.enemies - 1)) then
 		return Pool(FerociousBite, Rip:Remains() < 1 and 0 or 25)
 	end
-	if PrimalWrath:Usable(true) and Player.enemies > 1 and (Player.enemies >= 5 or Rip:NextMultiplier() > (Rip:MultiplierSum() / Player.enemies) or Rip:LowestRemainsOthers() < ((Berserk:Up() or IncarnationKingOfTheJungle:Up()) and 3.6 or 7.2)) then
+	if PrimalWrath:Usable(0, true) and Player.enemies > 1 and (Player.enemies >= 5 or Rip:NextMultiplier() > (Rip:MultiplierSum() / Player.enemies) or Rip:LowestRemainsOthers() < ((Berserk:Up() or IncarnationKingOfTheJungle:Up()) and 3.6 or 7.2)) then
 		return Pool(PrimalWrath)
 	end
 	if Target.timeToDie > 8 and (Player.enemies == 1 or not PrimalWrath.known) and (Rip:Down() or (not Sabertooth.known and Rip:Remains() < 7.2) or (Rip:Remains() < 19.2 and Rip:NextMultiplier() > Rip:Multiplier())) then
-		if PrimalWrath:Usable(true) and Sabertooth.known then
+		if PrimalWrath:Usable(0, true) and Sabertooth.known then
 			return Pool(PrimalWrath)
-		elseif Rip:Usable(true) then
+		elseif Rip:Usable(0, true) then
 			return Pool(Rip)
 		end
 	end
-	if SavageRoar:Usable(true) and SavageRoar:Remains() < 12 then
+	if SavageRoar:Usable(0, true) and SavageRoar:Remains() < 12 then
 		return Pool(SavageRoar)
 	end
-	if FerociousBite:Usable(true) then
+	if FerociousBite:Usable(0, true) then
 		return Pool(FerociousBite, 25)
 	end
 end
@@ -1737,7 +1788,7 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 	if Sabertooth.known and Player.enemies == 1 and Player:ComboPoints() >= 2 and Rip:Down() and Rip:Usable() and Rip:NextMultiplier() >= Player.rip_multiplier_max and (TigersFury:Remains() < 1.5 or Bloodtalons:Remains() < 1.5 or Bloodtalons:Stack() == 1) then
 		return Rip
 	end
-	if ThrashCat:Usable(true) then
+	if ThrashCat:Usable(0, true) then
 		if ThrashCat:Refreshable() and Player.enemies > 2 then
 			return Pool(ThrashCat)
 		end
@@ -1748,21 +1799,21 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 	if BrutalSlash:Usable() and Player.enemies > 2 and (Player:Energy() < 50 or Player:ComboPoints() < 4) then
 		return BrutalSlash
 	end
-	if ScentOfBlood.known and SwipeCat:Usable(true) and ScentOfBlood:Up() then
+	if ScentOfBlood.known and SwipeCat:Usable(0, true) and ScentOfBlood:Up() then
 		return Pool(SwipeCat)
 	end
 	if Player.enemies < 6 or not PrimalWrath.known then
-		if Rake:Usable(true) and (Rake:Down() or Target.timeToDie > 4 and Rake:Refreshable()) then
+		if Rake:Usable(0, true) and (Rake:Down() or Target.timeToDie > 4 and Rake:Refreshable()) then
 			return Pool(Rake)
 		end
-		if LunarInspiration.known and MoonfireCat:Usable() and MoonfireCat:Refreshable() then
-			return MoonfireCat
+		if LunarInspiration.known and Moonfire:Usable() and Moonfire:Refreshable() then
+			return Moonfire
 		end
 	end
 	if BrutalSlash:Usable() and Player:EnergyTimeToMax() > 1.5 and (TigersFury:Up() or BrutalSlash:ChargesFractional() > 2.5) then
 		return BrutalSlash
 	end
-	if ThrashCat:Usable(true) and ThrashCat:Refreshable() and (Player.enemies > 1 or Target.timeToDie > (ThrashCat:Remains() + 4)) then
+	if ThrashCat:Usable(0, true) and ThrashCat:Refreshable() and (Player.enemies > 1 or Target.timeToDie > (ThrashCat:Remains() + 4)) then
 		if IncarnationKingOfTheJungle:Down() or WildFleshrending.known or Player.enemies > 1 then
 			return Pool(ThrashCat)
 		end
@@ -1770,7 +1821,7 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 			return ThrashCat
 		end
 	end
-	if SwipeCat:Usable(true) and Player.enemies > 1 then
+	if SwipeCat:Usable(0, true) and Player.enemies > 1 then
 		return Pool(SwipeCat)
 	end
 	if Shred:Usable() and (Clearcasting:Up() or Rake:Remains() > ((Shred:EnergyCost() + Rake:EnergyCost() - Player:Energy()) / Player:EnergyRegen())) then
@@ -1808,8 +1859,8 @@ actions.opener+=/rip,if=!ticking
 		Player.opener_done = true
 		return self:main()
 	end
-	if LunarInspiration.known and MoonfireCat:Down() then
-		return MoonfireCat
+	if LunarInspiration.known and Moonfire:Down() then
+		return Moonfire
 	end
 	if Player:ComboPoints() >= ((Berserk:Remains() > 6 or TigersFury:Ready()) and 3 or 5) and PrimalWrath:Usable() then
 		return PrimalWrath
@@ -1859,8 +1910,8 @@ actions+=/swipe
 	if Pulverize:Usable() and Thrash:Stack() == 3 then
 		return Pulverize
 	end
-	if MoonfireBear:Usable() and MoonfireBear:Refreshable() and Player.enemies < 2 then
-		return MoonfireBear
+	if Moonfire:Usable() and Moonfire:Refreshable() and Player.enemies < 2 then
+		return Moonfire
 	end
 	if IncarnationGuardianOfUrsoc:Usable() then
 		UseCooldown(IncarnationGuardianOfUrsoc)
@@ -1874,8 +1925,8 @@ actions+=/swipe
 	if Mangle:Usable() and Thrash:Up() then
 		return Mangle
 	end
-	if GalacticGuardian.known and MoonfireBear:Usable() and Player.enemies < 2 and GalacticGuardian:Up() then
-		return MoonfireBear
+	if GalacticGuardian.known and Moonfire:Usable() and Player.enemies < 2 and GalacticGuardian:Up() then
+		return Moonfire
 	end
 	if Thrash:Usable() then
 		return Thrash
@@ -1930,8 +1981,17 @@ APL.Interrupt = function(self)
 	if SkullBash:Usable() then
 		return SkullBash
 	end
+	if SolarBeam:Usable() then
+		return SolarBeam
+	end
 	if Maim:Usable() then
 		return Maim
+	end
+	if MightyBash:Usable() then
+		return MightyBash
+	end
+	if Typhoon:Usable() then
+		return Typhoon
 	end
 end
 
@@ -2209,7 +2269,7 @@ end
 
 function UI:UpdateCombat()
 	timer.combat = 0
-	local _, start, duration, remains, spellId
+	local _, start, duration, remains, spellId, speed, max_speed
 	Player.ctime = GetTime()
 	Player.time = Player.ctime - Player.time_diff
 	Player.main =  nil
@@ -2223,6 +2283,8 @@ function UI:UpdateCombat()
 	Player.ability_casting = abilities.bySpellId[spellId]
 	Player.execute_remains = max(remains and (remains / 1000 - Player.ctime) or 0, Player.gcd_remains)
 	Player.haste_factor = 1 / (1 + UnitSpellHaste('player') / 100)
+	Player.health = UnitHealth('player')
+	Player.health_max = UnitHealthMax('player')
 	if Player.form == FORM.CAT then
 		Player.gcd = 1
 		Player.energy_regen = GetPowerRegen()
@@ -2237,13 +2299,14 @@ function UI:UpdateCombat()
 	if Player.form == FORM.BEAR then
 		Player.rage = UnitPower('player', 1)
 	end
-	Player.health = UnitHealth('player')
-	Player.health_max = UnitHealthMax('player')
 	Player.mana = UnitPower('player', 0) + (Player.mana_regen * Player.execute_remains)
 	if Player.ability_casting then
 		Player.mana = Player.mana - Player.ability_casting:ManaCost()
 	end
 	Player.mana = min(max(Player.mana, 0), Player.mana_max)
+	speed, max_speed = GetUnitSpeed('player')
+	Player.moving = speed ~= 0
+	Player.movement_speed = max_speed / 7 * 100
 
 	trackAuras:Purge()
 	if Opt.auto_aoe then
@@ -2301,14 +2364,14 @@ end
 -- Start Event Handling
 
 function events:ADDON_LOADED(name)
-	if name == 'Claw' then
+	if name == ADDON then
 		Opt = Claw
 		if not Opt.frequency then
-			print('It looks like this is your first time running ' .. name .. ', why don\'t you take some time to familiarize yourself with the commands?')
+			print('It looks like this is your first time running ' .. ADDON .. ', why don\'t you take some time to familiarize yourself with the commands?')
 			print('Type |cFFFFD000' .. SLASH_Claw1 .. '|r for a list of commands.')
 		end
 		if UnitLevel('player') < 10 then
-			print('[|cFFFFD000Warning|r] ' .. name .. ' is not designed for players under level 10, and almost certainly will not operate properly!')
+			print('[|cFFFFD000Warning|r] ' .. ADDON .. ' is not designed for players under level 10, and almost certainly will not operate properly!')
 		end
 		InitOpts()
 		UI:UpdateDraggable()
@@ -2382,7 +2445,7 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 		end
 		if Opt.previous and clawPanel:IsVisible() then
 			clawPreviousPanel.ability = ability
-			clawPreviousPanel.border:SetTexture('Interface\\AddOns\\Claw\\border.blp')
+			clawPreviousPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
 			clawPreviousPanel.icon:SetTexture(ability.icon)
 			clawPreviousPanel:Show()
 		end
@@ -2419,7 +2482,7 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 			Rip:RefreshAura(dstGUID)
 		end
 		if Opt.previous and Opt.miss_effect and eventType == 'SPELL_MISSED' and clawPanel:IsVisible() and ability == clawPreviousPanel.ability then
-			clawPreviousPanel.border:SetTexture('Interface\\AddOns\\Claw\\misseffect.blp')
+			clawPreviousPanel.border:SetTexture(ADDON_PATH .. 'misseffect.blp')
 		end
 	end
 end
@@ -2449,6 +2512,7 @@ function events:PLAYER_REGEN_ENABLED()
 	Player.last_swing_taken = 0
 	Target.estimated_range = 30
 	Player.previous_gcd = {}
+	Player.opener_done = false
 	if Player.last_ability then
 		Player.last_ability = nil
 		clawPreviousPanel:Hide()
@@ -2469,7 +2533,6 @@ function events:PLAYER_REGEN_ENABLED()
 		autoAoe:Clear()
 		autoAoe:Update()
 	end
-	Player.opener_done = nil
 end
 
 function events:PLAYER_EQUIPMENT_CHANGED()
@@ -2530,7 +2593,7 @@ function events:SPELL_UPDATE_COOLDOWN()
 end
 
 function events:UNIT_POWER_UPDATE(srcName, powerType)
-	if srcName == 'player' and powerType == 'COMBO_POINTS' then
+	if srcName == 'player' and (powerType == 'COMBO_POINTS' or powerType == 'LUNAR_POWER') then
 		UI:UpdateCombatWithin(0.05)
 	end
 end
@@ -2662,10 +2725,10 @@ local function Status(desc, opt, ...)
 	else
 		opt_view = opt and '|cFF00C000On|r' or '|cFFC00000Off|r'
 	end
-	print('Claw -', desc .. ':', opt_view, ...)
+	print(ADDON, '-', desc .. ':', opt_view, ...)
 end
 
-function SlashCmdList.Claw(msg, editbox)
+SlashCmdList[ADDON] = function(msg, editbox)
 	msg = { strsplit(' ', msg:lower()) }
 	if startsWith(msg[1], 'lock') then
 		if msg[2] then
@@ -2805,13 +2868,13 @@ function SlashCmdList.Claw(msg, editbox)
 			Opt.always_on = msg[2] == 'on'
 			Target:Update()
 		end
-		return Status('Show the Claw UI without a target', Opt.always_on)
+		return Status('Show the ' .. ADDON .. ' UI without a target', Opt.always_on)
 	end
 	if msg[1] == 'cd' then
 		if msg[2] then
 			Opt.cooldown = msg[2] == 'on'
 		end
-		return Status('Use Claw for cooldown management', Opt.cooldown)
+		return Status('Use ' .. ADDON .. ' for cooldown management', Opt.cooldown)
 	end
 	if msg[1] == 'swipe' then
 		if msg[2] then
@@ -2888,6 +2951,12 @@ function SlashCmdList.Claw(msg, editbox)
 		end
 		return Status('Length of time target exists in auto AoE after being hit', Opt.auto_aoe_ttl, 'seconds')
 	end
+	if msg[1] == 'ttd' then
+		if msg[2] then
+			Opt.cd_ttd = tonumber(msg[2]) or 8
+		end
+		return Status('Minimum enemy lifetime to use cooldowns on (ignored on bosses)', Opt.cd_ttd, 'seconds')
+	end
 	if startsWith(msg[1], 'pot') then
 		if msg[2] then
 			Opt.pot = msg[2] == 'on'
@@ -2912,32 +2981,33 @@ function SlashCmdList.Claw(msg, editbox)
 		UI:SnapAllPanels()
 		return Status('Position has been reset to', 'default')
 	end
-	print('Claw (version: |cFFFFD000' .. GetAddOnMetadata('Claw', 'Version') .. '|r) - Commands:')
+	print(ADDON, '(version: |cFFFFD000' .. GetAddOnMetadata(ADDON, 'Version') .. '|r) - Commands:')
 	local _, cmd
 	for _, cmd in next, {
-		'locked |cFF00C000on|r/|cFFC00000off|r - lock the Claw UI so that it can\'t be moved',
-		'snap |cFF00C000above|r/|cFF00C000below|r/|cFFC00000off|r - snap the Claw UI to the Personal Resource Display',
-		'scale |cFFFFD000prev|r/|cFFFFD000main|r/|cFFFFD000cd|r/|cFFFFD000interrupt|r/|cFFFFD000extra|r/|cFFFFD000glow|r - adjust the scale of the Claw UI icons',
-		'alpha |cFFFFD000[percent]|r - adjust the transparency of the Claw UI icons',
+		'locked |cFF00C000on|r/|cFFC00000off|r - lock the ' .. ADDON .. ' UI so that it can\'t be moved',
+		'snap |cFF00C000above|r/|cFF00C000below|r/|cFFC00000off|r - snap the ' .. ADDON .. ' UI to the Personal Resource Display',
+		'scale |cFFFFD000prev|r/|cFFFFD000main|r/|cFFFFD000cd|r/|cFFFFD000interrupt|r/|cFFFFD000extra|r/|cFFFFD000glow|r - adjust the scale of the ' .. ADDON .. ' UI icons',
+		'alpha |cFFFFD000[percent]|r - adjust the transparency of the ' .. ADDON .. ' UI icons',
 		'frequency |cFFFFD000[number]|r - set the calculation frequency (default is every 0.2 seconds)',
 		'glow |cFFFFD000main|r/|cFFFFD000cd|r/|cFFFFD000interrupt|r/|cFFFFD000extra|r/|cFFFFD000blizzard|r |cFF00C000on|r/|cFFC00000off|r - glowing ability buttons on action bars',
 		'glow color |cFFF000000.0-1.0|r |cFF00FF000.1-1.0|r |cFF0000FF0.0-1.0|r - adjust the color of the ability button glow',
 		'previous |cFF00C000on|r/|cFFC00000off|r - previous ability icon',
-		'always |cFF00C000on|r/|cFFC00000off|r - show the Claw UI without a target',
-		'cd |cFF00C000on|r/|cFFC00000off|r - use Claw for cooldown management',
+		'always |cFF00C000on|r/|cFFC00000off|r - show the ' .. ADDON .. ' UI without a target',
+		'cd |cFF00C000on|r/|cFFC00000off|r - use ' .. ADDON .. ' for cooldown management',
 		'swipe |cFF00C000on|r/|cFFC00000off|r - show spell casting swipe animation on main ability icon',
 		'dim |cFF00C000on|r/|cFFC00000off|r - dim main ability icon when you don\'t have enough resources to use it',
 		'miss |cFF00C000on|r/|cFFC00000off|r - red border around previous ability when it fails to hit',
 		'aoe |cFF00C000on|r/|cFFC00000off|r - allow clicking main ability icon to toggle amount of targets (disables moving)',
 		'bossonly |cFF00C000on|r/|cFFC00000off|r - only use cooldowns on bosses',
-		'hidespec |cFFFFD000balance|r/|cFFFFD000feral|r/|cFFFFD000guardian|r/|cFFFFD000restoration|r - toggle disabling Claw for specializations',
+		'hidespec |cFFFFD000balance|r/|cFFFFD000feral|r/|cFFFFD000guardian|r/|cFFFFD000restoration|r - toggle disabling ' .. ADDON .. ' for specializations',
 		'interrupt |cFF00C000on|r/|cFFC00000off|r - show an icon for interruptable spells',
 		'auto |cFF00C000on|r/|cFFC00000off|r  - automatically change target mode on AoE spells',
 		'ttl |cFFFFD000[seconds]|r  - time target exists in auto AoE after being hit (default is 10 seconds)',
+		'ttd |cFFFFD000[seconds]|r  - minimum enemy lifetime to use cooldowns on (default is 8 seconds, ignored on bosses)',
 		'pot |cFF00C000on|r/|cFFC00000off|r - show flasks and battle potions in cooldown UI',
 		'trinket |cFF00C000on|r/|cFFC00000off|r - show on-use trinkets in cooldown UI',
 		'frenzied |cFFFFD000[health]|r  - health threshold to recommend Frenzied Regeneration at in Bear Form (default is 60%)',
-		'|cFFFFD000reset|r - reset the location of the Claw UI to default',
+		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
 		print('  ' .. SLASH_Claw1 .. ' ' .. cmd)
 	end
