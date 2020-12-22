@@ -159,6 +159,7 @@ local Player = {
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
 	},
+	berserk_remains = 0,
 }
 
 -- current target information
@@ -977,7 +978,8 @@ Pulverize.buff_duration = 20
 ------ Procs
 
 -- Covenant abilities
-
+local ConvokeTheSpirits = Ability:Add(323764, false, true)
+ConvokeTheSpirits.cooldown_duration = 120
 -- Racials
 local Shadowmeld = Ability:Add(58984, true, true)
 -- PvP talents
@@ -1117,7 +1119,7 @@ function Player:RageDeficit()
 end
 
 function Player:Stealthed()
-	return Prowl:Up() or (Shadowmeld.known and Shadowmeld:Up()) or (IncarnationKingOfTheJungle.known and IncarnationKingOfTheJungle:Up())
+	return Prowl:Up() or (Shadowmeld.known and Shadowmeld:Up()) or (IncarnationKingOfTheJungle.known and self.berserk_remains > 0)
 end
 
 function Player:UnderAttack()
@@ -1387,12 +1389,12 @@ function Rake:NextMultiplier()
 		if not id then
 			break
 		end
-		if Shadowmeld:Match(id) or Prowl:Match(id) or IncarnationKingOfTheJungle:Match(id) then
+		if Shadowmeld:Match(id) or Prowl:Match(id) or Berserk:Match(id) or IncarnationKingOfTheJungle:Match(id) then
 			stealthed = true
 		elseif TigersFury:Match(id) then
 			multiplier = multiplier * 1.15
 		elseif SavageRoar:Match(id) then
-			multiplier = multiplier * 1.10
+			multiplier = multiplier * 1.15
 		end
 	end
 	if stealthed then
@@ -1433,7 +1435,7 @@ function Rip:RefreshAura(guid)
 		max_duration = 1.3 * duration
 		aura.multiplier = self.next_multiplier
 	elseif self.next_applied_by == FerociousBite then
-		duration = 4 * self.next_combo_points
+		duration = self.next_combo_points
 		max_duration = 1.3 * (4 + (4 * Player.combo_points_max))
 	end
 	aura.expires = Player.time + min(max_duration, (aura.expires - Player.time) + duration)
@@ -1474,7 +1476,7 @@ function Rip:MultiplierMax()
 		multiplier = multiplier * 1.15
 	end
 	if SavageRoar.known then
-		multiplier = multiplier * 1.10
+		multiplier = multiplier * 1.15
 	end
 	if Bloodtalons.known then
 		multiplier = multiplier * 1.30
@@ -1493,7 +1495,7 @@ function Rip:NextMultiplier()
 		if TigersFury:Match(id) then
 			multiplier = multiplier * 1.15
 		elseif SavageRoar:Match(id) then
-			multiplier = multiplier * 1.10
+			multiplier = multiplier * 1.15
 		elseif Bloodtalons:Match(id) then
 			multiplier = multiplier * 1.30
 		end
@@ -1535,7 +1537,7 @@ function ThrashCat:NextMultiplier()
 		if TigersFury:Match(id) then
 			multiplier = multiplier * 1.15
 		elseif SavageRoar:Match(id) then
-			multiplier = multiplier * 1.10
+			multiplier = multiplier * 1.15
 		end
 	end
 	return multiplier
@@ -1641,9 +1643,6 @@ actions.precombat+=/berserk
 				UseCooldown(PotionOfUnbridledFury)
 			end
 		end
-		if Berserk:Usable() and Target.timeToDie > 9 then
-			UseCooldown(Berserk)
-		end
 	end
 --[[
 actions=auto_attack,if=!buff.prowl.up&!buff.shadowmeld.up
@@ -1655,7 +1654,7 @@ actions+=/ferocious_bite,target_if=dot.rip.ticking&dot.rip.remains<3&target.time
 actions+=/run_action_list,name=finishers,if=combo_points>4
 actions+=/run_action_list,name=generators
 ]]
-	Player.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or (Berserk.known and Berserk:Up()) or (IncarnationKingOfTheJungle.known and IncarnationKingOfTheJungle:Up())
+	Player.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or Player.berserk_remains > 0
 	if not Player.opener_done then
 		return self:opener()
 	end
@@ -1690,8 +1689,13 @@ actions.cooldowns+=/potion,if=target.time_to_die<65|(time_to_die<180&(buff.berse
 actions.cooldowns+=/shadowmeld,if=combo_points<5&energy>=action.rake.cost&dot.rake.pmultiplier<1.7&buff.tigers_fury.up&(!talent.incarnation.enabled|cooldown.incarnation.remains>18)&!buff.incarnation.up
 actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 ]]
-	if Player.use_cds and Berserk:Usable() and Player:Energy() >= 30 and (TigersFury:Cooldown() > 5 or TigersFury:Up()) then
-		return UseCooldown(Berserk)
+	if Player.use_cds then
+		if Berserk:Usable() and Player:Energy() >= 40 and (TigersFury:Ready(5) or TigersFury:Up()) then
+			return UseCooldown(Berserk)
+		end
+		if IncarnationKingOfTheJungle:Usable() and Player:Energy() >= 40 and (not TigersFury:Ready(15) or TigersFury:Up()) then
+			return UseCooldown(IncarnationKingOfTheJungle)
+		end
 	end
 	if TigersFury:Usable() and Player:EnergyDeficit() >= 60 then
 		return UseCooldown(TigersFury)
@@ -1702,13 +1706,13 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if FeralFrenzy:Usable() and Player:ComboPoints() == 0 then
 		return UseCooldown(FeralFrenzy)
 	end
-	if Player.use_cds and IncarnationKingOfTheJungle:Usable() and Player:Energy() >= 30 and (TigersFury:Cooldown() > 15 or TigersFury:Up()) then
-		return UseCooldown(IncarnationKingOfTheJungle)
+	if ConvokeTheSpirits:Usable() and Player:ComboPoints() <= (Player.berserk_remains > 0 and 2 or 0) and TigersFury:Remains() > 4 and (not SavageRoar.known or SavageRoar:Remains() > 4) then
+		return UseCooldown(ConvokeTheSpirits)
 	end
-	if Opt.pot and Target.boss and PotionOfUnbridledFury:Usable() and (Target.timeToDie < 65 or (Target.timeToDie < 180 and (Berserk:Up() or IncarnationKingOfTheJungle:Up()))) then
+	if Opt.pot and Target.boss and PotionOfUnbridledFury:Usable() and (Target.timeToDie < 65 or (Target.timeToDie < 180 and Player.berserk_remains > 0)) then
 		return UseCooldown(PotionOfUnbridledFury)
 	end
-	if Shadowmeld:Usable() and Player:ComboPoints() < 5 and Player:Energy() >= Rake:EnergyCost() and Rake:Multiplier() < 1.7 and TigersFury:Up() and (not IncarnationKingOfTheJungle.known or (IncarnationKingOfTheJungle:Down() and IncarnationKingOfTheJungle:Cooldown() > 18)) then
+	if Player.use_cds and Shadowmeld:Usable() and Player:ComboPoints() < 5 and Player:Energy() >= Rake:EnergyCost() and Rake:Multiplier() < 1.7 and TigersFury:Up() and Player.berserk_remains == 0 and ((not Berserk.known and not IncarnationKingOfTheJungle.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationKingOfTheJungle.known and not IncarnationKingOfTheJungle:Ready(18))) then
 		return UseCooldown(Shadowmeld)
 	end
 	if Opt.trinket and Player.use_cds and ((Target.boss and Target.timeToDie < 20) or TigersFury:Up()) then
@@ -1745,10 +1749,10 @@ actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_ga
 			return Pool(Rip)
 		end
 	end
-	if Sabertooth.known and FerociousBite:Usable(0, true) and Rip:Up() and between(Player.enemies, 2, 3) and Rip:LowestRemainsOthers() > (((Berserk:Up() or IncarnationKingOfTheJungle:Up()) and 5 or 8) * (Player.enemies - 1)) then
+	if Sabertooth.known and FerociousBite:Usable(0, true) and Rip:Up() and between(Player.enemies, 2, 3) and Rip:LowestRemainsOthers() > ((Player.berserk_remains > 0 and 5 or 8) * (Player.enemies - 1)) then
 		return Pool(FerociousBite, Rip:Remains() < 1 and 0 or 25)
 	end
-	if PrimalWrath:Usable(0, true) and Player.enemies > 1 and (Player.enemies >= 5 or Rip:NextMultiplier() > (Rip:MultiplierSum() / Player.enemies) or Rip:LowestRemainsOthers() < ((Berserk:Up() or IncarnationKingOfTheJungle:Up()) and 3.6 or 7.2)) then
+	if PrimalWrath:Usable(0, true) and Player.enemies > 1 and (Player.enemies >= 5 or Rip:NextMultiplier() > (Rip:MultiplierSum() / Player.enemies) or Rip:LowestRemainsOthers() < (Player.berserk_remains > 0 and 3.6 or 7.2)) then
 		return Pool(PrimalWrath)
 	end
 	if Target.timeToDie > 8 and (Player.enemies == 1 or not PrimalWrath.known) and (Rip:Down() or (not Sabertooth.known and Rip:Remains() < 7.2) or (Rip:Remains() < 19.2 and Rip:NextMultiplier() > Rip:Multiplier())) then
@@ -1788,8 +1792,8 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 	if Sabertooth.known and Player.enemies == 1 and Player:ComboPoints() >= 2 and Rip:Down() and Rip:Usable() and Rip:NextMultiplier() >= Player.rip_multiplier_max and (TigersFury:Remains() < 1.5 or Bloodtalons:Remains() < 1.5 or Bloodtalons:Stack() == 1) then
 		return Rip
 	end
-	if ThrashCat:Usable(0, true) then
-		if ThrashCat:Refreshable() and Player.enemies > 2 then
+	if ThrashCat:Usable(0, true) and Player.enemies > 2 then
+		if ThrashCat:Refreshable() then
 			return Pool(ThrashCat)
 		end
 		if ScentOfBlood.known and ScentOfBlood:Down() and Player.enemies > 3 then
@@ -1813,15 +1817,15 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 	if BrutalSlash:Usable() and Player:EnergyTimeToMax() > 1.5 and (TigersFury:Up() or BrutalSlash:ChargesFractional() > 2.5) then
 		return BrutalSlash
 	end
-	if ThrashCat:Usable(0, true) and ThrashCat:Refreshable() and (Player.enemies > 1 or Target.timeToDie > (ThrashCat:Remains() + 4)) then
-		if IncarnationKingOfTheJungle:Down() or WildFleshrending.known or Player.enemies > 1 then
+	if ThrashCat:Usable(0, true) and ThrashCat:Refreshable() then
+		if Player.enemies > 1 then
 			return Pool(ThrashCat)
 		end
-		if Clearcasting:Up() and IncarnationKingOfTheJungle:Down() then
+		if Clearcasting:Up() and Target.timeToDie > (ThrashCat:Remains() + 4) and Player.berserk_remains == 0 then
 			return ThrashCat
 		end
 	end
-	if SwipeCat:Usable(0, true) and Player.enemies > 1 then
+	if SwipeCat:Usable(0, true) and Player.enemies > 1 and Player.berserk_remains == 0 then
 		return Pool(SwipeCat)
 	end
 	if Shred:Usable() and (Clearcasting:Up() or Rake:Remains() > ((Shred:EnergyCost() + Rake:EnergyCost() - Player:Energy()) / Player:EnergyRegen())) then
@@ -2249,7 +2253,7 @@ end
 
 function UI:UpdateDisplay()
 	timer.display = 0
-	local dim, text_center
+	local dim, text_center, text_tl
 	if Opt.dimmer then
 		dim = not ((not Player.main) or
 		           (Player.main.spellId and IsUsableSpell(Player.main.spellId)) or
@@ -2262,8 +2266,12 @@ function UI:UpdateDisplay()
 			dim = Opt.dimmer
 		end
 	end
+	if Player.berserk_remains > 0 then
+		text_tl = format('%.1fs', Player.berserk_remains)
+	end
 	clawPanel.dimmer:SetShown(dim)
 	clawPanel.text.center:SetText(text_center)
+	clawPanel.text.tl:SetText(text_tl)
 	--clawPanel.text.bl:SetText(format('%.1fs', Target.timeToDie))
 end
 
@@ -2307,6 +2315,11 @@ function UI:UpdateCombat()
 	speed, max_speed = GetUnitSpeed('player')
 	Player.moving = speed ~= 0
 	Player.movement_speed = max_speed / 7 * 100
+	if Berserk.known then
+		Player.berserk_remains = Berserk:Remains()
+	elseif IncarnationKingOfTheJungle.known then
+		Player.berserk_remains = IncarnationKingOfTheJungle:Remains()
+	end
 
 	trackAuras:Purge()
 	if Opt.auto_aoe then
@@ -2570,6 +2583,7 @@ function events:PLAYER_SPECIALIZATION_CHANGED(unitName)
 		return
 	end
 	Player.spec = GetSpecialization() or 0
+	Player.berserk_remains = 0
 	clawPreviousPanel.ability = nil
 	Player:SetTargetMode(1)
 	Target:Update()
