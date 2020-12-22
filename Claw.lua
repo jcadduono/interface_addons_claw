@@ -1676,10 +1676,7 @@ actions+=/run_action_list,name=generators
 		return Rake
 	end
 	self:cooldowns()
-	if Sabertooth.known and FerociousBite:Usable(0, true) and Rip:Up() and Rip:Remains() < 3 and Target.timeToDie > 10 and (Player.enemies < 3 or Rip:LowestRemainsOthers() > 8) then
-		return Pool(FerociousBite, Rip:Remains() < 1 and 0 or 25)
-	end
-	if Player:HealthPct() < 65 and Regrowth:Usable() and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() and not Player:Stealthed() then
+	if Player:HealthPct() < (Player:ComboPoints() >= 5 and 85 or 65) and Regrowth:Usable() and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() and not Player:Stealthed() then
 		UseExtra(Regrowth)
 	end
 	if ApexPredatorsCarving.known and FerociousBite:Usable() and ApexPredatorsCarving:Up() and (not Bloodtalons.known or Bloodtalons:Up() or Rip:Ticking() > 4) then
@@ -1717,12 +1714,6 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if Thorns:Usable() and Player:UnderAttack() and Thorns:WontCapEnergy() then
 		return UseCooldown(Thorns)
 	end
-	if FeralFrenzy:Usable() and Player:ComboPoints() == 0 then
-		return UseCooldown(FeralFrenzy)
-	end
-	if ConvokeTheSpirits:Usable() and Player:ComboPoints() <= (Player.berserk_remains > 0 and 2 or 0) and TigersFury:Remains() > 4 and (not SavageRoar.known or SavageRoar:Remains() > 4) then
-		return UseCooldown(ConvokeTheSpirits)
-	end
 	if Opt.pot and Target.boss and PotionOfUnbridledFury:Usable() and (Target.timeToDie < 65 or (Target.timeToDie < 180 and Player.berserk_remains > 0)) then
 		return UseCooldown(PotionOfUnbridledFury)
 	end
@@ -1735,6 +1726,12 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 		elseif Trinket2:Usable() then
 			UseCooldown(Trinket2)
 		end
+	end
+	if FeralFrenzy:Usable() and Player:ComboPoints() == 0 then
+		return UseCooldown(FeralFrenzy)
+	end
+	if ConvokeTheSpirits:Usable() and Player:ComboPoints() <= (Player.berserk_remains > 0 and 2 or 0) and TigersFury:Remains() > 4 and (not SavageRoar.known or SavageRoar:Remains() > 4) then
+		return UseCooldown(ConvokeTheSpirits)
 	end
 end
 
