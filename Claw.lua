@@ -980,6 +980,10 @@ Pulverize.buff_duration = 20
 -- Covenant abilities
 local ConvokeTheSpirits = Ability:Add(323764, false, true)
 ConvokeTheSpirits.cooldown_duration = 120
+-- Legendary effects
+local ApexPredatorsCarving = Ability:Add(339139, true, true, 339140)
+ApexPredatorsCarving.buff_duration = 15
+ApexPredatorsCarving.bonus_id = 7091
 -- Racials
 local Shadowmeld = Ability:Add(58984, true, true)
 -- PvP talents
@@ -1335,11 +1339,18 @@ function Ability:EnergyCost()
 		if (self == Shred or self == ThrashCat or self == SwipeCat) and Clearcasting:Up() then
 			return 0
 		end
-		if Berserk:Up() then
-			cost = cost - (cost * 0.40)
+		if IncarnationKingOfTheJungle.known and IncarnationKingOfTheJungle:Up() then
+			cost = cost - (cost * 0.20)
 		end
 	end
 	return cost
+end
+
+function FerociousBite:EnergyCost()
+	if ApexPredatorsCarving.known and ApexPredatorsCarving:Up() then
+		return 0
+	end
+	return Ability.EnergyCost(self)
 end
 
 function Ironfur:RageCost()
@@ -1671,6 +1682,9 @@ actions+=/run_action_list,name=generators
 	if Player:HealthPct() < 65 and Regrowth:Usable() and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() and not Player:Stealthed() then
 		UseExtra(Regrowth)
 	end
+	if ApexPredatorsCarving.known and FerociousBite:Usable() and ApexPredatorsCarving:Up() and (not Bloodtalons.known or Bloodtalons:Up() or Rip:Ticking() > 4) then
+		return FerociousBite
+	end
 	if Player:ComboPoints() == 5 then
 		return self:finishers()
 	end
@@ -1793,7 +1807,7 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 		return Rip
 	end
 	if ThrashCat:Usable(0, true) and Player.enemies > 2 then
-		if ThrashCat:Refreshable() then
+		if ThrashCat:Refreshable() and (Player.berserk_remains == 0 or Player.enemies > 3) then
 			return Pool(ThrashCat)
 		end
 		if ScentOfBlood.known and ScentOfBlood:Down() and Player.enemies > 3 then
@@ -1811,19 +1825,14 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 			return Pool(Rake)
 		end
 		if LunarInspiration.known and Moonfire:Usable() and Moonfire:Refreshable() then
-			return Moonfire
+			return Pool(Moonfire)
 		end
 	end
 	if BrutalSlash:Usable() and Player:EnergyTimeToMax() > 1.5 and (TigersFury:Up() or BrutalSlash:ChargesFractional() > 2.5) then
 		return BrutalSlash
 	end
-	if ThrashCat:Usable(0, true) and ThrashCat:Refreshable() then
-		if Player.enemies > 1 then
-			return Pool(ThrashCat)
-		end
-		if Clearcasting:Up() and Target.timeToDie > (ThrashCat:Remains() + 4) and Player.berserk_remains == 0 then
-			return ThrashCat
-		end
+	if ThrashCat:Usable(0, true) and Player.enemies >= 2 and ThrashCat:Refreshable() and Clearcasting:Up() and Target.timeToDie > (ThrashCat:Remains() + 9) and Player.berserk_remains == 0 then
+		return ThrashCat
 	end
 	if SwipeCat:Usable(0, true) and Player.enemies > 1 and Player.berserk_remains == 0 then
 		return Pool(SwipeCat)
