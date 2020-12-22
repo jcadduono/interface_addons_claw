@@ -1717,10 +1717,7 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if Opt.pot and Target.boss and PotionOfUnbridledFury:Usable() and (Target.timeToDie < 65 or (Target.timeToDie < 180 and Player.berserk_remains > 0)) then
 		return UseCooldown(PotionOfUnbridledFury)
 	end
-	if Player.use_cds and Shadowmeld:Usable() and Player:ComboPoints() < 5 and Player:Energy() >= Rake:EnergyCost() and Rake:Multiplier() < 1.7 and TigersFury:Up() and Player.berserk_remains == 0 and ((not Berserk.known and not IncarnationKingOfTheJungle.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationKingOfTheJungle.known and not IncarnationKingOfTheJungle:Ready(18))) then
-		return UseCooldown(Shadowmeld)
-	end
-	if Opt.trinket and Player.use_cds and ((Target.boss and Target.timeToDie < 20) or TigersFury:Up()) then
+	if Opt.trinket and ((Target.boss and Target.timeToDie < 20) or TigersFury:Up() or Player.berserk_remains > 8) then
 		if Trinket1:Usable() then
 			UseCooldown(Trinket1)
 		elseif Trinket2:Usable() then
@@ -1730,8 +1727,13 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if FeralFrenzy:Usable() and Player:ComboPoints() == 0 then
 		return UseCooldown(FeralFrenzy)
 	end
-	if ConvokeTheSpirits:Usable() and Player:ComboPoints() <= (Player.berserk_remains > 0 and 2 or 0) and TigersFury:Remains() > 4 and (not SavageRoar.known or SavageRoar:Remains() > 4) then
-		return UseCooldown(ConvokeTheSpirits)
+	if Player.use_cds then
+		if ConvokeTheSpirits:Usable() and Player:ComboPoints() <= (Player.berserk_remains > 0 and 2 or 0) and TigersFury:Remains() > 4 and (not SavageRoar.known or SavageRoar:Remains() > 4) then
+			return UseCooldown(ConvokeTheSpirits)
+		end
+		if Shadowmeld:Usable() and Player:ComboPoints() < 5 and Player:Energy() >= Rake:EnergyCost() and Rake:Multiplier() < 1.7 and TigersFury:Up() and Player.berserk_remains == 0 and ((not Berserk.known and not IncarnationKingOfTheJungle.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationKingOfTheJungle.known and not IncarnationKingOfTheJungle:Ready(18))) then
+			return UseCooldown(Shadowmeld)
+		end
 	end
 end
 
