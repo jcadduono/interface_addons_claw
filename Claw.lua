@@ -2482,9 +2482,10 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 			autoAoe:Remove(dstGUID)
 		elseif ability.auto_aoe and (eventType == ability.auto_aoe.trigger or ability.auto_aoe.trigger == 'SPELL_AURA_APPLIED' and eventType == 'SPELL_AURA_REFRESH') then
 			ability:RecordTargetHit(dstGUID)
-		end
-		if ability == Shred then
+		elseif ability == Shred and Player.berserk_remains == 0 then
 			Player:SetTargetMode(1)
+		elseif ability == Rake and (eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH') then
+			autoAoe:Add(dstGUID, true)
 		end
 	end
 	if eventType == 'SPELL_ABSORBED' or eventType == 'SPELL_MISSED' or eventType == 'SPELL_DAMAGE' or eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH' then
