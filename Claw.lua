@@ -93,6 +93,7 @@ local function InitOpts()
 		pot = false,
 		trinket = true,
 		frenzied_threshold = 60,
+		multipliers = true,
 	})
 end
 
@@ -2311,7 +2312,7 @@ end
 
 function UI:UpdateDisplay()
 	timer.display = 0
-	local dim, text_center, text_tl
+	local dim, text_center, text_bl, text_tr
 	if Opt.dimmer then
 		dim = not ((not Player.main) or
 		           (Player.main.spellId and IsUsableSpell(Player.main.spellId)) or
@@ -2325,11 +2326,21 @@ function UI:UpdateDisplay()
 		end
 	end
 	if Player.berserk_remains > 0 then
-		text_tl = format('%.1fs', Player.berserk_remains)
+		text_bl = format('%.1fs', Player.berserk_remains)
+	end
+	if clawPanel.text.multiplier_diff then
+		if clawPanel.text.multiplier_diff >= 0 then
+			text_tr = format('+%d%%', clawPanel.text.multiplier_diff * 100)
+			clawPanel.text.tr:SetTextColor(0, 1, 0)
+		elseif clawPanel.text.multiplier_diff < 0 then
+			text_tr = format('%d%%', clawPanel.text.multiplier_diff * 100)
+			clawPanel.text.tr:SetTextColor(1, 0, 0)
+		end
 	end
 	clawPanel.dimmer:SetShown(dim)
 	clawPanel.text.center:SetText(text_center)
-	clawPanel.text.tl:SetText(text_tl)
+	clawPanel.text.bl:SetText(text_bl)
+	clawPanel.text.tr:SetText(text_tr)
 	--clawPanel.text.bl:SetText(format('%.1fs', Target.timeToDie))
 end
 
@@ -2391,6 +2402,11 @@ function UI:UpdateCombat()
 	Player.main = APL[Player.spec]:main()
 	if Player.main then
 		clawPanel.icon:SetTexture(Player.main.icon)
+		if Opt.multipliers and Player.main.Multiplier then
+			clawPanel.text.multiplier_diff = Player.main:NextMultiplier() - Player.main:Multiplier()
+		else
+			clawPanel.text.multiplier_diff = nil
+		end
 	end
 	if Player.cd then
 		clawCooldownPanel.icon:SetTexture(Player.cd.icon)
@@ -3053,6 +3069,12 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		return Status('Health threshold to recommend Frenzied Regeneration at in Bear Form', Opt.frenzied_threshold .. '%')
 	end
+	if startsWith(msg[1], 'mu') then
+		if msg[2] then
+			Opt.multipliers = msg[2] == 'on'
+		end
+		return Status('Show DoT multiplier differences in top right corner', Opt.multipliers)
+	end
 	if msg[1] == 'reset' then
 		clawPanel:ClearAllPoints()
 		clawPanel:SetPoint('CENTER', 0, -169)
@@ -3085,6 +3107,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'pot |cFF00C000on|r/|cFFC00000off|r - show flasks and battle potions in cooldown UI',
 		'trinket |cFF00C000on|r/|cFFC00000off|r - show on-use trinkets in cooldown UI',
 		'frenzied |cFFFFD000[health]|r  - health threshold to recommend Frenzied Regeneration at in Bear Form (default is 60%)',
+		'multipliers |cFF00C000on|r/|cFFC00000off|r - show DoT multiplier differences in top right corner',
 		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
 		print('  ' .. SLASH_Claw1 .. ' ' .. cmd)
