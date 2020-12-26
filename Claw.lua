@@ -1765,7 +1765,7 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if Opt.pot and Target.boss and PotionOfUnbridledFury:Usable() and (Target.timeToDie < 65 or (Target.timeToDie < 180 and Player.berserk_remains > 0)) then
 		return UseCooldown(PotionOfUnbridledFury)
 	end
-	if Opt.trinket and ((Target.boss and Target.timeToDie < 20) or TigersFury:Up() or Player.berserk_remains > 8) then
+	if Opt.trinket and ((Target.boss and Target.timeToDie < 20) or Player.berserk_remains > 4 or (TigersFury:Up() and ((not Berserk.known and not IncarnationKingOfTheJungle.known) or (Berserk.known and not Berserk:Ready(TigersFury:Cooldown()) or (IncarnationKingOfTheJungle.known and not IncarnationKingOfTheJungle:Ready(TigersFury:Cooldown())))))) then
 		if Trinket1:Usable() then
 			UseCooldown(Trinket1)
 		elseif Trinket2:Usable() then
