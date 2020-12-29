@@ -2562,7 +2562,7 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 			autoAoe:Remove(dstGUID)
 		elseif ability.auto_aoe and (eventType == ability.auto_aoe.trigger or ability.auto_aoe.trigger == 'SPELL_AURA_APPLIED' and eventType == 'SPELL_AURA_REFRESH') then
 			ability:RecordTargetHit(dstGUID)
-		elseif ability == Shred and Player.berserk_remains == 0 then
+		elseif ability == Shred and Player.berserk_remains == 0 and not Bloodtalons.known then
 			Player:SetTargetMode(1)
 		elseif ability == Rake and (eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH') then
 			autoAoe:Add(dstGUID, true)
