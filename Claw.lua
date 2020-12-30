@@ -1444,8 +1444,7 @@ function Rake:NextMultiplier()
 		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL|PLAYER')
 		if not id then
 			break
-		end
-		if Shadowmeld:Match(id) or Prowl:Match(id) or Berserk:Match(id) or IncarnationKingOfTheJungle:Match(id) then
+		elseif Shadowmeld:Match(id) or Prowl:Match(id) or Berserk:Match(id) or IncarnationKingOfTheJungle:Match(id) then
 			stealthed = true
 		elseif TigersFury:Match(id) then
 			multiplier = multiplier * 1.15
@@ -1776,10 +1775,10 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 		return UseCooldown(FeralFrenzy)
 	end
 	if Player.use_cds then
-		if ConvokeTheSpirits:Usable() and Player:ComboPoints() <= (Player.berserk_remains > 0 and 2 or 1) and TigersFury:Remains() > 4 and (not SavageRoar.known or SavageRoar:Remains() > 4) and Rip:Remains() > 4 then
+		if ConvokeTheSpirits:Usable() and Player:ComboPoints() <= (Player.berserk_remains > 0 and 2 or 1) and (not SavageRoar.known or SavageRoar:Remains() > 4) and Rip:Remains() > 4 and not TigersFury:Ready() then
 			return UseCooldown(ConvokeTheSpirits)
 		end
-		if Shadowmeld:Usable() and Player:ComboPoints() < 5 and Player:Energy() >= Rake:EnergyCost() and Rake:Multiplier() < 1.7 and TigersFury:Up() and Player.berserk_remains == 0 and ((not Berserk.known and not IncarnationKingOfTheJungle.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationKingOfTheJungle.known and not IncarnationKingOfTheJungle:Ready(18))) then
+		if Shadowmeld:Usable() and Player:ComboPoints() < 5 and Player:Energy() >= Rake:EnergyCost() and Rake:Multiplier() < 1.5 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and (not SavageRoar.known or SavageRoar:Remains() > 1.5) and ((not Berserk.known and not IncarnationKingOfTheJungle.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationKingOfTheJungle.known and not IncarnationKingOfTheJungle:Ready(18))) then
 			return UseCooldown(Shadowmeld)
 		end
 	end
