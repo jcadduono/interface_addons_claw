@@ -1559,6 +1559,14 @@ function Rip:NextMultiplier()
 	return multiplier
 end
 
+function PrimalWrath:Multiplier()
+	return Rip:Multiplier()
+end
+
+function PrimalWrath:NextMultiplier()
+	return Rip:NextMultiplier()
+end
+
 function ThrashCat:ApplyAura(guid)
 	local aura = {
 		expires = Player.time + self.buff_duration,
