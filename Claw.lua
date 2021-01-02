@@ -161,6 +161,7 @@ local Player = {
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
 	},
 	berserk_remains = 0,
+	main_freecast = false,
 }
 
 -- current target information
@@ -1855,7 +1856,7 @@ actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_ga
 		end
 	end
 	if Sabertooth.known and FerociousBite:Usable(0, true) and Rip:Up() and between(Player.enemies, 2, 3) and Rip:LowestRemainsOthers() > ((Player.berserk_remains > 0 and 5 or 8) * (Player.enemies - 1)) then
-		return Pool(FerociousBite, Rip:Remains() < 1 and 0 or 25)
+		return Pool(FerociousBite, ((ApexPredatorsCarving.known and ApexPredatorsCarving:Up()) or Rip:Remains() < 1) and 0 or 25)
 	end
 	if PrimalWrath:Usable(0, true) and Player.enemies > 1 and (Player.enemies >= 5 or Rip:NextMultiplier() > (Rip:MultiplierSum() / Player.enemies) or Rip:LowestRemainsOthers() < (Player.berserk_remains > 0 and 3.6 or 7.2)) then
 		return Pool(PrimalWrath)
@@ -1867,7 +1868,7 @@ actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_ga
 		return Pool(SavageRoar)
 	end
 	if FerociousBite:Usable(0, true) then
-		return Pool(FerociousBite, 25)
+		return Pool(FerociousBite, (ApexPredatorsCarving.known and ApexPredatorsCarving:Up()) and 0 or 25)
 	end
 end
 
@@ -2336,6 +2337,15 @@ function UI:UpdateDisplay()
 			clawPanel.text.tr:SetTextColor(1, 0, 0)
 		end
 	end
+	if Player.main and Player.main_freecast then
+		if not clawPanel.freeCastOverlayOn then
+			clawPanel.freeCastOverlayOn = true
+			clawPanel.border:SetTexture(ADDON_PATH .. 'freecast.blp')
+		end
+	elseif clawPanel.freeCastOverlayOn then
+		clawPanel.freeCastOverlayOn = false
+		clawPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
+	end
 	clawPanel.dimmer:SetShown(dim)
 	clawPanel.text.center:SetText(text_center)
 	clawPanel.text.bl:SetText(text_bl)
@@ -2406,6 +2416,7 @@ function UI:UpdateCombat()
 		else
 			clawPanel.text.multiplier_diff = nil
 		end
+		Player.main_freecast = Player.main.energy_cost > 0 and Player.main:EnergyCost() == 0
 	end
 	if Player.cd then
 		clawCooldownPanel.icon:SetTexture(Player.cd.icon)
