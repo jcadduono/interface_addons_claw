@@ -1861,7 +1861,7 @@ actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_ga
 	if PrimalWrath:Usable(0, true) and Player.enemies > 1 and (Player.enemies >= 5 or Rip:NextMultiplier() > (Rip:MultiplierSum() / Player.enemies) or Rip:LowestRemainsOthers() < (Player.berserk_remains > 0 and 3.6 or 7.2)) then
 		return Pool(PrimalWrath)
 	end
-	if Rip:Usable(0, true) and Target.timeToDie > 8 and (Player.enemies == 1 or not PrimalWrath.known) and (Rip:Down() or (not Sabertooth.known and Rip:Remains() < 7.2) or (Rip:Remains() < 19.2 and Rip:NextMultiplier() > Rip:Multiplier())) then
+	if Rip:Usable(0, true) and Target.timeToDie > (8 + Rip:Remains()) and (Player.enemies == 1 or not PrimalWrath.known) and (Rip:Down() or ((not Sabertooth.known or Rip:NextMultiplier() >= Player.rip_multiplier_max) and Rip:Remains() < 7.2) or (Rip:Remains() < 19.2 and Rip:NextMultiplier() > Rip:Multiplier())) then
 		return Pool(Rip)
 	end
 	if SavageRoar:Usable(0, true) and SavageRoar:Remains() < 12 then
