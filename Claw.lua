@@ -1240,6 +1240,9 @@ function Player:UpdateAbilities()
 		Swipe.known = true
 	end
 	Moonfire.triggers_bt = LunarInspiration.known
+	if IncarnationKingOfTheJungle.known then
+		Berserk.known = false
+	end
 
 	abilities.bySpellId = {}
 	abilities.velocity = {}
