@@ -94,6 +94,7 @@ local function InitOpts()
 		trinket = true,
 		frenzied_threshold = 60,
 		multipliers = true,
+		owlweave = false,
 	})
 end
 
@@ -800,6 +801,7 @@ local CatForm = Ability:Add(768, true, true)
 local Growl = Ability:Add(6795, false, true)
 Growl.buff_duration = 3
 Growl.cooldown_duration = 8
+local MoonkinForm = Ability:Add(197625, true, true)
 local Moonfire = Ability:Add(8921, false, true, 164812)
 Moonfire.buff_duration = 16
 Moonfire.tick_interval = 2
@@ -826,9 +828,16 @@ Typhoon.cooldown_duration = 30
 ------ Procs
 
 ------ Talents
+local HeartOfTheWild = Ability:Add(319454, true, true, 108291)
+HeartOfTheWild.buff_duration = 45
+HeartOfTheWild.cooldown_duration = 300
 local MightyBash = Ability:Add(5211, false, true)
 MightyBash.buff_duration = 4
 MightyBash.cooldown_duration = 60
+local StarsurgeBA = Ability:Add(197626, false, true)
+StarsurgeBA.cooldown_duration = 10
+local SunfireBA = Ability:Add(197630, false, true, 164815)
+SunfireBA.buff_duration = 12
 local WildCharge = Ability:Add(102401, false, true)
 WildCharge.cooldown_duration = 15
 local WildChargeCat = Ability:Add(49376, false, true)
@@ -1722,6 +1731,10 @@ actions+=/run_action_list,name=finishers,if=combo_points>4
 actions+=/run_action_list,name=generators
 ]]
 	Player.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or Player.berserk_remains > 0
+	if Opt.owlweave then
+		local apl = self:owlweave()
+		if apl then return apl end
+	end
 	if CatForm:Down() then
 		return CatForm
 	end
@@ -1941,6 +1954,29 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 	end
 	if Shred:Usable() and (Clearcasting:Up() or Rake:Remains() > ((Shred:EnergyCost() + Rake:EnergyCost() - Player:Energy()) / Player:EnergyRegen())) then
 		return Shred
+	end
+end
+
+APL[SPEC.FERAL].owlweave = function(self)
+--[[
+actions.owlweave=starsurge,if=buff.heart_of_the_wild.up
+actions.owlweave+=/sunfire,if=!prev_gcd.1.sunfire&!prev_gcd.2.sunfire
+actions.owlweave+=/heart_of_the_wild,if=energy<40&(dot.rip.remains>4.5|combo_points<5)&cooldown.tigers_fury.remains>=6.5&buff.clearcasting.stack<1&!buff.apex_predators_craving.up&!buff.bloodlust.up&(buff.bs_inc.remains>5|!buff.bs_inc.up)&(!cooldown.convoke_the_spirits.up|!covenant.night_fae)
+actions.owlweave+=/moonkin_form,if=energy<40&(dot.rip.remains>4.5|combo_points<5)&cooldown.tigers_fury.remains>=6.5&buff.clearcasting.stack<1&!buff.apex_predators_craving.up&!buff.bloodlust.up&(buff.bs_inc.remains>5|!buff.bs_inc.up)&(!cooldown.convoke_the_spirits.up|!covenant.night_fae)
+]]
+	if MoonkinForm:Up() then
+		if HeartOfTheWild.known and StarsurgeBA:Usable() and HeartOfTheWild:Up() then
+			return StarsurgeBA
+		end
+		if SunfireBA:Usable() and SunfireBA:Refreshable() then
+			return SunfireBA
+		end
+	elseif SunfireBA:Refreshable() and Player:Energy() < 40 and (Rip:Remains() > 4.5 or Player:ComboPoints() < 5) and not TigersFury:Ready(6.5) and Clearcasting:Down() and (not ApexPredatorsCarving.known or ApexPredatorsCarving:Down()) and not Player:BloodlustActive() and (Berserk:Remains() > 5 or Berserk:Down()) and (not ConvokeTheSpirits.known or not ConvokeTheSpirits:Ready()) then
+		if HeartOfTheWild:Usable() then
+			UseCooldown(HeartOfTheWild)
+		elseif MoonkinForm:Usable() then
+			UseCooldown(MoonkinForm)
+		end
 	end
 end
 
@@ -3096,6 +3132,12 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		return Status('Show DoT multiplier differences in top right corner', Opt.multipliers)
 	end
+	if startsWith(msg[1], 'ow') then
+		if msg[2] then
+			Opt.owlweave = msg[2] == 'on'
+		end
+		return Status('Enable owlweaving in Feral specialization', Opt.owlweave)
+	end
 	if msg[1] == 'reset' then
 		clawPanel:ClearAllPoints()
 		clawPanel:SetPoint('CENTER', 0, -169)
@@ -3129,6 +3171,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'trinket |cFF00C000on|r/|cFFC00000off|r - show on-use trinkets in cooldown UI',
 		'frenzied |cFFFFD000[health]|r  - health threshold to recommend Frenzied Regeneration at in Bear Form (default is 60%)',
 		'multipliers |cFF00C000on|r/|cFFC00000off|r - show DoT multiplier differences in top right corner',
+		'owlweave |cFF00C000on|r/|cFFC00000off|r - enable owlweaving in Feral specialization',
 		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
 		print('  ' .. SLASH_Claw1 .. ' ' .. cmd)
