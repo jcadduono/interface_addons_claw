@@ -1800,7 +1800,7 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 		return UseCooldown(FeralFrenzy)
 	end
 	if Player.use_cds then
-		if ConvokeTheSpirits:Usable() and Player:ComboPoints() <= (Player.berserk_remains > 0 and 2 or 1) and (not SavageRoar.known or SavageRoar:Remains() > 4) and Rip:Remains() > 4 and not TigersFury:Ready() and (TigersFury:Remains() < 3 or Target.timeToDie < 6) then
+		if ConvokeTheSpirits:Usable() and Player:ComboPoints() <= (Player.berserk_remains > 0 and 2 or 1) and (not SavageRoar.known or SavageRoar:Remains() > 4) and Rip:Remains() > 4 and (Predator.known or not TigersFury:Ready() and (TigersFury:Remains() < 3 or Target.timeToDie < 6)) then
 			return UseCooldown(ConvokeTheSpirits)
 		end
 		if Shadowmeld:Usable() and Player:ComboPoints() < 5 and Player:Energy() >= Rake:EnergyCost() and Rake:Multiplier() < 1.5 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and (not SavageRoar.known or SavageRoar:Remains() > 1.5) and ((not Berserk.known and not IncarnationKingOfTheJungle.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationKingOfTheJungle.known and not IncarnationKingOfTheJungle:Ready(18))) then
