@@ -921,6 +921,7 @@ IncarnationKingOfTheJungle.cooldown_duration = 180
 local JungleStalker = Ability:Add(252071, true, true)
 JungleStalker.buff_duration = 30
 local LunarInspiration = Ability:Add(155580, false, true)
+local Predator = Ability:Add(202021, false, true)
 local Sabertooth = Ability:Add(202031, false, true)
 local SavageRoar = Ability:Add(52610, true, true)
 SavageRoar.buff_duration = 12
@@ -980,10 +981,6 @@ GalacticGuardian.buff_duration = 15
 local IncarnationGuardianOfUrsoc = Ability:Add(102558, true, true)
 IncarnationGuardianOfUrsoc.buff_duration = 30
 IncarnationGuardianOfUrsoc.cooldown_duration = 180
-local LunarBeam = Ability:Add(204066, false, true, 204069)
-LunarBeam.buff_duration = 8.5
-LunarBeam.cooldown_duration = 75
-LunarBeam.tick_interval = 1
 local Pulverize = Ability:Add(80313, true, true, 158792)
 Pulverize.buff_duration = 20
 ------ Procs
@@ -997,6 +994,10 @@ Pulverize.buff_duration = 20
 -- Covenant abilities
 local ConvokeTheSpirits = Ability:Add(323764, false, true)
 ConvokeTheSpirits.cooldown_duration = 120
+-- Soulbind conduits
+local SavageCombatant = Ability:Add(340609, true, true, 340613)
+SavageCombatant.buff_duration = 15
+SavageCombatant.conduit_id = 270
 -- Legendary effects
 local ApexPredatorsCarving = Ability:Add(339139, true, true, 339140)
 ApexPredatorsCarving.buff_duration = 15
@@ -1218,7 +1219,7 @@ function Player:UpdateAbilities()
 	self.rage_max = UnitPowerMax('player', 1)
 	self.combo_points_max = UnitPowerMax('player', 4)
 
-	local _, ability, spellId
+	local _, ability, spellId, node
 
 	for _, ability in next, abilities.all do
 		ability.known = false
@@ -1236,7 +1237,13 @@ function Player:UpdateAbilities()
 			ability.known = self:BonusIdEquipped(ability.bonus_id)
 		end
 		if ability.conduit_id then
-			ability.known = C_Soulbinds.IsConduitInstalledInSoulbind(C_Soulbinds.GetActiveSoulbindID(), ability.conduit_id)
+			node = C_Soulbinds.FindNodeIDActuallyInstalled(C_Soulbinds.GetActiveSoulbindID(), ability.conduit_id)
+			if node then
+				node = C_Soulbinds.GetNode(node)
+				if node and node.state == 3 then
+					ability.known = true
+				end
+			end
 		end
 	end
 
@@ -1409,14 +1416,6 @@ function FerociousBite:EnergyCost()
 		return 0
 	end
 	return Ability.EnergyCost(self)
-end
-
-function Ironfur:RageCost()
-	local cost  = self.rage_cost
-	if GuardiansWrath.known then
-		cost = cost - (GuardiansWrath:Stack() * 15)
-	end
-	return cost
 end
 
 function Regrowth:ManaCost()
@@ -1642,10 +1641,6 @@ end
 MightyBash.Usable = Maim.Usable
 Typhoon.Usable = Maim.Usable
 
-function Moonfire:Duration()
-	return Ability:Duration(self) + 6
-end
-
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -1800,7 +1795,7 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 		return UseCooldown(FeralFrenzy)
 	end
 	if Player.use_cds then
-		if ConvokeTheSpirits:Usable() and Player:ComboPoints() <= (Player.berserk_remains > 0 and 2 or 1) and (not SavageRoar.known or SavageRoar:Remains() > 4) and Rip:Remains() > 4 and (Predator.known or not TigersFury:Ready() and (TigersFury:Remains() < 3 or Target.timeToDie < 6)) then
+		if ConvokeTheSpirits:Usable() and Player:ComboPoints() <= (Player.berserk_remains > 0 and 2 or 1) and (not SavageRoar.known or SavageRoar:Remains() > 4) and Rip:Remains() > 4 and ((Predator.known and not Target.boss) or not TigersFury:Ready() and (TigersFury:Remains() < 3 or Target.timeToDie < 6)) then
 			return UseCooldown(ConvokeTheSpirits)
 		end
 		if Shadowmeld:Usable() and Player:ComboPoints() < 5 and Player:Energy() >= Rake:EnergyCost() and Rake:Multiplier() < 1.5 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and (not SavageRoar.known or SavageRoar:Remains() > 1.5) and ((not Berserk.known and not IncarnationKingOfTheJungle.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationKingOfTheJungle.known and not IncarnationKingOfTheJungle:Ready(18))) then
@@ -2011,10 +2006,7 @@ actions+=/swipe
 		return BearForm
 	end
 	self:cooldowns()
-	if Maul:Usable() and Player:RageDeficit() < 10 and Player.enemies < 4 then
-		return Maul
-	end
-	if Ironfur:Usable() and Ironfur:RageCost() == 0 then
+	if Ironfur:Usable() and Player:UnderAttack() then
 		UseExtra(Ironfur)
 	end
 	if Pulverize:Usable() and Thrash:Stack() == 3 then
@@ -2029,8 +2021,14 @@ actions+=/swipe
 	if Thrash:Usable() and ((Player.enemies > 1 and (not IncarnationGuardianOfUrsoc.known or IncarnationGuardianOfUrsoc:Down())) or (Player.enemies > 4 and IncarnationGuardianOfUrsoc.known and IncarnationGuardianOfUrsoc:Up())) then
 		return Thrash
 	end
+	if GalacticGuardian.known and Moonfire:Usable() and GalacticGuardian:Up() and Moonfire:Refreshable() and Target.timeToDie > (Moonfire:Remains() + 12) then
+		return Moonfire
+	end
 	if Swipe:Usable() and Player.enemies > 4 and (not IncarnationGuardianOfUrsoc.known or IncarnationGuardianOfUrsoc:Down()) then
 		return Swipe
+	end
+	if Maul:Usable() and Player.enemies < 4 and not Player:UnderAttack() and (Player:RageDeficit() < 10 or (SavageCombatant.known and SavageCombatant:Stack() >= 3)) then
+		return Maul
 	end
 	if Mangle:Usable() and Thrash:Up() then
 		return Mangle
@@ -2040,9 +2038,6 @@ actions+=/swipe
 	end
 	if Thrash:Usable() then
 		return Thrash
-	end
-	if Maul:Usable() and (Player:RageDeficit() < 30 or (GuardiansWrath.known and GuardiansWrath:Stack() < 3)) then
-		return Maul
 	end
 	if Swipe:Usable() then
 		return Swipe
@@ -2074,9 +2069,6 @@ actions.cooldowns+=/use_items
 	end
 	if Barkskin:Usable() then
 		return UseCooldown(Barkskin)
-	end
-	if LunarBeam:Usable() then
-		return UseCooldown(LunarBeam)
 	end
 	if BristlingFur:Usable() then
 		return UseCooldown(BristlingFur)
