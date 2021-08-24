@@ -14,7 +14,10 @@
 	<Binding name="Set Targets to 3" category="ADDONS">
 		Claw_SetTargetMode(3)
 	</Binding>
-	<Binding name="Set Targets to 4+" category="ADDONS">
+	<Binding name="Set Targets to 4" category="ADDONS">
 		Claw_SetTargetMode(4)
+	</Binding>
+	<Binding name="Set Targets to 5+" category="ADDONS">
+		Claw_SetTargetMode(5)
 	</Binding>
 </Bindings>
