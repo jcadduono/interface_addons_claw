@@ -9,6 +9,7 @@ local ADDON_PATH = 'Interface\\AddOns\\' .. ADDON .. '\\'
 local min = math.min
 local max = math.max
 local floor = math.floor
+local GetComboPoints = _G.GetComboPoints
 local GetPowerRegenForPowerType = _G.GetPowerRegenForPowerType
 local GetSpellCharges = _G.GetSpellCharges
 local GetSpellCooldown = _G.GetSpellCooldown
@@ -151,7 +152,6 @@ local Player = {
 		next_tick = 0,
 	},
 	combo_points = 0,
-	combo_points_max = 5,
 	rage = 0,
 	rage_max = 0,
 	group_size = 1,
@@ -1145,7 +1145,7 @@ function Player:Update()
 		if self.energy.next_tick > self.ctime and self.execute_remains > (self.energy.next_tick - self.ctime) then
 			self.energy.current = min(max(self.energy.current + floor(self.energy.regen * 2), 0), self.energy.max)
 		end
-		self.combo_points = UnitPower('player', 4)
+		self.combo_points = GetComboPoints('player', 'target')
 	else
 		self.energy.current = 0
 		self.energy.regen = 0
@@ -1404,17 +1404,17 @@ APL.Cat = function(self)
 		end
 		return Pool(Shred)
 	else
-		if Claw:Usable(0, true) then
-			if Claw:EnergyCost() - Player:Energy() > 20 and CatForm:Usable() then
-				return CatForm
-			end
-			return Pool(Claw)
-		end
 		if Rake:Usable(0, true) and Target.timeToDie > 6 and Rake:Down() then
 			if Rake:EnergyCost() - Player:Energy() > 20 and CatForm:Usable() then
 				return CatForm
 			end
 			return Pool(Rake)
+		end
+		if Claw:Usable(0, true) then
+			if Claw:EnergyCost() - Player:Energy() > 20 and CatForm:Usable() then
+				return CatForm
+			end
+			return Pool(Claw)
 		end
 	end
 end
