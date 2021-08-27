@@ -867,12 +867,14 @@ Swipe.can_clearcast = true
 local Rake = Ability:Add({1822, 1823, 1824, 9904, 27003}, false, true)
 Rake.buff_duration = 9
 Rake.energy_cost = 40
+Rake.tick_interval = 3
 Rake.requires_cat = true
 Rake.can_clearcast = true
 local Rip = Ability:Add({1079, 9492, 9493, 9752, 9894, 9896, 27008}, false, true)
 Rip.buff_duration = 12
 Rip.cp_cost = 1
 Rip.energy_cost = 30
+Rip.tick_interval = 2
 Rip.requires_cat = true
 Rip.can_clearcast = true
 local Prowl = Ability:Add({5215, 6783, 9913}, true, true)
@@ -1386,7 +1388,7 @@ APL.Cat = function(self)
 	if Prowl:Usable() then
 		UseCooldown(Prowl)
 	end
-	if Rip:Usable(0, true) and Player.combo_points >= 4 and Target.timeToDie > 6 and Rip:Down() then
+	if Rip:Usable(0, true) and Player.combo_points >= 4 and Target.timeToDie > (Rip:TickTime() * 2) and Rip:Down() then
 		if Rip:EnergyCost() - Player:Energy() > 20 and CatForm:Usable() then
 			return CatForm
 		end
@@ -1404,7 +1406,7 @@ APL.Cat = function(self)
 		end
 		return Pool(Shred)
 	else
-		if Rake:Usable(0, true) and Target.timeToDie > 6 and Rake:Down() then
+		if Rake:Usable(0, true) and Target.timeToDie > (Rake:TickTime() * 2) and Rake:Down() then
 			if Rake:EnergyCost() - Player:Energy() > 20 and CatForm:Usable() then
 				return CatForm
 			end
