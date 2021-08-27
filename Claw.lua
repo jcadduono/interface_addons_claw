@@ -142,9 +142,14 @@ local Player = {
 	mana_base = 0,
 	mana_max = 0,
 	mana_regen = 0,
-	energy = 0,
-	energy_max = 0,
-	energy_regen = 0,
+	energy = {
+		current = 0,
+		max = 0,
+		regen = 0,
+		tick_energy = 0,
+		last_tick = 0,
+		next_tick = 0,
+	},
 	combo_points = 0,
 	combo_points_max = 5,
 	rage = 0,
@@ -482,7 +487,7 @@ function Ability:Usable(seconds, pool)
 		if self:ManaCost() > Player.mana then
 			return false
 		end
-		if Player.form == FORM.CAT and self:EnergyCost() > Player.energy then
+		if Player.form == FORM.CAT and self:EnergyCost() > Player.energy.current then
 			return false
 		end
 		if Player.form == FORM.BEAR and self:RageCost() > Player.rage then
@@ -686,7 +691,7 @@ function Ability:CastRegen()
 end
 
 function Ability:CastEnergyRegen()
-	return Player.energy_regen * self:CastTime() - self:EnergyCost()
+	return Player.energy.regen * self:CastTime() - self:EnergyCost()
 end
 
 function Ability:Previous(n)
@@ -890,6 +895,7 @@ local MarkOfTheWild = Ability:Add({1126, 5232, 6756, 5234, 8907, 9884, 9885, 269
 MarkOfTheWild.mana_costs = {20, 50, 100, 160, 240, 340, 445, 565}
 MarkOfTheWild.buff_duration = 1800
 ------ Talents
+local Furor = Ability:Add({17056, 17058, 17059, 17060, 17061}, true, true)
 local OmenOfClarity = Ability:Add({16864}, true, true)
 local Clearcasting = Ability:Add({16870}, true, true)
 ------ Procs
@@ -965,7 +971,7 @@ function InventoryItem:Usable(seconds)
 end
 
 -- Inventory Items
-
+local WolfsheadHelm = InventoryItem:Add(8345)
 -- Equipment
 local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
@@ -981,8 +987,12 @@ function Player:ManaPct()
 	return self.mana / self.mana_max * 100
 end
 
+function Player:Energy()
+	return self.energy.current
+end
+
 function Player:EnergyDeficit(energy)
-	return (energy or self.energy_max) - self.energy
+	return (energy or self.energy.max) - self.energy.current
 end
 
 function Player:EnergyTimeToMax(energy)
@@ -991,6 +1001,25 @@ function Player:EnergyTimeToMax(energy)
 		return 0
 	end
 	return deficit / self:EnergyRegen()
+end
+
+function Player:EnergyTick(timerTrigger)
+	local time = GetTime()
+	local energy = UnitPower('player', 3)
+	if time == self.shapeshift_time then
+		return
+	end
+	if (
+		(not timerTrigger and energy > self.energy.tick_energy) or
+		(timerTrigger and energy >= Player.energy.max)
+	) then
+		self.energy.next_tick = time + 2
+		self.energy.last_tick = time
+		if energy >= Player.energy.max then
+			C_Timer.After(2, function() Player:EnergyTick(true) end)
+		end
+	end
+	self.energy.tick_energy = energy
 end
 
 function Player:RageDeficit()
@@ -1110,20 +1139,22 @@ function Player:Update()
 	end
 	self.mana = min(max(self.mana, 0), self.mana_max)
 	if Player.form == FORM.CAT then
-		Player.energy_regen = GetPowerRegenForPowerType(3)
-		Player.energy_max = UnitPowerMax('player', 3)
-		Player.energy = UnitPower('player', 3) + (Player.energy_regen * Player.execute_remains)
-		Player.energy = min(max(Player.energy, 0), Player.energy_max)
-		Player.combo_points = UnitPower('player', 4)
+		self.energy.regen = GetPowerRegenForPowerType(3)
+		self.energy.max = UnitPowerMax('player', 3)
+		self.energy.current = UnitPower('player', 3)
+		if self.energy.next_tick > self.ctime and self.execute_remains > (self.energy.next_tick - self.ctime) then
+			self.energy.current = min(max(self.energy.current + floor(self.energy.regen * 2), 0), self.energy.max)
+		end
+		self.combo_points = UnitPower('player', 4)
 	else
-		Player.energy = 0
-		Player.energy_regen = 0
-		Player.combo_points = 0
+		self.energy.current = 0
+		self.energy.regen = 0
+		self.combo_points = 0
 	end
-	if Player.form == FORM.BEAR then
-		Player.rage = UnitPower('player', 1)
+	if self.form == FORM.BEAR then
+		self.rage = UnitPower('player', 1)
 	else
-		Player.rage = 0
+		self.rage = 0
 	end
 	speed, max_speed = GetUnitSpeed('player')
 	self.moving = speed ~= 0
@@ -1258,7 +1289,6 @@ function Claw:EnergyCost()
 	end
 	return max(0, cost)
 end
-Shred.EnergyCost = Claw.EnergyCost
 Rake.EnergyCost = Claw.EnergyCost
 MangleCat.EnergyCost = Claw.EnergyCost
 
@@ -1357,31 +1387,31 @@ APL.Cat = function(self)
 		UseCooldown(Prowl)
 	end
 	if Rip:Usable(0, true) and Player.combo_points >= 4 and Target.timeToDie > 6 and Rip:Down() then
-		if Rip:EnergyCost() - Player.energy > 20 and CatForm:Usable() then
+		if Rip:EnergyCost() - Player:Energy() > 20 and CatForm:Usable() then
 			return CatForm
 		end
 		return Pool(Rip)
 	end
 	if MangleCat:Usable(0, true) and MangleCat:Down() then
-		if MangleCat:EnergyCost() - Player.energy > 20 and CatForm:Usable() then
+		if MangleCat:EnergyCost() - Player:Energy() > 20 and CatForm:Usable() then
 			return CatForm
 		end
 		return Pool(MangleCat)
 	end
 	if Shred:Usable(0, true) then
-		if Shred:EnergyCost() - Player.energy > 20 and CatForm:Usable() then
+		if Shred:EnergyCost() - Player:Energy() > 20 and CatForm:Usable() then
 			return CatForm
 		end
 		return Pool(Shred)
 	else
 		if Claw:Usable(0, true) then
-			if Claw:EnergyCost() - Player.energy > 20 and CatForm:Usable() then
+			if Claw:EnergyCost() - Player:Energy() > 20 and CatForm:Usable() then
 				return CatForm
 			end
 			return Pool(Claw)
 		end
 		if Rake:Usable(0, true) and Target.timeToDie > 6 and Rake:Down() then
-			if Rake:EnergyCost() - Player.energy > 20 and CatForm:Usable() then
+			if Rake:EnergyCost() - Player:Energy() > 20 and CatForm:Usable() then
 				return CatForm
 			end
 			return Pool(Rake)
@@ -1881,7 +1911,14 @@ function events:UNIT_SPELLCAST_SUCCEEDED(srcName, castGUID, spellId)
 	ability.next_castGUID = castGUID
 end
 
+function events:UNIT_POWER_FREQUENT(srcName, powerType)
+	if srcName == 'player' and powerType == 'ENERGY' then
+		Player:EnergyTick()
+	end
+end
+
 function events:UPDATE_SHAPESHIFT_FORM()
+	Player.shapeshift_time = GetTime()
 	local form = GetShapeshiftFormID() or 0
 	if form == 1 then
 		Player.form = FORM.CAT
