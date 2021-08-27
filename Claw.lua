@@ -852,24 +852,23 @@ Claw.energy_cost = 45
 Claw.requires_cat = true
 Claw.can_clearcast = true
 local Growl = Ability:Add({2649}, false, true)
-local Shred = Ability:Add({5221, 6800, 8992, 9829, 9830, 27001, 27002}, false, true)
-Shred.energy_cost = 60
-Shred.requires_cat = true
-Shred.can_clearcast = true
 local Maul = Ability:Add({6807, 6808, 6809, 8972, 9745, 9880, 9881, 26996}, false, true)
 Maul.rage_cost = 15
 Maul.requires_bear = true
 Maul.can_clearcast = true
-local Swipe = Ability:Add({779, 780, 769, 9754, 9908, 26997}, false, true)
-Swipe.rage_cost = 20
-Swipe.requires_bear = true
-Swipe.can_clearcast = true
+local Prowl = Ability:Add({5215, 6783, 9913}, true, true)
+Prowl.cooldown_duration = 10
+Prowl.requires_cat = true
 local Rake = Ability:Add({1822, 1823, 1824, 9904, 27003}, false, true)
 Rake.buff_duration = 9
 Rake.energy_cost = 40
 Rake.tick_interval = 3
 Rake.requires_cat = true
 Rake.can_clearcast = true
+local Ravage = Ability:Add({6785, 6787, 9866, 9867, 27005}, false, true)
+Ravage.energy_cost = 60
+Ravage.requires_cat = true
+Ravage.can_clearcast = true
 local Rip = Ability:Add({1079, 9492, 9493, 9752, 9894, 9896, 27008}, false, true)
 Rip.buff_duration = 12
 Rip.cp_cost = 1
@@ -877,9 +876,14 @@ Rip.energy_cost = 30
 Rip.tick_interval = 2
 Rip.requires_cat = true
 Rip.can_clearcast = true
-local Prowl = Ability:Add({5215, 6783, 9913}, true, true)
-Prowl.cooldown_duration = 10
-Prowl.requires_cat = true
+local Shred = Ability:Add({5221, 6800, 8992, 9829, 9830, 27001, 27002}, false, true)
+Shred.energy_cost = 60
+Shred.requires_cat = true
+Shred.can_clearcast = true
+local Swipe = Ability:Add({779, 780, 769, 9754, 9908, 26997}, false, true)
+Swipe.rage_cost = 20
+Swipe.requires_bear = true
+Swipe.can_clearcast = true
 ------ Talents
 local Ferocity = Ability:Add({16934, 16935, 16936, 16937, 16938}, true, true)
 local MangleBear = Ability:Add({33878, 33986, 33987}, false, true)
@@ -890,6 +894,7 @@ local MangleCat = Ability:Add({33876, 33982, 33983}, false, true)
 MangleCat.energy_cost = 45
 MangleCat.requires_cat = true
 MangleCat.can_clearcast = true
+local ShreddingAttacks = Ability:Add({16966, 16968}, true, true)
 ------ Procs
 
 ---- Restoration
@@ -1304,6 +1309,14 @@ end
 Swipe.RageCost = Maul.RageCost
 MangleBear.RageCost = Maul.RageCost
 
+function Shred:EnergyCost()
+	local cost = Ability.EnergyCost(self)
+	if ShreddingAttacks.known then
+		cost = cost - (ShreddingAttacks.rank * 9)
+	end
+	return max(0, cost)
+end
+
 function Shred:Usable(seconds, pool)
 	if Player.threat >= 3 then
 		return false
@@ -1319,6 +1332,13 @@ function Prowl:Usable()
 		return false
 	end
 	return Ability.Usable(self)
+end
+
+function Ravage:Usable(seconds, pool)
+	if Prowl:Down() then
+		return false
+	end
+	return Ability.Usable(self, seconds, pool)
 end
 
 -- End Ability Modifications
@@ -1387,6 +1407,9 @@ end
 APL.Cat = function(self)
 	if Prowl:Usable() then
 		UseCooldown(Prowl)
+	end
+	if Ravage:Usable(0, true) then
+		return Pool(Ravage)
 	end
 	if Rip:Usable(0, true) and Player.combo_points >= 4 and Target.timeToDie > (Rip:TickTime() * 2) and Rip:Down() then
 		if Rip:EnergyCost() - Player:Energy() > 20 and CatForm:Usable() then
