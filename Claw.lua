@@ -38,8 +38,8 @@ local function startsWith(str, start) -- case insensitive check to see if a stri
 end
 -- end useful functions
 
-Claw = {}
-local Opt -- use this as a local table reference to Claw
+ClawConfig = {}
+local Opt -- use this as a local table reference to ClawConfig
 
 SLASH_Claw1, SLASH_Claw2 = '/claw', '/cl'
 BINDING_HEADER_CLAW = ADDON
@@ -62,7 +62,7 @@ local function InitOpts()
 			end
 		end
 	end
-	SetDefaults(Claw, { -- defaults
+	SetDefaults(ClawConfig, { -- defaults
 		locked = false,
 		scale = {
 			main = 1,
@@ -472,6 +472,12 @@ function Ability:Usable(seconds, pool)
 	if not self.known then
 		return false
 	end
+	if self.requires_bear and Player.form ~= FORM.BEAR then
+		return false
+	end
+	if self.requires_cat and Player.form ~= FORM.CAT then
+		return false
+	end
 	if not pool then
 		if self:ManaCost() > Player.mana then
 			return false
@@ -824,21 +830,68 @@ end
 ---- General
 
 ---- Balance
-
+local Thorns = Ability:Add({467, 782, 1075, 8914, 9756, 9910, 26992}, true, false)
+Thorns.mana_costs = {35, 60, 105, 170, 240, 320, 400}
+Thorns.buff_duration = 600
 ------ Talents
 
 ------ Procs
 
 ---- Feral
-
+local BearForm = Ability:Add({5487, 9634}, true, true)
+BearForm.mana_cost_pct = 35
+local CatForm = Ability:Add({768}, true, true)
+CatForm.mana_cost_pct = 35
+local Claw = Ability:Add({1082, 3029, 5201, 9849, 9850, 27000}, false, true)
+Claw.energy_cost = 45
+Claw.requires_cat = true
+Claw.can_clearcast = true
+local Growl = Ability:Add({2649}, false, true)
+local Shred = Ability:Add({5221, 6800, 8992, 9829, 9830, 27001, 27002}, false, true)
+Shred.energy_cost = 60
+Shred.requires_cat = true
+Shred.can_clearcast = true
+local Maul = Ability:Add({6807, 6808, 6809, 8972, 9745, 9880, 9881, 26996}, false, true)
+Maul.rage_cost = 15
+Maul.requires_bear = true
+Maul.can_clearcast = true
+local Swipe = Ability:Add({779, 780, 769, 9754, 9908, 26997}, false, true)
+Swipe.rage_cost = 20
+Swipe.requires_bear = true
+Swipe.can_clearcast = true
+local Rake = Ability:Add({1822, 1823, 1824, 9904, 27003}, false, true)
+Rake.buff_duration = 9
+Rake.energy_cost = 40
+Rake.requires_cat = true
+Rake.can_clearcast = true
+local Rip = Ability:Add({1079, 9492, 9493, 9752, 9894, 9896, 27008}, false, true)
+Rip.buff_duration = 12
+Rip.cp_cost = 1
+Rip.energy_cost = 30
+Rip.requires_cat = true
+Rip.can_clearcast = true
+local Prowl = Ability:Add({5215, 6783, 9913}, true, true)
+Prowl.cooldown_duration = 10
+Prowl.requires_cat = true
 ------ Talents
-
+local Ferocity = Ability:Add({16934, 16935, 16936, 16937, 16938}, true, true)
+local MangleBear = Ability:Add({33878, 33986, 33987}, false, true)
+MangleBear.rage_cost = 20
+MangleBear.requires_bear = true
+MangleBear.can_clearcast = true
+local MangleCat = Ability:Add({33876, 33982, 33983}, false, true)
+MangleCat.energy_cost = 45
+MangleCat.requires_cat = true
+MangleCat.can_clearcast = true
 ------ Procs
 
 ---- Restoration
-
+local MarkOfTheWild = Ability:Add({1126, 5232, 6756, 5234, 8907, 9884, 9885, 26990}, true, false)
+MarkOfTheWild.mana_costs = {20, 50, 100, 160, 240, 340, 445, 565}
+MarkOfTheWild.buff_duration = 1800
 ------ Talents
-
+local OmenOfClarity = Ability:Add({16864}, true, true)
+local Clearcasting = Ability:Add({16870}, true, true)
 ------ Procs
 
 -- Racials
@@ -1006,6 +1059,8 @@ function Player:UpdateAbilities()
 		end
 		ability.name, _, ability.icon = GetSpellInfo(ability.spellId)
 	end
+	
+	Clearcasting.known = OmenOfClarity.known
 
 	abilities.bySpellId = {}
 	abilities.velocity = {}
@@ -1175,7 +1230,64 @@ end
 
 -- Start Ability Modifications
 
+function Ability:EnergyCost()
+	if self.can_clearcast and Clearcasting.known and Clearcasting:Up() then
+		return 0
+	end
+	return self.energy_cost
+end
 
+function Ability:RageCost()
+	if self.can_clearcast and Clearcasting.known and Clearcasting:Up() then
+		return 0
+	end
+	return self.rage_cost
+end
+
+function Ability:ManaCost()
+	if self.can_clearcast and Clearcasting.known and Clearcasting:Up() then
+		return 0
+	end
+	return self.mana_cost
+end
+
+function Claw:EnergyCost()
+	local cost = Ability.EnergyCost(self)
+	if Ferocity.known then
+		cost = cost - Ferocity.rank
+	end
+	return max(0, cost)
+end
+Shred.EnergyCost = Claw.EnergyCost
+Rake.EnergyCost = Claw.EnergyCost
+MangleCat.EnergyCost = Claw.EnergyCost
+
+function Maul:RageCost()
+	local cost = Ability.RageCost(self)
+	if Ferocity.known then
+		cost = cost - Ferocity.rank
+	end
+	return max(0, cost)
+end
+Swipe.RageCost = Maul.RageCost
+MangleBear.RageCost = Maul.RageCost
+
+function Shred:Usable(seconds, pool)
+	if Player.threat >= 3 then
+		return false
+	end
+	if Player.group_size == 1 and Player:TimeInCombat() == 0 and Prowl:Down() then
+		return false
+	end
+	return Ability.Usable(self, seconds, pool)
+end
+
+function Prowl:Usable()
+	if Player:TimeInCombat() > 0 then
+		return false
+	end
+	return Ability.Usable(self)
+end
 
 -- End Ability Modifications
 
@@ -1202,9 +1314,78 @@ local APL = {}
 
 APL.Main = function(self)
 	if Player:TimeInCombat() == 0 then
-
+		local apl = self:Buffs(Target.boss and 180 or 30)
+		if apl then return apl end
 	else
+		local apl = self:Buffs(10)
+		if apl then UseExtra(apl) end
+	end
+	if Player.form == FORM.BEAR then
+		return self:Bear()
+	elseif Player.form == FORM.CAT then
+		return self:Cat()
+	end
+	return CatForm
+end
 
+APL.Buffs = function(self, remains)
+	if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < remains then
+		return MarkOfTheWild
+	end
+	if OmenOfClarity:Usable() and OmenOfClarity:Remains() < remains then
+		return OmenOfClarity
+	end
+	if Thorns:Usable() and Thorns:Remains() < remains then
+		return Thorns
+	end
+end
+
+APL.Bear = function(self)
+	if Growl:Usable() and Player.threat < 3 then
+		UseCooldown(Growl)
+	end
+	if Swipe:Usable() and Player.enemies >= 3 then
+		return Swipe
+	end
+	if Maul:Usable() and (Player.rage >= 60 or Player.enemies < 3) then
+		UseCooldown(Maul)
+	end
+end
+
+APL.Cat = function(self)
+	if Prowl:Usable() then
+		UseCooldown(Prowl)
+	end
+	if Rip:Usable(0, true) and Player.combo_points >= 4 and Target.timeToDie > 6 and Rip:Down() then
+		if Rip:EnergyCost() - Player.energy > 20 and CatForm:Usable() then
+			return CatForm
+		end
+		return Pool(Rip)
+	end
+	if MangleCat:Usable(0, true) and MangleCat:Down() then
+		if MangleCat:EnergyCost() - Player.energy > 20 and CatForm:Usable() then
+			return CatForm
+		end
+		return Pool(MangleCat)
+	end
+	if Shred:Usable(0, true) then
+		if Shred:EnergyCost() - Player.energy > 20 and CatForm:Usable() then
+			return CatForm
+		end
+		return Pool(Shred)
+	else
+		if Claw:Usable(0, true) then
+			if Claw:EnergyCost() - Player.energy > 20 and CatForm:Usable() then
+				return CatForm
+			end
+			return Pool(Claw)
+		end
+		if Rake:Usable(0, true) and Target.timeToDie > 6 and Rake:Down() then
+			if Rake:EnergyCost() - Player.energy > 20 and CatForm:Usable() then
+				return CatForm
+			end
+			return Pool(Rake)
+		end
 	end
 end
 
@@ -1379,7 +1560,7 @@ end
 
 function UI:UpdateDisplay()
 	timer.display = 0
-	local dim, dim_cd
+	local dim, dim_cd, text_center
 	if Opt.dimmer then
 		dim = not ((not Player.main) or
 		           (Player.main.spellId and IsUsableSpell(Player.main.spellId)) or
@@ -1467,7 +1648,7 @@ end
 
 function events:ADDON_LOADED(name)
 	if name == ADDON then
-		Opt = Claw
+		Opt = ClawConfig
 		if not Opt.frequency then
 			print('It looks like this is your first time running ' .. ADDON .. ', why don\'t you take some time to familiarize yourself with the commands?')
 			print('Type |cFFFFD000' .. SLASH_Claw1 .. '|r for a list of commands.')
@@ -1736,6 +1917,7 @@ function events:PLAYER_ENTERING_WORLD()
 	Player:SetTargetMode(1)
 	events:GROUP_ROSTER_UPDATE()
 	events:PLAYER_EQUIPMENT_CHANGED()
+	events:UPDATE_SHAPESHIFT_FORM()
 	events:PLAYER_REGEN_ENABLED()
 	Target:Update()
 	Player:Update()
