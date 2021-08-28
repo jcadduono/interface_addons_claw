@@ -148,8 +148,8 @@ local Player = {
 		max = 0,
 		regen = 0,
 		tick_energy = 0,
-		last_tick = 0,
 		next_tick = 0,
+		per_tick = 0,
 	},
 	combo_points = 0,
 	rage = 0,
@@ -1021,7 +1021,6 @@ function Player:EnergyTick(timerTrigger)
 		(timerTrigger and energy >= Player.energy.max)
 	) then
 		self.energy.next_tick = time + 2
-		self.energy.last_tick = time
 		if energy >= Player.energy.max then
 			C_Timer.After(2, function() Player:EnergyTick(true) end)
 		end
@@ -1071,6 +1070,7 @@ function Player:UpdateAbilities()
 	local int = UnitStat('player', 4)
 	self.mana_max = UnitPowerMax('player', 0)
 	self.mana_base = self.mana_max - (min(20, int) + 15 * (int - min(20, int)))
+	self.energy.max = UnitPowerMax('player', 3)
 
 	-- Update spell ranks first
 	for _, ability in next, abilities.all do
@@ -1145,17 +1145,18 @@ function Player:Update()
 		self.mana = self.mana - self.ability_casting:ManaCost()
 	end
 	self.mana = min(max(self.mana, 0), self.mana_max)
-	if Player.form == FORM.CAT then
-		self.energy.regen = GetPowerRegenForPowerType(3)
-		self.energy.max = UnitPowerMax('player', 3)
+	if self.form == FORM.CAT then
 		self.energy.current = UnitPower('player', 3)
+		self.energy.regen = GetPowerRegenForPowerType(3)
+		self.energy.per_tick = floor(self.energy.regen * 2)
 		if self.energy.next_tick > self.ctime and self.execute_remains > (self.energy.next_tick - self.ctime) then
-			self.energy.current = min(max(self.energy.current + floor(self.energy.regen * 2), 0), self.energy.max)
+			self.energy.current = min(max(self.energy.current + self.energy.per_tick, 0), self.energy.max)
 		end
 		self.combo_points = GetComboPoints('player', 'target')
 	else
 		self.energy.current = 0
 		self.energy.regen = 0
+		self.energy.per_tick = 0
 		self.combo_points = 0
 	end
 	if self.form == FORM.BEAR then
@@ -1289,6 +1290,14 @@ function Ability:ManaCost()
 	return self.mana_cost
 end
 
+function Ability:ShapeshiftForEnergy()
+	return self:EnergyCost() - Player:Energy() > Player.energy.per_tick and CatForm:ShapeshiftEnergyGain() > Player.energy.per_tick
+end
+
+function CatForm:ShapeshiftEnergyGain()
+	return ((Furor.known and 40 or 0) + (WolfsheadHelm:Equipped() and 20 or 0)) - Player.energy.current
+end
+
 function Claw:EnergyCost()
 	local cost = Ability.EnergyCost(self)
 	if Ferocity.known then
@@ -1412,31 +1421,31 @@ APL.Cat = function(self)
 		return Pool(Ravage)
 	end
 	if Rip:Usable(0, true) and Player.combo_points >= 4 and Target.timeToDie > (Rip:TickTime() * 2) and Rip:Down() then
-		if Rip:EnergyCost() - Player:Energy() > 20 and CatForm:Usable() then
+		if Rip:ShapeshiftForEnergy() and CatForm:Usable() then
 			return CatForm
 		end
 		return Pool(Rip)
 	end
 	if MangleCat:Usable(0, true) and MangleCat:Down() then
-		if MangleCat:EnergyCost() - Player:Energy() > 20 and CatForm:Usable() then
+		if MangleCat:ShapeshiftForEnergy() and CatForm:Usable() then
 			return CatForm
 		end
 		return Pool(MangleCat)
 	end
 	if Shred:Usable(0, true) then
-		if Shred:EnergyCost() - Player:Energy() > 20 and CatForm:Usable() then
+		if Shred:ShapeshiftForEnergy() and CatForm:Usable() then
 			return CatForm
 		end
 		return Pool(Shred)
 	else
 		if Rake:Usable(0, true) and Target.timeToDie > (Rake:TickTime() * 2) and Rake:Down() then
-			if Rake:EnergyCost() - Player:Energy() > 20 and CatForm:Usable() then
+			if Rake:ShapeshiftForEnergy() and CatForm:Usable() then
 				return CatForm
 			end
 			return Pool(Rake)
 		end
 		if Claw:Usable(0, true) then
-			if Claw:EnergyCost() - Player:Energy() > 20 and CatForm:Usable() then
+			if Claw:ShapeshiftForEnergy() and CatForm:Usable() then
 				return CatForm
 			end
 			return Pool(Claw)
