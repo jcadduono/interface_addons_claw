@@ -851,6 +851,11 @@ local Claw = Ability:Add({1082, 3029, 5201, 9849, 9850, 27000}, false, true)
 Claw.energy_cost = 45
 Claw.requires_cat = true
 Claw.can_clearcast = true
+local FerociousBite = Ability:Add({22568, 22827, 22828, 22829, 31018, 24248}, false, true)
+FerociousBite.cp_cost = 1
+FerociousBite.energy_cost = 35
+FerociousBite.requires_cat = true
+FerociousBite.can_clearcast = true
 local Growl = Ability:Add({2649}, false, true)
 local Maul = Ability:Add({6807, 6808, 6809, 8972, 9745, 9880, 9881, 26996}, false, true)
 Maul.rage_cost = 15
@@ -894,6 +899,7 @@ local MangleCat = Ability:Add({33876, 33982, 33983}, false, true)
 MangleCat.energy_cost = 45
 MangleCat.requires_cat = true
 MangleCat.can_clearcast = true
+local PrimalFury = Ability:Add({37116, 37117}, true, true)
 local ShreddingAttacks = Ability:Add({16966, 16968}, true, true)
 ------ Procs
 
@@ -1420,11 +1426,19 @@ APL.Cat = function(self)
 	if Ravage:Usable(0, true) then
 		return Pool(Ravage)
 	end
-	if Rip:Usable(0, true) and Player.combo_points >= 4 and Target.timeToDie > (Rip:TickTime() * 2) and Rip:Down() then
-		if Rip:ShapeshiftForEnergy() and CatForm:Usable() then
-			return CatForm
+	if Player.combo_points >= ((PrimalFury.known or Target.timeToDie < 2) and 4 or 5) then
+		if FerociousBite:Usable(0, true) and Target.timeToDie < (Rip:Remains() + (Rip:TickTime() * (MangleCat:Up() and 2 or 3))) then
+			if FerociousBite:ShapeshiftForEnergy() and CatForm:Usable() and Target.timeToDie > 1.8 then
+				return CatForm
+			end
+			return Pool(FerociousBite)
 		end
-		return Pool(Rip)
+		if Rip:Usable(0, true) and Rip:Down() and Target.timeToDie > (Rip:TickTime() * (MangleCat:Up() and 2 or 3)) then
+			if Rip:ShapeshiftForEnergy() and CatForm:Usable() then
+				return CatForm
+			end
+			return Pool(Rip)
+		end
 	end
 	if MangleCat:Usable(0, true) and MangleCat:Down() then
 		if MangleCat:ShapeshiftForEnergy() and CatForm:Usable() then
