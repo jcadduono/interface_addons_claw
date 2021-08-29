@@ -97,6 +97,7 @@ local function InitOpts()
 		cd_ttd = 8,
 		pot = false,
 		trinket = true,
+		conserve_powershift = false,
 	})
 end
 
@@ -1297,7 +1298,7 @@ function Ability:ManaCost()
 end
 
 function Ability:ShapeshiftForEnergy()
-	return self:EnergyCost() - Player:Energy() > Player.energy.per_tick and CatForm:ShapeshiftEnergyGain() > Player.energy.per_tick
+	return self:EnergyCost() - Player:Energy() > Player.energy.per_tick and CatForm:ShapeshiftEnergyGain() >= (Player.energy.per_tick * (Opt.conserve_powershift and 2 or 1))
 end
 
 function CatForm:ShapeshiftEnergyGain()
@@ -2272,6 +2273,12 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		return Status('Show on-use trinkets in cooldown UI', Opt.trinket)
 	end
+	if startsWith(msg[1], 'con') then
+		if msg[2] then
+			Opt.conserve_powershift = msg[2] == 'on'
+		end
+		return Status('Conserve mana by only powershifting for 2+ energy ticks', Opt.conserve_powershift)
+	end
 	if msg[1] == 'reset' then
 		clawPanel:ClearAllPoints()
 		clawPanel:SetPoint('CENTER', 0, -169)
@@ -2300,6 +2307,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'ttd |cFFFFD000[seconds]|r  - minimum enemy lifetime to use cooldowns on (default is 8 seconds, ignored on bosses)',
 		'pot |cFF00C000on|r/|cFFC00000off|r - show flasks and battle potions in cooldown UI',
 		'trinket |cFF00C000on|r/|cFFC00000off|r - show on-use trinkets in cooldown UI',
+		'conserve |cFF00C000on|r/|cFFC00000off|r - conserve mana by only powershifting for 2+ energy ticks',
 		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
 		print('  ' .. SLASH_Claw1 .. ' ' .. cmd)
