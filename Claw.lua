@@ -1014,7 +1014,7 @@ function Player:EnergyTimeToMax(energy)
 	if deficit <= 0 then
 		return 0
 	end
-	return deficit / self:EnergyRegen()
+	return (floor(deficit / self.energy.regen / 2) * 2) + max(0, self.energy.next_tick - self.ctime)
 end
 
 function Player:EnergyTick(timerTrigger)
@@ -1136,6 +1136,7 @@ function Player:Update()
 	self.interrupt = nil
 	self.extra = nil
 	self.pool_energy = nil
+	self.wait_seconds = nil
 	start, duration = GetSpellCooldown(47524)
 	self.gcd_remains = start > 0 and duration - (self.ctime - start) or 0
 	_, _, _, _, remains, _, _, spellId = UnitCastingInfo('player')
@@ -1152,25 +1153,14 @@ function Player:Update()
 		self.mana = self.mana - self.ability_casting:ManaCost()
 	end
 	self.mana = min(max(self.mana, 0), self.mana_max)
-	if self.form == FORM.CAT then
-		self.energy.current = UnitPower('player', 3)
-		self.energy.regen = GetPowerRegenForPowerType(3)
-		self.energy.per_tick = floor(self.energy.regen * 2)
-		if self.energy.next_tick > self.ctime and self.execute_remains > (self.energy.next_tick - self.ctime) then
-			self.energy.current = min(max(self.energy.current + self.energy.per_tick, 0), self.energy.max)
-		end
-		self.combo_points = GetComboPoints('player', 'target')
-	else
-		self.energy.current = 0
-		self.energy.regen = 0
-		self.energy.per_tick = 0
-		self.combo_points = 0
+	self.energy.current = UnitPower('player', 3)
+	self.energy.regen = GetPowerRegenForPowerType(3)
+	self.energy.per_tick = floor(self.energy.regen * 2)
+	if self.energy.next_tick > self.ctime and self.execute_remains > (self.energy.next_tick - self.ctime) then
+		self.energy.current = min(max(self.energy.current + self.energy.per_tick, 0), self.energy.max)
 	end
-	if self.form == FORM.BEAR then
-		self.rage = UnitPower('player', 1)
-	else
-		self.rage = 0
-	end
+	self.combo_points = GetComboPoints('player', 'target')
+	self.rage = UnitPower('player', 1)
 	speed, max_speed = GetUnitSpeed('player')
 	self.moving = speed ~= 0
 	self.movement_speed = max_speed / 7 * 100
@@ -1298,7 +1288,7 @@ function Ability:ManaCost()
 end
 
 function Ability:ShapeshiftForEnergy()
-	return self:EnergyCost() - Player:Energy() > Player.energy.per_tick and CatForm:ShapeshiftEnergyGain() >= (Player.energy.per_tick * (Opt.conserve_powershift and 2 or 1))
+	return self:EnergyCost() - Player.energy.current > Player.energy.per_tick and CatForm:ShapeshiftEnergyGain() >= (Player.energy.per_tick * (Opt.conserve_powershift and 2 or 1))
 end
 
 function CatForm:ShapeshiftEnergyGain()
@@ -1376,6 +1366,11 @@ local function Pool(ability, extra)
 	return ability
 end
 
+local function WaitForDrop(ability)
+	Player.wait_seconds = ability:Remains()
+	return ability
+end
+
 -- Begin Action Priority Lists
 
 local APL = {}
@@ -1428,17 +1423,23 @@ APL.Cat = function(self)
 		return Pool(Ravage)
 	end
 	if Player.combo_points >= ((PrimalFury.known or Target.timeToDie < 2) and 4 or 5) then
-		if FerociousBite:Usable(0, true) and Target.timeToDie < (Rip:Remains() + (Rip:TickTime() * (MangleCat:Up() and 2 or 3))) then
+		if Rip:Usable(0, true) and Target.timeToDie > (Rip:Remains() + (Rip:TickTime() * (MangleCat:Up() and 2 or 3))) then
+			if Rip:Up() then
+				if Rip:Remains() < Player:EnergyTimeToMax() then
+					return WaitForDrop(Rip)
+				end
+			else
+				if Rip:ShapeshiftForEnergy() and CatForm:Usable() then
+					return CatForm
+				end
+				return Pool(Rip)
+			end
+		end
+		if FerociousBite:Usable(0, true) then
 			if FerociousBite:ShapeshiftForEnergy() and CatForm:Usable() and Target.timeToDie > 1.8 then
 				return CatForm
 			end
 			return Pool(FerociousBite)
-		end
-		if Rip:Usable(0, true) and Rip:Down() and Target.timeToDie > (Rip:TickTime() * (MangleCat:Up() and 2 or 3)) then
-			if Rip:ShapeshiftForEnergy() and CatForm:Usable() then
-				return CatForm
-			end
-			return Pool(Rip)
 		end
 	end
 	if MangleCat:Usable(0, true) and MangleCat:Down() then
@@ -1654,6 +1655,10 @@ function UI:UpdateDisplay()
 			text_center = format('POOL %d', deficit)
 			dim = Opt.dimmer
 		end
+	end
+	if Player.wait_seconds then
+		text_center = format('WAIT\n%.1fs', Player.wait_seconds)
+		dim = Opt.dimmer
 	end
 	if Player.main and Player.main_freecast then
 		if not clawPanel.freeCastOverlayOn then
