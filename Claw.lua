@@ -98,6 +98,7 @@ local function InitOpts()
 		pot = false,
 		trinket = true,
 		conserve_powershift = false,
+		mana_threshold_powershift = 20,
 		tick_padding_ms = 100,
 	})
 end
@@ -1292,7 +1293,7 @@ function Ability:ManaCost()
 end
 
 function Ability:ShapeshiftForEnergy()
-	return self:EnergyCost() - Player.energy.current > Player.energy.per_tick and CatForm:ShapeshiftEnergyGain() >= (Player.energy.per_tick * (Opt.conserve_powershift and 2 or 1)) and (Player.execute_remains + (Opt.tick_padding_ms / 1000)) < Player.energy.time_until_tick
+	return self:EnergyCost() - Player.energy.current > Player.energy.per_tick and CatForm:ShapeshiftEnergyGain() >= (Player.energy.per_tick * (Opt.conserve_powershift and 2 or 1)) and (Player.execute_remains + (Opt.tick_padding_ms / 1000)) < Player.energy.time_until_tick and Player:ManaPct() > Opt.mana_threshold_powershift
 end
 
 function CatForm:ShapeshiftEnergyGain()
@@ -2291,10 +2292,15 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		return Status('Conserve mana by only powershifting for 2+ energy ticks', Opt.conserve_powershift)
 	end
+	if startsWith(msg[1], 'mana') then
+		if msg[2] then
+			Opt.mana_threshold_powershift = max(0, min(100, tonumber(msg[2]) or 20))
+		end
+		return Status('Powershift when mana is above', Opt.mana_threshold_powershift, '%')
+	end
 	if startsWith(msg[1], 'pad') then
 		if msg[2] then
 			Opt.tick_padding_ms = max(0, min(500, tonumber(msg[2]) or 100))
-			UI:UpdateAlpha()
 		end
 		return Status('Powershift when next energy tick is at least', Opt.tick_padding_ms, 'ms away')
 	end
@@ -2327,7 +2333,8 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'pot |cFF00C000on|r/|cFFC00000off|r - show flasks and battle potions in cooldown UI',
 		'trinket |cFF00C000on|r/|cFFC00000off|r - show on-use trinkets in cooldown UI',
 		'conserve |cFF00C000on|r/|cFFC00000off|r - conserve mana by only powershifting for 2+ energy ticks',
-		'padding |cFFFFD000[0-500]|r - powershift when next energy tick is at least X milliseconds away (default is 100ms)',
+		'mana |cFFFFD000[percent]|r -  powershift when mana is above a percent threshold (default is 20%)',
+		'pad |cFFFFD000[0-500]|r - powershift when next energy tick is at least X milliseconds away (default is 100ms)',
 		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
 		print('  ' .. SLASH_Claw1 .. ' ' .. cmd)
