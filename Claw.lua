@@ -98,6 +98,7 @@ local function InitOpts()
 		pot = false,
 		trinket = true,
 		conserve_powershift = false,
+		tick_padding_ms = 100,
 	})
 end
 
@@ -149,8 +150,10 @@ local Player = {
 		max = 0,
 		regen = 0,
 		tick_energy = 0,
+		tick_interval = 2,
 		next_tick = 0,
 		per_tick = 0,
+		time_until_tick = 0,
 	},
 	combo_points = 0,
 	rage = 0,
@@ -517,7 +520,7 @@ function Ability:Remains(mine)
 			if expires == 0 then
 				return 600 -- infinite duration
 			end
-			return max(expires - Player.ctime - Player.execute_remains, 0)
+			return max(0, expires - Player.ctime - Player.execute_remains)
 		end
 	end
 	return 0
@@ -951,7 +954,7 @@ end
 function InventoryItem:Count()
 	local count = GetItemCount(self.itemId, false, false) or 0
 	if self.created_by and (self.created_by:Previous() or Player.previous_gcd[1] == self.created_by) then
-		count = max(count, 1)
+		count = max(1, count)
 	end
 	return count
 end
@@ -1014,7 +1017,7 @@ function Player:EnergyTimeToMax(energy)
 	if deficit <= 0 then
 		return 0
 	end
-	return (floor(deficit / self.energy.regen / 2) * 2) + max(0, self.energy.next_tick - self.ctime)
+	return (floor(deficit / self.energy.regen / self.energy.tick_interval) * self.energy.tick_interval) + self.energy.time_until_tick
 end
 
 function Player:EnergyTick(timerTrigger)
@@ -1027,9 +1030,9 @@ function Player:EnergyTick(timerTrigger)
 		(not timerTrigger and energy > self.energy.tick_energy) or
 		(timerTrigger and energy >= Player.energy.max)
 	) then
-		self.energy.next_tick = time + 2
+		self.energy.next_tick = time + self.energy.tick_interval
 		if energy >= Player.energy.max then
-			C_Timer.After(2, function() Player:EnergyTick(true) end)
+			C_Timer.After(self.energy.tick_interval, function() Player:EnergyTick(true) end)
 		end
 	end
 	self.energy.tick_energy = energy
@@ -1152,12 +1155,13 @@ function Player:Update()
 	if self.ability_casting then
 		self.mana = self.mana - self.ability_casting:ManaCost()
 	end
-	self.mana = min(max(self.mana, 0), self.mana_max)
+	self.mana = max(0, min(self.mana_max, self.mana))
 	self.energy.current = UnitPower('player', 3)
 	self.energy.regen = GetPowerRegenForPowerType(3)
-	self.energy.per_tick = floor(self.energy.regen * 2)
-	if self.energy.next_tick > self.ctime and self.execute_remains > (self.energy.next_tick - self.ctime) then
-		self.energy.current = min(max(self.energy.current + self.energy.per_tick, 0), self.energy.max)
+	self.energy.per_tick = floor(self.energy.regen * self.energy.tick_interval)
+	self.energy.time_until_tick = max(0, self.energy.next_tick - self.ctime)
+	if self.execute_remains > self.energy.time_until_tick then
+		self.energy.current = max(0, min(self.energy.max, self.energy.current + self.energy.per_tick))
 	end
 	self.combo_points = GetComboPoints('player', 'target')
 	self.rage = UnitPower('player', 1)
@@ -1288,7 +1292,7 @@ function Ability:ManaCost()
 end
 
 function Ability:ShapeshiftForEnergy()
-	return self:EnergyCost() - Player.energy.current > Player.energy.per_tick and CatForm:ShapeshiftEnergyGain() >= (Player.energy.per_tick * (Opt.conserve_powershift and 2 or 1))
+	return self:EnergyCost() - Player.energy.current > Player.energy.per_tick and CatForm:ShapeshiftEnergyGain() >= (Player.energy.per_tick * (Opt.conserve_powershift and 2 or 1)) and (Player.execute_remains + (Opt.tick_padding_ms / 1000)) < Player.energy.time_until_tick
 end
 
 function CatForm:ShapeshiftEnergyGain()
@@ -1652,13 +1656,16 @@ function UI:UpdateDisplay()
 	if Player.pool_energy then
 		local deficit = Player.pool_energy - UnitPower('player', 3)
 		if deficit > 0 then
-			text_center = format('POOL %d', deficit)
+			text_center = format('POOL\n%d', deficit)
 			dim = Opt.dimmer
 		end
 	end
 	if Player.wait_seconds then
 		text_center = format('WAIT\n%.1fs', Player.wait_seconds)
 		dim = Opt.dimmer
+	end
+	if Player.main == CatForm and Player.form == FORM.CAT and Player.energy.time_until_tick > 0 then
+		text_center = format('TICK\n%.1fs', Player.energy.time_until_tick)
 	end
 	if Player.main and Player.main_freecast then
 		if not clawPanel.freeCastOverlayOn then
@@ -1993,7 +2000,7 @@ function events:ACTIONBAR_SLOT_CHANGED()
 end
 
 function events:GROUP_ROSTER_UPDATE()
-	Player.group_size = min(max(GetNumGroupMembers(), 1), 40)
+	Player.group_size = max(1, min(40, GetNumGroupMembers()))
 end
 
 function events:PLAYER_ENTERING_WORLD()
@@ -2132,7 +2139,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 	end
 	if msg[1] == 'alpha' then
 		if msg[2] then
-			Opt.alpha = max(min((tonumber(msg[2]) or 100), 100), 0) / 100
+			Opt.alpha = max(0, min(100, tonumber(msg[2]) or 100)) / 100
 			UI:UpdateAlpha()
 		end
 		return Status('Icon transparency', Opt.alpha * 100 .. '%')
@@ -2181,9 +2188,9 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		if msg[2] == 'color' then
 			if msg[5] then
-				Opt.glow.color.r = max(min(tonumber(msg[3]) or 0, 1), 0)
-				Opt.glow.color.g = max(min(tonumber(msg[4]) or 0, 1), 0)
-				Opt.glow.color.b = max(min(tonumber(msg[5]) or 0, 1), 0)
+				Opt.glow.color.r = max(0, min(1, tonumber(msg[3]) or 0))
+				Opt.glow.color.g = max(0, min(1, tonumber(msg[4]) or 0))
+				Opt.glow.color.b = max(0, min(1, tonumber(msg[5]) or 0))
 				UI:UpdateGlowColorAndScale()
 			end
 			return Status('Glow color', '|cFFFF0000' .. Opt.glow.color.r, '|cFF00FF00' .. Opt.glow.color.g, '|cFF0000FF' .. Opt.glow.color.b)
@@ -2284,6 +2291,13 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		return Status('Conserve mana by only powershifting for 2+ energy ticks', Opt.conserve_powershift)
 	end
+	if startsWith(msg[1], 'pad') then
+		if msg[2] then
+			Opt.tick_padding_ms = max(0, min(500, tonumber(msg[2]) or 100))
+			UI:UpdateAlpha()
+		end
+		return Status('Powershift when next energy tick is at least', Opt.tick_padding_ms, 'ms away')
+	end
 	if msg[1] == 'reset' then
 		clawPanel:ClearAllPoints()
 		clawPanel:SetPoint('CENTER', 0, -169)
@@ -2313,6 +2327,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'pot |cFF00C000on|r/|cFFC00000off|r - show flasks and battle potions in cooldown UI',
 		'trinket |cFF00C000on|r/|cFFC00000off|r - show on-use trinkets in cooldown UI',
 		'conserve |cFF00C000on|r/|cFFC00000off|r - conserve mana by only powershifting for 2+ energy ticks',
+		'padding |cFFFFD000[0-500]|r - powershift when next energy tick is at least X milliseconds away (default is 100ms)',
 		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
 		print('  ' .. SLASH_Claw1 .. ' ' .. cmd)
