@@ -1180,6 +1180,24 @@ function Player:Update()
 	end
 end
 
+function Player:Init()
+	local _
+	if #UI.glows == 0 then
+		UI:CreateOverlayGlows()
+	end
+	clawPreviousPanel.ability = nil
+	Player.guid = UnitGUID('player')
+	Player.level = UnitLevel('player')
+	_, Player.instance = IsInInstance()
+	Player:SetTargetMode(1)
+	events:GROUP_ROSTER_UPDATE()
+	events:PLAYER_EQUIPMENT_CHANGED()
+	events:UPDATE_SHAPESHIFT_FORM()
+	events:PLAYER_REGEN_ENABLED()
+	Target:Update()
+	Player:Update()
+end
+
 -- End Player API
 
 -- Start Target API
@@ -1293,7 +1311,7 @@ function Ability:ManaCost()
 end
 
 function Ability:ShapeshiftForEnergy()
-	return self:EnergyCost() - Player.energy.current > Player.energy.per_tick and CatForm:ShapeshiftEnergyGain() >= (Player.energy.per_tick * (Opt.conserve_powershift and 2 or 1)) and (Player.execute_remains + (Opt.tick_padding_ms / 1000)) < Player.energy.time_until_tick and Player:ManaPct() > Opt.mana_threshold_powershift
+	return self:EnergyCost() - Player.energy.current > Player.energy.per_tick and CatForm:ShapeshiftEnergyGain() >= (Player.energy.per_tick * (Opt.conserve_powershift and 2 or 1)) and (Player.execute_remains + (Opt.tick_padding_ms / 1000)) < Player.energy.time_until_tick and Player:ManaPct() > Opt.mana_threshold_powershift and Target.timeToDie > 2
 end
 
 function CatForm:ShapeshiftEnergyGain()
@@ -2005,21 +2023,8 @@ function events:GROUP_ROSTER_UPDATE()
 end
 
 function events:PLAYER_ENTERING_WORLD()
-	if #UI.glows == 0 then
-		UI:CreateOverlayGlows()
-	end
-	local _
-	_, Player.instance = IsInInstance()
-	Player.guid = UnitGUID('player')
-	Player.level = UnitLevel('player')
-	clawPreviousPanel.ability = nil
-	Player:SetTargetMode(1)
-	events:GROUP_ROSTER_UPDATE()
-	events:PLAYER_EQUIPMENT_CHANGED()
-	events:UPDATE_SHAPESHIFT_FORM()
-	events:PLAYER_REGEN_ENABLED()
-	Target:Update()
-	Player:Update()
+	Player:Init()
+	C_Timer.After(2, function() Player:Init() end)
 end
 
 clawPanel.button:SetScript('OnClick', function(self, button, down)
