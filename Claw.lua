@@ -848,6 +848,10 @@ Thorns.buff_duration = 600
 ------ Procs
 
 ---- Feral
+local Bash = Ability:Add({5211, 6798, 8983}, false, false)
+Bash.rage_cost = 10
+Bash.cooldown_duration = 60
+Bash.requires_bear = true
 local BearForm = Ability:Add({5487, 9634}, true, true)
 BearForm.mana_cost_pct = 35
 local CatForm = Ability:Add({768}, true, true)
@@ -886,6 +890,14 @@ Rip.energy_cost = 30
 Rip.tick_interval = 2
 Rip.requires_cat = true
 Rip.can_clearcast = true
+local Pounce = Ability:Add({9005, 9823, 9827, 27006}, false, true)
+Pounce.buff_duration = 3
+Pounce.energy_cost = 50
+Pounce.requires_cat = true
+Pounce.can_clearcast = true
+Pounce.bleed = Ability:Add({9007, 9824, 9826, 27007}, false, true)
+Pounce.bleed.buff_duration = 18
+Pounce.bleed.tick_interval = 3
 local Shred = Ability:Add({5221, 6800, 8992, 9829, 9830, 27001, 27002}, false, true)
 Shred.energy_cost = 60
 Shred.requires_cat = true
@@ -895,6 +907,10 @@ Swipe.rage_cost = 20
 Swipe.requires_bear = true
 Swipe.can_clearcast = true
 ------ Talents
+local FeralCharge = Ability:Add({16979}, false, false)
+FeralCharge.rage_cost = 5
+FeralCharge.cooldown_duration = 15
+FeralCharge.requires_bear = true
 local Ferocity = Ability:Add({16934, 16935, 16936, 16937, 16938}, true, true)
 local MangleBear = Ability:Add({33878, 33986, 33987}, false, true)
 MangleBear.rage_cost = 20
@@ -1106,8 +1122,13 @@ function Player:UpdateAbilities()
 		end
 		ability.name, _, ability.icon = GetSpellInfo(ability.spellId)
 	end
-	
+
 	Clearcasting.known = OmenOfClarity.known
+	if Pounce.known then
+		Pounce.bleed.known = true
+		Pounce.bleed.spellId = Pounce.bleed.spellIds[Pounce.rank]
+		Pounce.bleed.rank = Pounce.rank
+	end
 
 	abilities.bySpellId = {}
 	abilities.velocity = {}
@@ -1272,7 +1293,7 @@ function Target:Update()
 end
 
 function Target:Stunned()
-	if HammerOfJustice:Up() or SealOfJustice.stun:Up() then
+	if Pounce:Up() or Bash:Up() then
 		return true
 	end
 	return false
@@ -1347,7 +1368,7 @@ function Shred:EnergyCost()
 end
 
 function Shred:Usable(seconds, pool)
-	if Player.threat >= 3 then
+	if Player.threat >= 3 and not Target:Stunned() then
 		return false
 	end
 	if Player.group_size == 1 and Player:TimeInCombat() == 0 and Prowl:Down() then
@@ -1370,6 +1391,16 @@ function Ravage:Usable(seconds, pool)
 	return Ability.Usable(self, seconds, pool)
 end
 
+function Pounce:Usable(seconds, pool)
+	if Prowl:Down() then
+		return false
+	end
+	if not Target.stunnable then
+		return false
+	end
+	return Ability.Usable(self, seconds, pool)
+end
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -1385,7 +1416,7 @@ local function UseExtra(ability, overwrite)
 end
 
 local function Pool(ability, extra)
-	Player.pool_energy = ability:EnergyCost() + (extra or 0)
+	Player.pool_energy = min(Player.energy.max, ability:EnergyCost() + (extra or 0))
 	return ability
 end
 
@@ -1442,6 +1473,9 @@ APL.Cat = function(self)
 	if Prowl:Usable() then
 		UseCooldown(Prowl)
 	end
+	if Pounce:Usable(0, true) and (Player.instance == 'none' or Player.group_size == 1) then
+		return Pool(Pounce, Shred:EnergyCost())
+	end
 	if Ravage:Usable(0, true) then
 		return Pool(Ravage)
 	end
@@ -1493,7 +1527,12 @@ APL.Cat = function(self)
 end
 
 APL.Interrupt = function(self)
-
+	if FeralCharge:Usable() then
+		return FeralCharge
+	end
+	if Bash:Usable() then
+		return Bash
+	end
 end
 
 -- End Action Priority Lists
