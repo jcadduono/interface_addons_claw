@@ -1544,6 +1544,9 @@ function UI:CreateOverlayGlows()
 		GenerateGlow(_G['MultiBarBottomRightButton' .. i])
 	end
 	for i = 1, 10 do
+		GenerateGlow(_G['StanceButton' .. i])
+	end
+	for i = 1, 10 do
 		GenerateGlow(_G['PetActionButton' .. i])
 	end
 	if Bartender4 then
