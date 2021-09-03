@@ -1464,10 +1464,13 @@ APL.Bear = function(self)
 	if Growl:Usable() and Player.threat < 3 then
 		UseCooldown(Growl)
 	end
+	if MangleBear:Usable() then
+		return MangleBear
+	end
 	if Swipe:Usable() and Player.enemies >= 3 then
 		return Swipe
 	end
-	if Maul:Usable() and (Player.rage >= 60 or Player.enemies < 3) then
+	if Maul:Usable() and (Player.rage >= 60 or (Player.enemies < 3 and (not MangleBear.known or Player.rage >= 30))) then
 		UseCooldown(Maul)
 	end
 end
@@ -1502,7 +1505,7 @@ APL.Cat = function(self)
 			return Pool(FerociousBite)
 		end
 	end
-	if MangleCat:Usable(0, true) and MangleCat:Down() then
+	if MangleCat:Usable(0, true) and (MangleCat:Down() or (Rip:Remains() > MangleCat:Remains() and Target.timeToDie > MangleCat:Remains())) then
 		if MangleCat:ShapeshiftForEnergy() and CatForm:Usable() then
 			return CatForm
 		end
@@ -1513,6 +1516,19 @@ APL.Cat = function(self)
 			return CatForm
 		end
 		return Pool(Shred)
+	elseif MangleCat.known then
+		if Rake:Usable(0, true) and MangleCat:Up() and Target.timeToDie > (Rake:TickTime() * 4) and Rake:Down() then
+			if Rake:ShapeshiftForEnergy() and CatForm:Usable() then
+				return CatForm
+			end
+			return Pool(Rake)
+		end
+		if MangleCat:Usable(0, true) then
+			if MangleCat:ShapeshiftForEnergy() and CatForm:Usable() then
+				return CatForm
+			end
+			return Pool(MangleCat)
+		end
 	else
 		if Rake:Usable(0, true) and Target.timeToDie > (Rake:TickTime() * 2) and Rake:Down() then
 			if Rake:ShapeshiftForEnergy() and CatForm:Usable() then
