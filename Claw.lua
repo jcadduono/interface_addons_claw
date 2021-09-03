@@ -925,6 +925,9 @@ local ShreddingAttacks = Ability:Add({16966, 16968}, true, true)
 ------ Procs
 
 ---- Restoration
+local GiftOfTheWild = Ability:Add({21849, 21850, 26991}, true, false)
+GiftOfTheWild.mana_costs = {900, 1200, 1515}
+GiftOfTheWild.buff_duration = 3600
 local MarkOfTheWild = Ability:Add({1126, 5232, 6756, 5234, 8907, 9884, 9885, 26990}, true, false)
 MarkOfTheWild.mana_costs = {20, 50, 100, 160, 240, 340, 445, 565}
 MarkOfTheWild.buff_duration = 1800
@@ -1446,7 +1449,7 @@ APL.Main = function(self)
 end
 
 APL.Buffs = function(self, remains)
-	if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < remains then
+	if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < remains and GiftOfTheWild:Remains() < remains then
 		return MarkOfTheWild
 	end
 	if OmenOfClarity:Usable() and OmenOfClarity:Remains() < remains then
