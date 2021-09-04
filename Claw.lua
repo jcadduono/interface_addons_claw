@@ -848,6 +848,9 @@ end
 ---- General
 
 ---- Balance
+local FaerieFire = Ability:Add({770, 778, 9749, 9907, 26993})
+FaerieFire.mana_costs = {55, 75, 95, 115, 145}
+FaerieFire.buff_duration = 40
 local Thorns = Ability:Add({467, 782, 1075, 8914, 9756, 9910, 26992}, true, false)
 Thorns.mana_costs = {35, 60, 105, 170, 240, 320, 400}
 Thorns.buff_duration = 600
@@ -915,6 +918,9 @@ Swipe.rage_cost = 20
 Swipe.requires_bear = true
 Swipe.can_clearcast = true
 ------ Talents
+local FaerieFireFeral = Ability:Add({16857, 17390, 17391, 17392, 27011})
+FaerieFireFeral.cooldown_duration = 6
+FaerieFireFeral.buff_duration = 40
 local FeralCharge = Ability:Add({16979}, false, false)
 FeralCharge.rage_cost = 5
 FeralCharge.cooldown_duration = 15
@@ -1504,6 +1510,9 @@ APL.Bear = function(self)
 	if Maul:Usable() and (Player.rage.current >= 60 or (Player.enemies < 3 and (not MangleBear.known or Player.rage.current >= 30))) then
 		UseCooldown(Maul)
 	end
+	if FaerieFireFeral:Usable() and Target.timeToDie > 20 and FaerieFire:Down() and FaerieFireFeral:Down() then
+		return FaerieFireFeral
+	end
 end
 
 APL.Cat = function(self)
@@ -1541,6 +1550,9 @@ APL.Cat = function(self)
 			return CatForm
 		end
 		return Pool(MangleCat)
+	end
+	if FaerieFireFeral:Usable() and Target.timeToDie > 30 and FaerieFire:Down() and FaerieFireFeral:Down() and Player:EnergyTimeToMax() > (Player.gcd * 2) then
+		return FaerieFireFeral
 	end
 	if Shred:Usable(0, true) then
 		if Shred:ShapeshiftForEnergy() and CatForm:Usable() then
