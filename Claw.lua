@@ -947,6 +947,7 @@ MarkOfTheWild.mana_costs = {20, 50, 100, 160, 240, 340, 445, 565}
 MarkOfTheWild.buff_duration = 1800
 ------ Talents
 local Furor = Ability:Add({17056, 17058, 17059, 17060, 17061}, true, true)
+local NaturalShapeshifter = Ability:Add({16833, 16834, 16835}, true, true)
 local OmenOfClarity = Ability:Add({16864}, true, true)
 local Clearcasting = Ability:Add({16870}, true, true)
 ------ Procs
@@ -1368,6 +1369,15 @@ end
 function Ability:ShapeshiftForEnergy()
 	return self:EnergyCost() - Player.energy.current > Player.energy.per_tick and CatForm:ShapeshiftEnergyGain() >= (Player.energy.per_tick * (Opt.conserve_powershift and 2 or 1)) and (Player.execute_remains + (Opt.tick_padding_ms / 1000)) < Player.energy.time_until_tick and Player:ManaPct() > Opt.mana_threshold_powershift and Target.timeToDie > 2
 end
+
+function CatForm:ManaCost()
+	local cost = Ability.ManaCost(self)
+	if NaturalShapeshifter.known then
+		cost = cost - floor(cost * 0.10 * NaturalShapeshifter.rank)
+	end
+	return cost
+end
+BearForm.ManaCost = CatForm.ManaCost
 
 function CatForm:ShapeshiftEnergyGain()
 	return ((Furor.known and 40 or 0) + (WolfsheadHelm:Equipped() and 20 or 0)) - Player.energy.current
