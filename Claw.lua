@@ -142,10 +142,17 @@ local Player = {
 	gcd_remains = 0,
 	health = 0,
 	health_max = 0,
-	mana = 0,
-	mana_base = 0,
-	mana_max = 0,
-	mana_regen = 0,
+	mana = {
+		base = 0,
+		current = 0,
+		max = 0,
+		regen = 0,
+		tick_mana = 0,
+		tick_interval = 2,
+		next_tick = 0,
+		per_tick = 0,
+		time_until_tick = 0,
+	},
 	energy = {
 		current = 0,
 		max = 0,
@@ -157,8 +164,10 @@ local Player = {
 		time_until_tick = 0,
 	},
 	combo_points = 0,
-	rage = 0,
-	rage_max = 0,
+	rage = {
+		current = 0,
+		max = 0,
+	},
 	group_size = 1,
 	moving = false,
 	movement_speed = 100,
@@ -437,7 +446,6 @@ function Ability:Add(spellId, buff, player)
 		hasted_cooldown = false,
 		hasted_ticks = false,
 		known = false,
-		health_cost = 0,
 		mana_cost = 0,
 		energy_cost = 0,
 		cp_cost = 0,
@@ -489,13 +497,13 @@ function Ability:Usable(seconds, pool)
 		return false
 	end
 	if not pool then
-		if self:ManaCost() > Player.mana then
+		if self:ManaCost() > Player.mana.current then
 			return false
 		end
 		if Player.form == FORM.CAT and self:EnergyCost() > Player.energy.current then
 			return false
 		end
-		if Player.form == FORM.BEAR and self:RageCost() > Player.rage then
+		if Player.form == FORM.BEAR and self:RageCost() > Player.rage.current then
 			return false
 		end
 	end
@@ -692,7 +700,7 @@ function Ability:CastTime()
 end
 
 function Ability:CastRegen()
-	return Player.mana_regen * self:CastTime() - self:ManaCost()
+	return Player.mana.regen * self:CastTime() - self:ManaCost()
 end
 
 function Ability:CastEnergyRegen()
@@ -1021,7 +1029,22 @@ function Player:HealthPct()
 end
 
 function Player:ManaPct()
-	return self.mana / self.mana_max * 100
+	return self.mana.current / self.mana.max * 100
+end
+
+function Player:ManaTick(timerTrigger)
+	local time = GetTime()
+	local mana = UnitPower('player', 0)
+	if (
+		(not timerTrigger and mana > self.mana.tick_mana) or
+		(timerTrigger and mana >= self.mana.max)
+	) then
+		self.mana.next_tick = time + self.mana.tick_interval
+		if mana >= self.mana.max then
+			C_Timer.After(self.mana.tick_interval, function() Player:ManaTick(true) end)
+		end
+	end
+	self.mana.tick_mana = mana
 end
 
 function Player:Energy()
@@ -1048,10 +1071,10 @@ function Player:EnergyTick(timerTrigger)
 	end
 	if (
 		(not timerTrigger and energy > self.energy.tick_energy) or
-		(timerTrigger and energy >= Player.energy.max)
+		(timerTrigger and energy >= self.energy.max)
 	) then
 		self.energy.next_tick = time + self.energy.tick_interval
-		if energy >= Player.energy.max then
+		if energy >= self.energy.max then
 			C_Timer.After(self.energy.tick_interval, function() Player:EnergyTick(true) end)
 		end
 	end
@@ -1059,7 +1082,7 @@ function Player:EnergyTick(timerTrigger)
 end
 
 function Player:RageDeficit()
-	return self.rage_max - self.rage
+	return self.rage.max - self.rage.current
 end
 
 function Player:Stealthed()
@@ -1098,9 +1121,10 @@ end
 
 function Player:UpdateAbilities()
 	local int = UnitStat('player', 4)
-	self.mana_max = UnitPowerMax('player', 0)
-	self.mana_base = self.mana_max - (min(20, int) + 15 * (int - min(20, int)))
+	self.mana.max = UnitPowerMax('player', 0)
+	self.mana.base = self.mana.max - (min(20, int) + 15 * (int - min(20, int)))
 	self.energy.max = UnitPowerMax('player', 3)
+	self.rage.max = UnitPowerMax('player', 1)
 
 	-- Update spell ranks first
 	for _, ability in next, abilities.all do
@@ -1116,10 +1140,7 @@ function Player:UpdateAbilities()
 					ability.mana_cost = ability.mana_costs[i] -- update mana_cost to current rank
 				end
 				if ability.mana_cost_pct then
-					ability.mana_cost = floor(self.mana_base * (ability.mana_cost_pct / 100))
-				end
-				if ability.health_costs then
-					ability.health_cost = ability.health_costs[i] -- update health_cost to current rank
+					ability.mana_cost = floor(self.mana.base * (ability.mana_cost_pct / 100))
 				end
 			end
 		end
@@ -1174,13 +1195,17 @@ function Player:Update()
 	self.gcd = 1.5 * self.haste_factor
 	self.health = UnitHealth('player')
 	self.health_max = UnitHealthMax('player')
-	self.mana_regen = GetPowerRegenForPowerType(0)
-	self.mana = UnitPower('player', 0) + (self.mana_regen * self.execute_remains)
-	self.mana_max = UnitPowerMax('player', 0)
+	self.mana.current = UnitPower('player', 0)
+	self.mana.regen = GetPowerRegenForPowerType(0)
+	self.mana.per_tick = floor(self.mana.regen * self.mana.tick_interval)
+	self.mana.time_until_tick = max(0, self.mana.next_tick - self.ctime)
 	if self.ability_casting then
-		self.mana = self.mana - self.ability_casting:ManaCost()
+		self.mana.current = self.mana.current - self.ability_casting:ManaCost()
 	end
-	self.mana = max(0, min(self.mana_max, self.mana))
+	if self.execute_remains > self.mana.time_until_tick then
+		self.mana.current = self.mana.current + self.mana.per_tick
+	end
+	self.mana.current = max(0, min(self.mana.max, self.mana.current))
 	self.energy.current = UnitPower('player', 3)
 	self.energy.regen = GetPowerRegenForPowerType(3)
 	self.energy.per_tick = floor(self.energy.regen * self.energy.tick_interval)
@@ -1189,7 +1214,7 @@ function Player:Update()
 		self.energy.current = max(0, min(self.energy.max, self.energy.current + self.energy.per_tick))
 	end
 	self.combo_points = GetComboPoints('player', 'target')
-	self.rage = UnitPower('player', 1)
+	self.rage.current = UnitPower('player', 1)
 	speed, max_speed = GetUnitSpeed('player')
 	self.moving = speed ~= 0
 	self.movement_speed = max_speed / 7 * 100
@@ -1476,7 +1501,7 @@ APL.Bear = function(self)
 	if Swipe:Usable() and Player.enemies >= 3 then
 		return Swipe
 	end
-	if Maul:Usable() and (Player.rage >= 60 or (Player.enemies < 3 and (not MangleBear.known or Player.rage >= 30))) then
+	if Maul:Usable() and (Player.rage.current >= 60 or (Player.enemies < 3 and (not MangleBear.known or Player.rage.current >= 30))) then
 		UseCooldown(Maul)
 	end
 end
@@ -2059,7 +2084,11 @@ function events:UNIT_SPELLCAST_SUCCEEDED(srcName, castGUID, spellId)
 end
 
 function events:UNIT_POWER_FREQUENT(srcName, powerType)
-	if srcName == 'player' and powerType == 'ENERGY' then
+	if srcName ~= 'player' then
+		return
+	elseif powerType == 'MANA' then
+		Player:ManaTick()
+	elseif powerType == 'ENERGY' then
 		Player:EnergyTick()
 	end
 end
