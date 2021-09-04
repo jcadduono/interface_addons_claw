@@ -1435,7 +1435,13 @@ local APL = {}
 APL.Main = function(self)
 	if Player:TimeInCombat() == 0 then
 		local apl = self:Buffs(Target.boss and 180 or 30)
-		if apl then return apl end
+		if apl then
+			if Prowl:Up() then
+				UseExtra(apl)
+			else
+				return apl
+			end
+		end
 	else
 		local apl = self:Buffs(10)
 		if apl then UseExtra(apl) end
