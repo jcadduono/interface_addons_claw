@@ -1367,7 +1367,22 @@ function Ability:ManaCost()
 end
 
 function Ability:ShapeshiftForEnergy()
-	return self:EnergyCost() - Player.energy.current > Player.energy.per_tick and CatForm:ShapeshiftEnergyGain() >= (Player.energy.per_tick * (Opt.conserve_powershift and 2 or 1)) and (Player.execute_remains + (Opt.tick_padding_ms / 1000)) < Player.energy.time_until_tick and Player:ManaPct() > Opt.mana_threshold_powershift and Target.timeToDie > 2
+	if Target.timeToDie < 2 or Player:ManaPct() < Opt.mana_threshold_powershift then
+		return false -- don't powershift if the target is about to die or we are low on mana
+	end
+	if CatForm:ShapeshiftEnergyGain() < Player.energy.per_tick * (Opt.conserve_powershift and 2 or 1) then
+		return false -- if conserving mana, only powershift for at least 2 ticks of energy gain
+	end
+	if self:EnergyCost() - Player.energy.current > Player.energy.per_tick * 2 then
+		return true -- don't care about clipping energy ticks if it's still worth powershifting after the next tick
+	end
+	if Player.execute_remains + (Opt.tick_padding_ms / 1000) >= Player.energy.time_until_tick then
+		return false -- prevent clipping an energy tick
+	end
+	if self:EnergyCost() - Player.energy.current > Player.energy.per_tick then
+		return true -- powershift if we will have to wait 2 or more ticks to use the ability
+	end
+	return false
 end
 
 function CatForm:ManaCost()
