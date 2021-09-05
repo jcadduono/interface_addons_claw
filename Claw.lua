@@ -1498,6 +1498,9 @@ APL.Main = function(self)
 				return apl
 			end
 		end
+		if Player.form == FORM.CAT and Player.level >= 40 and not WolfsheadHelm:Equipped() and WolfsheadHelm:Count() > 0 then
+			return WolfsheadHelm
+		end
 	else
 		local apl = self:Buffs(10)
 		if apl then UseExtra(apl) end
