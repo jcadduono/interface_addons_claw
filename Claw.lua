@@ -2157,7 +2157,7 @@ end
 
 function events:PLAYER_ENTERING_WORLD()
 	Player:Init()
-	C_Timer.After(2, function() Player:Init() end)
+	C_Timer.After(5, function() events:PLAYER_EQUIPMENT_CHANGED() end)
 end
 
 clawPanel.button:SetScript('OnClick', function(self, button, down)
