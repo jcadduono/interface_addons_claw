@@ -1538,7 +1538,7 @@ APL.Cat = function(self)
 	if Player.combo_points >= ((PrimalFury.known or Target.timeToDie < 2) and 4 or 5) then
 		if Rip:Usable(0, true) and Target.timeToDie > (Rip:Remains() + (Rip:TickTime() * (MangleCat:Up() and 2 or 3))) then
 			if Rip:Up() then
-				if Rip:Remains() < Player:EnergyTimeToMax() then
+				if Rip:Remains() < Player:EnergyTimeToMax() and (not MangleCat.known or MangleCat:Remains() > Rip:Remains()) then
 					return WaitForDrop(Rip)
 				end
 			else
@@ -1555,7 +1555,7 @@ APL.Cat = function(self)
 			return Pool(FerociousBite)
 		end
 	end
-	if MangleCat:Usable(0, true) and (MangleCat:Down() or (Rip:Remains() > MangleCat:Remains() and Target.timeToDie > MangleCat:Remains())) then
+	if MangleCat:Usable(0, true) and Target.timeToDie > MangleCat:Remains() and (MangleCat:Down() or Rip:Remains() > MangleCat:Remains() or (MangleCat:Remains() < Player:EnergyTimeToMax(Shred:EnergyCost()))) then
 		if MangleCat:ShapeshiftForEnergy() and CatForm:Usable() then
 			return CatForm
 		end
