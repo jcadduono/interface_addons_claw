@@ -926,11 +926,11 @@ FeralCharge.rage_cost = 5
 FeralCharge.cooldown_duration = 15
 FeralCharge.requires_bear = true
 local Ferocity = Ability:Add({16934, 16935, 16936, 16937, 16938}, true, true)
-local MangleBear = Ability:Add({33878, 33986, 33987}, false, true)
+local MangleBear = Ability:Add({33878, 33986, 33987}, false, false)
 MangleBear.rage_cost = 20
 MangleBear.requires_bear = true
 MangleBear.can_clearcast = true
-local MangleCat = Ability:Add({33876, 33982, 33983}, false, true)
+local MangleCat = Ability:Add({33876, 33982, 33983}, false, false)
 MangleCat.energy_cost = 45
 MangleCat.requires_cat = true
 MangleCat.can_clearcast = true
@@ -1544,6 +1544,9 @@ APL.Bear = function(self)
 end
 
 APL.Cat = function(self)
+	self.mangle_mine = max(MangleCat:Remains(true), MangleBear:Remains(true))
+	self.mangle_remains = self.mangle_mine > 0 and self.mangle_mine or max(MangleCat:Remains(), MangleBear:Remains())
+	self.mangle_mine = self.mangle_mine > 0
 	if Prowl:Usable() then
 		UseCooldown(Prowl)
 	end
@@ -1554,9 +1557,9 @@ APL.Cat = function(self)
 		return Pool(Ravage)
 	end
 	if Player.combo_points >= ((PrimalFury.known or Target.timeToDie < 2) and 4 or 5) then
-		if Rip:Usable(0, true) and Target.timeToDie > (Rip:Remains() + (Rip:TickTime() * (MangleCat:Up() and 2 or 3))) then
+		if Rip:Usable(0, true) and Target.timeToDie > (Rip:Remains() + (Rip:TickTime() * (self.mangle_remains > 0 and 2 or 3))) then
 			if Rip:Up() then
-				if Rip:Remains() < Player:EnergyTimeToMax() and (not MangleCat.known or MangleCat:Remains() > Rip:Remains()) then
+				if Rip:Remains() < Player:EnergyTimeToMax() and (not MangleCat.known or (not self.mangle_mine and self.mangle_remains > 0) or self.mangle_remains > Rip:Remains()) then
 					return WaitForDrop(Rip)
 				end
 			else
@@ -1573,7 +1576,7 @@ APL.Cat = function(self)
 			return Pool(FerociousBite)
 		end
 	end
-	if MangleCat:Usable(0, true) and Target.timeToDie > MangleCat:Remains() and (MangleCat:Down() or Rip:Remains() > MangleCat:Remains() or (MangleCat:Remains() < Player:EnergyTimeToMax(Shred:EnergyCost()))) then
+	if MangleCat:Usable(0, true) and Target.timeToDie > self.mangle_remains and (self.mangle_remains == 0 or (self.mangle_mine and Rip:Remains() > self.mangle_remains) or (self.mangle_remains < Player:EnergyTimeToMax(Shred:EnergyCost()))) then
 		if MangleCat:ShapeshiftForEnergy() and CatForm:Usable() then
 			return CatForm
 		end
@@ -1588,7 +1591,7 @@ APL.Cat = function(self)
 		end
 		return Pool(Shred)
 	elseif MangleCat.known then
-		if Rake:Usable(0, true) and MangleCat:Up() and Target.timeToDie > (Rake:TickTime() * 4) and Rake:Down() then
+		if Rake:Usable(0, true) and self.mangle_remains > 0 and Target.timeToDie > (Rake:TickTime() * 4) and Rake:Down() then
 			if Rake:ShapeshiftForEnergy() and CatForm:Usable() then
 				return CatForm
 			end
