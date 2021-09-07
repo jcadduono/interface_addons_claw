@@ -871,12 +871,21 @@ local Claw = Ability:Add({1082, 3029, 5201, 9849, 9850, 27000}, false, true)
 Claw.energy_cost = 45
 Claw.requires_cat = true
 Claw.can_clearcast = true
+local Enrage = Ability:Add({5229}, true, true)
+Enrage.cooldown_duration = 60
+Enrage.buff_duration = 10
+Enrage.requires_bear = true
 local FerociousBite = Ability:Add({22568, 22827, 22828, 22829, 31018, 24248}, false, true)
 FerociousBite.cp_cost = 1
 FerociousBite.energy_cost = 35
 FerociousBite.requires_cat = true
 FerociousBite.can_clearcast = true
 local Growl = Ability:Add({2649}, false, true)
+local Lacerate = Ability:Add({33745}, false, true)
+Lacerate.buff_duration = 15
+Lacerate.rage_cost = 15
+Lacerate.tick_interval = 3
+Lacerate.requires_bear = true
 local Maul = Ability:Add({6807, 6808, 6809, 8972, 9745, 9880, 9881, 26996}, false, true)
 Maul.rage_cost = 15
 Maul.requires_bear = true
@@ -1385,6 +1394,10 @@ function Ability:ShapeshiftForEnergy()
 	return false
 end
 
+function BearForm:ShapeshiftRageGain()
+	return ((Furor.known and 10 or 0) + (WolfsheadHelm:Equipped() and 5 or 0)) - Player.rage.current
+end
+
 function CatForm:ManaCost()
 	local cost = Ability.ManaCost(self)
 	if NaturalShapeshifter.known then
@@ -1407,6 +1420,14 @@ function Claw:EnergyCost()
 end
 Rake.EnergyCost = Claw.EnergyCost
 MangleCat.EnergyCost = Claw.EnergyCost
+
+function Lacerate:RageCost()
+	local cost = Ability.RageCost(self)
+	if ShreddingAttacks.known then
+		cost = cost - ShreddingAttacks.rank
+	end
+	return max(0, cost)
+end
 
 function Maul:RageCost()
 	local cost = Ability.RageCost(self)
@@ -1526,20 +1547,44 @@ APL.Buffs = function(self, remains)
 end
 
 APL.Bear = function(self)
+	self.ff_mine = max(FaerieFireFeral:Remains(true), FaerieFire:Remains(true))
+	self.ff_remains = self.ff_mine > 0 and self.ff_mine or max(FaerieFireFeral:Remains(), FaerieFire:Remains())
+	self.ff_mine = self.ff_mine > 0
+
+	if Player:TimeInCombat() == 0 then
+		if BearForm:Usable() and BearForm:ShapeshiftRageGain() > 0 then
+			UseCooldown(BearForm)
+		elseif Enrage:Usable() and Player.rage.current < 30 then
+			UseCooldown(Enrage)
+		end
+		if FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) then
+			return FaerieFireFeral
+		end
+	end
 	if Growl:Usable() and Player.threat < 3 then
 		UseCooldown(Growl)
+	elseif Maul:Usable() and (Player.rage.current >= 60 or (Lacerate.known and Player.rage.current >= 30 and Lacerate:Stack() >= 5 and Lacerate:Remains() > 5)) then
+		UseCooldown(Maul)
+	elseif Enrage:Usable() and Player.rage.current < 30 then
+		UseCooldown(Enrage)
 	end
 	if MangleBear:Usable() then
 		return MangleBear
 	end
+	if Lacerate:Usable() and Lacerate:Stack() >= 3 and Lacerate:Remains() < 5 then
+		return Lacerate
+	end
 	if Swipe:Usable() and Player.enemies >= 3 then
 		return Swipe
 	end
-	if Maul:Usable() and (Player.rage.current >= 60 or (Player.enemies < 3 and (not MangleBear.known or Player.rage.current >= 30))) then
-		UseCooldown(Maul)
+	if Lacerate:Usable() and Lacerate:Stack() < 5 then
+		return Lacerate
 	end
-	if FaerieFireFeral:Usable() and Target.timeToDie > 20 and FaerieFire:Down() and FaerieFireFeral:Down() then
+	if FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) then
 		return FaerieFireFeral
+	end
+	if Lacerate:Usable() and Player.rage.current >= 40 then
+		return Lacerate
 	end
 end
 
