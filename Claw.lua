@@ -1547,6 +1547,10 @@ APL.Cat = function(self)
 	self.mangle_mine = max(MangleCat:Remains(true), MangleBear:Remains(true))
 	self.mangle_remains = self.mangle_mine > 0 and self.mangle_mine or max(MangleCat:Remains(), MangleBear:Remains())
 	self.mangle_mine = self.mangle_mine > 0
+	self.ff_mine = max(FaerieFireFeral:Remains(true), FaerieFire:Remains(true))
+	self.ff_remains = self.ff_mine > 0 and self.ff_mine or max(FaerieFireFeral:Remains(), FaerieFire:Remains())
+	self.ff_mine = self.ff_mine > 0
+
 	if Prowl:Usable() then
 		UseCooldown(Prowl)
 	end
@@ -1580,14 +1584,17 @@ APL.Cat = function(self)
 		if MangleCat:ShapeshiftForEnergy() and CatForm:Usable() then
 			return CatForm
 		end
+		if FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) and not MangleCat:Usable() then
+			return FaerieFireFeral
+		end
 		return Pool(MangleCat)
-	end
-	if FaerieFireFeral:Usable() and Target.timeToDie > 30 and FaerieFire:Down() and FaerieFireFeral:Down() and Player:EnergyTimeToMax() > (Player.gcd * 2) then
-		return FaerieFireFeral
 	end
 	if Shred:Usable(0, true) then
 		if Shred:ShapeshiftForEnergy() and CatForm:Usable() then
 			return CatForm
+		end
+		if FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) and not Shred:Usable() then
+			return FaerieFireFeral
 		end
 		return Pool(Shred)
 	elseif MangleCat.known then
@@ -1601,6 +1608,9 @@ APL.Cat = function(self)
 			if MangleCat:ShapeshiftForEnergy() and CatForm:Usable() then
 				return CatForm
 			end
+			if FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) and not MangleCat:Usable() then
+				return FaerieFireFeral
+			end
 			return Pool(MangleCat)
 		end
 	else
@@ -1613,6 +1623,9 @@ APL.Cat = function(self)
 		if Claw:Usable(0, true) then
 			if Claw:ShapeshiftForEnergy() and CatForm:Usable() then
 				return CatForm
+			end
+			if FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) and not Claw:Usable() then
+				return FaerieFireFeral
 			end
 			return Pool(Claw)
 		end
