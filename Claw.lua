@@ -872,6 +872,9 @@ local Claw = Ability:Add({1082, 3029, 5201, 9849, 9850, 27000}, false, true)
 Claw.energy_cost = 45
 Claw.requires_cat = true
 Claw.can_clearcast = true
+local DemoralizingRoar = Ability:Add({99, 1735, 9490, 9747, 9898, 26998}, false, false)
+DemoralizingRoar.rage_cost = 10
+DemoralizingRoar.requires_bear = true
 local Enrage = Ability:Add({5229}, true, true)
 Enrage.cooldown_duration = 60
 Enrage.buff_duration = 10
@@ -965,7 +968,7 @@ local Clearcasting = Ability:Add({16870}, true, true)
 -- Racials
 
 -- Class Debuffs
-
+local DemoralizingShout = Ability:Add({1160, 6190, 11554, 11555, 11556, 25202, 25203})
 -- Trinket Effects
 
 -- End Abilities
@@ -1570,6 +1573,8 @@ APL.Bear = function(self)
 	end
 	if Growl:Usable() and Player.threat < 3 then
 		UseCooldown(Growl)
+	elseif DemoralizingRoar:Usable() and DemoralizingRoar:Remains() < 5 and (Player.enemies > 1 or Target.timeToDie > DemoralizingRoar:Remains()) and DemoralizingShout:Down() then
+		UseCooldown(DemoralizingRoar)
 	elseif Maul:Usable() and (Player.rage.current >= 60 or (Lacerate.known and Player.rage.current >= 30 and Lacerate:Stack() >= 5 and Lacerate:Remains() > 5)) then
 		UseCooldown(Maul)
 	elseif Enrage:Usable() and Player.rage.current < 30 then
