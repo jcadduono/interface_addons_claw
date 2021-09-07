@@ -100,6 +100,7 @@ local function InitOpts()
 		conserve_powershift = false,
 		mana_threshold_powershift = 20,
 		tick_padding_ms = 100,
+		front_mode = false,
 	})
 end
 
@@ -1448,6 +1449,9 @@ function Shred:EnergyCost()
 end
 
 function Shred:Usable(seconds, pool)
+	if Opt.front_mode then
+		return false
+	end
 	if Player.threat >= 3 and not Target:Stunned() then
 		return false
 	end
@@ -1465,6 +1469,9 @@ function Prowl:Usable()
 end
 
 function Ravage:Usable(seconds, pool)
+	if Opt.front_mode then
+		return false
+	end
 	if Prowl:Down() then
 		return false
 	end
@@ -1856,7 +1863,7 @@ end
 
 function UI:UpdateDisplay()
 	timer.display = 0
-	local dim, dim_cd, text_center
+	local dim, dim_cd, text_center, text_tr
 	if Opt.dimmer then
 		dim = not ((not Player.main) or
 		           (Player.main.spellId and IsUsableSpell(Player.main.spellId)) or
@@ -1879,6 +1886,9 @@ function UI:UpdateDisplay()
 	if Player.main == CatForm and Player.form == FORM.CAT and Player.energy.time_until_tick > 0 then
 		text_center = format('TICK\n%.1fs', Player.energy.time_until_tick)
 	end
+	if Opt.front_mode then
+		text_tr = 'F'
+	end
 	if Player.main and Player.main_freecast then
 		if not clawPanel.freeCastOverlayOn then
 			clawPanel.freeCastOverlayOn = true
@@ -1890,6 +1900,7 @@ function UI:UpdateDisplay()
 	end
 	clawPanel.dimmer:SetShown(dim)
 	clawPanel.text.center:SetText(text_center)
+	clawPanel.text.tr:SetText(text_tr)
 	clawCooldownPanel.dimmer:SetShown(dim_cd)
 	--clawPanel.text.bl:SetText(format('%.1fs', Target.timeToDie))
 end
@@ -2506,6 +2517,12 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		return Status('Powershift when next energy tick is at least', Opt.tick_padding_ms, 'ms away')
 	end
+	if startsWith(msg[1], 'fr') then
+		if msg[2] then
+			Opt.front_mode = msg[2] == 'on'
+		end
+		return Status('Front mode (unable to Shred/Ravage, displays F in top right)', Opt.front_mode)
+	end
 	if msg[1] == 'reset' then
 		clawPanel:ClearAllPoints()
 		clawPanel:SetPoint('CENTER', 0, -169)
@@ -2537,6 +2554,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'conserve |cFF00C000on|r/|cFFC00000off|r - conserve mana by only powershifting for 2+ energy ticks',
 		'mana |cFFFFD000[percent]|r -  powershift when mana is above a percent threshold (default is 20%)',
 		'pad |cFFFFD000[0-500]|r - powershift when next energy tick is at least X milliseconds away (default is 100ms)',
+		'front |cFF00C000on|r/|cFFC00000off|r - enable front mode (unable to Shred/Ravage)',
 		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
 		print('  ' .. SLASH_Claw1 .. ' ' .. cmd)
