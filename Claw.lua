@@ -1646,7 +1646,7 @@ APL.Cat = function(self)
 			return Pool(FerociousBite)
 		end
 	end
-	if MangleCat:Usable(0, true) and Target.timeToDie > self.mangle_remains and (self.mangle_remains == 0 or (self.mangle_mine and Rip:Remains() > self.mangle_remains) or (self.mangle_remains < Player:EnergyTimeToMax(Shred:EnergyCost()))) then
+	if MangleCat:Usable(0, true) and Target.timeToDie > self.mangle_remains and (self.mangle_remains == 0 or (self.mangle_mine and self.mangle_remains < 2 and Rip:Remains() > 2) or (self.mangle_remains < Player:EnergyTimeToMax(Shred:EnergyCost()))) then
 		if MangleCat:ShapeshiftForEnergy() and CatForm:Usable() then
 			return CatForm
 		end
