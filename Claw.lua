@@ -1037,6 +1037,7 @@ end
 
 -- Inventory Items
 local WolfsheadHelm = InventoryItem:Add(8345)
+local StaffOfNaturalFury = InventoryItem:Add(31334)
 -- Equipment
 local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
@@ -1404,10 +1405,13 @@ end
 
 function CatForm:ManaCost()
 	local cost = Ability.ManaCost(self)
-	if NaturalShapeshifter.known then
-		cost = cost - floor(cost * 0.10 * NaturalShapeshifter.rank)
+	if StaffOfNaturalFury:Equipped() then
+		cost = cost - 200
 	end
-	return cost
+	if NaturalShapeshifter.known then
+		cost = cost - (cost * 0.10 * NaturalShapeshifter.rank)
+	end
+	return floor(cost + 0.5)
 end
 BearForm.ManaCost = CatForm.ManaCost
 
