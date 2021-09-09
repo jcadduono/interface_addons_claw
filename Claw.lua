@@ -1627,26 +1627,38 @@ APL.Cat = function(self)
 		return Pool(Ravage)
 	end
 	if Player.combo_points >= ((PrimalFury.known or Target.timeToDie < 2) and 4 or 5) then
-		if Rip:Usable(0, true) and Target.timeToDie > (Rip:Remains() + (Rip:TickTime() * (self.mangle_remains > 0 and 2 or 3))) then
-			if Rip:Up() then
-				if Rip:Remains() < Player:EnergyTimeToMax() and (not MangleCat.known or (not self.mangle_mine and self.mangle_remains > 0) or self.mangle_remains > Rip:Remains()) then
-					return WaitForDrop(Rip)
+		return self:Cat_Finisher()
+	end
+	return self:Cat_Generator()
+end
+
+APL.Cat_Finisher = function(self)
+	if Rip:Usable(0, true) and Target.timeToDie > (Rip:Remains() + (Rip:TickTime() * (self.mangle_remains > 0 and 2 or 3))) then
+		if Rip:Up() then
+			if Rip:Remains() > Player:EnergyTimeToMax() then
+				if Player.combo_points < 5 then
+					return self:Cat_Generator()
 				end
 			else
-				if Rip:ShapeshiftForEnergy() and CatForm:Usable() then
-					return CatForm
-				end
-				return Pool(Rip)
+				return WaitForDrop(Rip)
 			end
-		end
-		if FerociousBite:Usable(0, true) then
-			if FerociousBite:ShapeshiftForEnergy() and CatForm:Usable() and Target.timeToDie > 1.8 then
+		else
+			if Rip:ShapeshiftForEnergy() and CatForm:Usable() then
 				return CatForm
 			end
-			return Pool(FerociousBite)
+			return Pool(Rip)
 		end
 	end
-	if MangleCat:Usable(0, true) and Target.timeToDie > self.mangle_remains and (self.mangle_remains == 0 or (self.mangle_mine and self.mangle_remains < 2 and Rip:Remains() > 2) or (self.mangle_remains < Player:EnergyTimeToMax(Shred:EnergyCost()))) then
+	if FerociousBite:Usable(0, true) then
+		if FerociousBite:ShapeshiftForEnergy() and CatForm:Usable() and Target.timeToDie > 1.8 then
+			return CatForm
+		end
+		return Pool(FerociousBite)
+	end
+end
+
+APL.Cat_Generator = function(self)
+	if MangleCat:Usable(0, true) and Target.timeToDie > self.mangle_remains and self.mangle_remains <= Player:EnergyTimeToMax(Shred:EnergyCost()) then
 		if MangleCat:ShapeshiftForEnergy() and CatForm:Usable() then
 			return CatForm
 		end
