@@ -1658,7 +1658,7 @@ APL.Cat_Finisher = function(self)
 end
 
 APL.Cat_Generator = function(self)
-	if MangleCat:Usable(0, true) and Target.timeToDie > self.mangle_remains and self.mangle_remains <= Player:EnergyTimeToMax(Shred:EnergyCost()) then
+	if MangleCat:Usable(0, true) and Target.timeToDie > self.mangle_remains and (self.mangle_remains == 0 or (self.mangle_mine and self.mangle_remains <= Player:EnergyTimeToMax(Shred:EnergyCost()))) then
 		if MangleCat:ShapeshiftForEnergy() and CatForm:Usable() then
 			return CatForm
 		end
