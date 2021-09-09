@@ -1635,11 +1635,10 @@ end
 APL.Cat_Finisher = function(self)
 	if Rip:Usable(0, true) and Target.timeToDie > (Rip:Remains() + (Rip:TickTime() * (self.mangle_remains > 0 and 2 or 3))) then
 		if Rip:Up() then
-			if Rip:Remains() > Player:EnergyTimeToMax() then
-				if Player.combo_points < 5 then
-					return self:Cat_Generator()
-				end
-			else
+			if Player.combo_points < 5 and Rip:Remains() > Player:EnergyTimeToMax(80) then
+				return self:Cat_Generator()
+			end
+			if Rip:Remains() < Player:EnergyTimeToMax() then
 				return WaitForDrop(Rip)
 			end
 		else
