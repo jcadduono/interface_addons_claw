@@ -1607,7 +1607,7 @@ APL.Bear = function(self)
 	if Swipe:Usable() and Player.rage.current >= 50 and Player.enemies >= 2 then
 		return Swipe
 	end
-	if FaerieFireFeral:Usable() and self.ff_mine then
+	if FaerieFireFeral:Usable() and self.ff_mine and Player.group_size > 1 then
 		return FaerieFireFeral
 	end
 	if Swipe:Usable() and Player.rage.current >= 50 then
