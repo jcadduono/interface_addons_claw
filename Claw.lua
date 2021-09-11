@@ -1593,26 +1593,26 @@ APL.Bear = function(self)
 	if MangleBear:Usable(0.5, true) then
 		return MangleBear
 	end
-	if Lacerate:Usable(0, true) and Lacerate:Stack() >= 3 and Lacerate:Remains() < 5 then
+	if Lacerate:Usable(0, true) and Lacerate:Stack() >= 3 and Lacerate:Remains() < 5 and Target.timeToDie > Lacerate:Remains() then
 		return Lacerate
 	end
-	if Swipe:Usable() and Player.enemies >= 3 and (Player.rage.current >= 30 or not MangleBear:Ready(3)) then
+	if Swipe:Usable() and Player.enemies >= 3 and (Player.rage.current >= (15 + Swipe:RageCost()) or not MangleBear:Ready(3)) then
 		return Swipe
 	end
-	if Lacerate:Usable() and Lacerate:Stack() < 5 then
+	if Lacerate:Usable() and Lacerate:Stack() < 5 and Target.timeToDie > (Lacerate:TickTime() * 3) then
 		return Lacerate
 	end
 	if FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) then
 		return FaerieFireFeral
 	end
-	if Swipe:Usable() and Player.rage.current >= (Player.enemies >= 2 and 30 or 50) then
+	if Swipe:Usable() and Player.rage.current >= (15 + Swipe:RageCost()) then
 		return Swipe
+	end
+	if Lacerate:Usable() and Player.rage.current >= (15 + Lacerate:RageCost()) and Target.timeToDie > (Lacerate:TickTime() * 2) then
+		return Lacerate
 	end
 	if FaerieFireFeral:Usable() and self.ff_mine and Player.group_size > 1 then
 		return FaerieFireFeral
-	end
-	if Lacerate:Usable() and Player.rage.current >= 50 then
-		return Lacerate
 	end
 end
 
@@ -1664,7 +1664,7 @@ APL.Cat_Finisher = function(self)
 end
 
 APL.Cat_Generator = function(self)
-	if MangleCat:Usable(0, true) and Target.timeToDie > self.mangle_remains and (self.mangle_remains == 0 or (self.mangle_mine and self.mangle_remains <= Player:EnergyTimeToMax(Shred:EnergyCost()))) then
+	if MangleCat:Usable(0, true) and Target.timeToDie > self.mangle_remains and (self.mangle_remains == 0 or (self.mangle_mine and (self.mangle_remains <= Player:EnergyTimeToMax(Shred:EnergyCost()) or (Player.combo_points >= 4 and self.mangle_remains <= (Player.gcd * 2))))) then
 		if MangleCat:ShapeshiftForEnergy() and CatForm:Usable() then
 			return CatForm
 		end
