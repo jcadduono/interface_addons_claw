@@ -1580,19 +1580,20 @@ APL.Bear = function(self)
 			return FaerieFireFeral
 		end
 	end
+	if DemoralizingRoar:Usable() and DemoralizingRoar:Remains() < 5 and (Player.enemies > 1 or Target.timeToDie > DemoralizingRoar:Remains()) and DemoralizingShout:Down() then
+		UseExtra(DemoralizingRoar, true)
+	end
 	if Growl:Usable() and Player.threat < 3 then
 		UseCooldown(Growl)
-	elseif DemoralizingRoar:Usable() and DemoralizingRoar:Remains() < 5 and (Player.enemies > 1 or Target.timeToDie > DemoralizingRoar:Remains()) and DemoralizingShout:Down() then
-		UseCooldown(DemoralizingRoar)
 	elseif Maul:Usable() and Player.rage.current >= 50 then
 		UseCooldown(Maul)
-	elseif Enrage:Usable() and Player.rage.current < 30 then
+	elseif Enrage:Usable() and Player.rage.current < 15 then
 		UseCooldown(Enrage)
 	end
-	if MangleBear:Usable(0.5) then
+	if MangleBear:Usable(0.5, true) then
 		return MangleBear
 	end
-	if Lacerate:Usable() and Lacerate:Stack() >= 3 and Lacerate:Remains() < 5 then
+	if Lacerate:Usable(0, true) and Lacerate:Stack() >= 3 and Lacerate:Remains() < 5 then
 		return Lacerate
 	end
 	if Swipe:Usable() and Player.enemies >= 3 and (Player.rage.current >= 30 or not MangleBear:Ready(3)) then
@@ -1604,14 +1605,11 @@ APL.Bear = function(self)
 	if FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) then
 		return FaerieFireFeral
 	end
-	if Swipe:Usable() and Player.rage.current >= 50 and Player.enemies >= 2 then
+	if Swipe:Usable() and Player.rage.current >= (Player.enemies >= 2 and 30 or 50) then
 		return Swipe
 	end
 	if FaerieFireFeral:Usable() and self.ff_mine and Player.group_size > 1 then
 		return FaerieFireFeral
-	end
-	if Swipe:Usable() and Player.rage.current >= 50 then
-		return Swipe
 	end
 	if Lacerate:Usable() and Player.rage.current >= 50 then
 		return Lacerate
