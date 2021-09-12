@@ -1945,7 +1945,7 @@ function UI:UpdateCombat()
 	Player.main = APL:Main()
 	if Player.main then
 		clawPanel.icon:SetTexture(Player.main.icon)
-		Player.main_freecast = Player.main.spellId and Player.main.energy_cost > 0 and Player.main:EnergyCost() == 0
+		Player.main_freecast = Player.main.spellId and ((Player.form == FORM.CAT and Player.main.energy_cost > 0 and Player.main:EnergyCost() == 0) or (Player.form == FORM.BEAR and Player.main.rage_cost > 0 and Player.main:RageCost() == 0))
 	end
 	if Player.cd then
 		clawCooldownPanel.icon:SetTexture(Player.cd.icon)
