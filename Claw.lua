@@ -1550,7 +1550,10 @@ APL.Main = function(self)
 	elseif Player.form == FORM.CAT then
 		return self:Cat()
 	end
-	return CatForm
+	if WolfsheadHelm:Equipped() then
+		return CatForm
+	end
+	return BearForm
 end
 
 APL.Buffs = function(self, remains)
