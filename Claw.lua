@@ -1626,6 +1626,7 @@ APL.Cat = function(self)
 	self.ff_mine = max(FaerieFireFeral:Remains(true), FaerieFire:Remains(true))
 	self.ff_remains = self.ff_mine > 0 and self.ff_mine or max(FaerieFireFeral:Remains(), FaerieFire:Remains())
 	self.ff_mine = self.ff_mine > 0
+	self.rip_remains = Rip:Remains()
 
 	if Prowl:Usable() then
 		UseCooldown(Prowl)
@@ -1643,14 +1644,18 @@ APL.Cat = function(self)
 end
 
 APL.Cat_Finisher = function(self)
-	if Rip:Usable(0, true) and Target.timeToDie > (Rip:Remains() + (Rip:TickTime() * (self.mangle_remains > 0 and 2 or 3))) then
+	if FerociousBite:Usable(0, true) and self.rip_remains > (6 + Player:EnergyTimeToMax(FerociousBite:EnergyCost())) then
+		if FerociousBite:ShapeshiftForEnergy() and CatForm:Usable() and Target.timeToDie > 1.8 then
+			return CatForm
+		end
+		return Pool(FerociousBite)
+	end
+	if Rip:Usable(0, true) and Target.timeToDie > (self.rip_remains + (Rip:TickTime() * (self.mangle_remains > 0 and 2 or 3))) then
 		if Rip:Up() then
-			if Player.combo_points < 5 and (Clearcasting:Up() or Rip:Remains() > Player:EnergyTimeToMax(72)) then
+			if Clearcasting:Up() or self.rip_remains > Player:EnergyTimeToMax(72) then
 				return self:Cat_Generator()
 			end
-			if Rip:Remains() < Player:EnergyTimeToMax() then
-				return WaitForDrop(Rip)
-			end
+			return WaitForDrop(Rip)
 		else
 			if Rip:ShapeshiftForEnergy() and CatForm:Usable() then
 				return CatForm
