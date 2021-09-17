@@ -23,7 +23,7 @@ local UnitHealth = _G.UnitHealth
 local UnitHealthMax = _G.UnitHealthMax
 local UnitPower = _G.UnitPower
 local UnitPowerMax = _G.UnitPowerMax
-local UnitThreatSituation = _G.UnitThreatSituation
+local UnitDetailedThreatSituation = _G.UnitDetailedThreatSituation
 -- end copy global functions
 
 -- useful functions
@@ -101,6 +101,7 @@ local function InitOpts()
 		mana_threshold_powershift = 20,
 		tick_padding_ms = 100,
 		front_mode = false,
+		cower_pct = 90,
 	})
 end
 
@@ -173,6 +174,7 @@ local Player = {
 	moving = false,
 	movement_speed = 100,
 	threat = 0,
+	threat_pct = 0,
 	last_swing_taken = 0,
 	last_swing_taken_physical = 0,
 	previous_gcd = {},-- list of previous GCD abilities
@@ -874,6 +876,11 @@ local Claw = Ability:Add({1082, 3029, 5201, 9849, 9850, 27000}, false, true)
 Claw.energy_cost = 45
 Claw.requires_cat = true
 Claw.can_clearcast = true
+local Cower = Ability:Add({8998, 9000, 9892, 31709, 27004}, false, true)
+Cower.cooldown_duration = 10
+Cower.energy_cost = 20
+Cower.requires_cat = true
+Cower.can_clearcast = true
 local DemoralizingRoar = Ability:Add({99, 1735, 9490, 9747, 9898, 26998}, false, false)
 DemoralizingRoar.rage_cost = 10
 DemoralizingRoar.requires_bear = true
@@ -1203,7 +1210,7 @@ function Player:UpdateAbilities()
 end
 
 function Player:Update()
-	local _, start, duration, remains, spellId, speed, max_speed
+	local _, start, duration, remains, spellId, speed, max_speed, threat, threat_pct
 	self.ctime = GetTime()
 	self.time = self.ctime - self.time_diff
 	self.main =  nil
@@ -1244,7 +1251,11 @@ function Player:Update()
 	speed, max_speed = GetUnitSpeed('player')
 	self.moving = speed ~= 0
 	self.movement_speed = max_speed / 7 * 100
-	self.threat = UnitThreatSituation('player', 'target') or 0
+	_, threat, threat_pct = UnitDetailedThreatSituation('player', 'target')
+	if threat then
+		self.threat = threat
+		self.threat_pct = threat_pct
+	end
 
 	trackAuras:Purge()
 	if Opt.auto_aoe then
@@ -1630,6 +1641,9 @@ APL.Cat = function(self)
 
 	if Prowl:Usable() then
 		UseCooldown(Prowl)
+	end
+	if Target.boss and Player.threat_pct >= Opt.cower_pct and Cower:Usable(0, true) then
+		UseCooldown(Cower)
 	end
 	if Pounce:Usable(0, true) and (Player.instance == 'none' or Player.group_size == 1) then
 		return Pool(Pounce, Shred:EnergyCost())
@@ -2563,6 +2577,12 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		return Status('Front mode (unable to Shred/Ravage, displays F in top right)', Opt.front_mode)
 	end
+	if startsWith(msg[1], 'cow') then
+		if msg[2] then
+			Opt.cower_pct = max(0, min(100, tonumber(msg[2]) or 90))
+		end
+		return Status('Recommend Cower when threat reaches', Opt.cower_pct, '%')
+	end
 	if msg[1] == 'reset' then
 		clawPanel:ClearAllPoints()
 		clawPanel:SetPoint('CENTER', 0, -169)
@@ -2595,6 +2615,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'mana |cFFFFD000[percent]|r -  powershift when mana is above a percent threshold (default is 20%)',
 		'pad |cFFFFD000[0-500]|r - powershift when next energy tick is at least X milliseconds away (default is 100ms)',
 		'front |cFF00C000on|r/|cFFC00000off|r - enable front mode (unable to Shred/Ravage)',
+		'cower |cFFFFD000[percent]|r -  recommend Cower when above a percent threat threshold (default is 90%)',
 		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
 		print('  ' .. SLASH_Claw1 .. ' ' .. cmd)
