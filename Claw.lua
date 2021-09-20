@@ -1252,10 +1252,8 @@ function Player:Update()
 	self.moving = speed ~= 0
 	self.movement_speed = max_speed / 7 * 100
 	_, threat, threat_pct = UnitDetailedThreatSituation('player', 'target')
-	if threat then
-		self.threat = threat
-		self.threat_pct = threat_pct
-	end
+	self.threat = threat or 0
+	self.threat_pct = threat_pct or 0
 
 	trackAuras:Purge()
 	if Opt.auto_aoe then
