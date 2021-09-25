@@ -1602,7 +1602,7 @@ APL.Bear = function(self)
 	elseif Enrage:Usable() and Player.rage.current < 15 then
 		UseCooldown(Enrage)
 	end
-	if MangleBear:Usable(0.5, true) then
+	if MangleBear:Usable((Player.enemies >= 3 and 0 or 0.5), true) then
 		return MangleBear
 	end
 	if Lacerate:Usable(0, true) and Lacerate:Stack() >= 3 and Lacerate:Remains() < 5 and Target.timeToDie > Lacerate:Remains() then
