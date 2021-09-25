@@ -905,6 +905,7 @@ local Maul = Ability:Add({6807, 6808, 6809, 8972, 9745, 9880, 9881, 26996}, fals
 Maul.rage_cost = 15
 Maul.requires_bear = true
 Maul.can_clearcast = true
+Maul.swing_queue = true
 local Prowl = Ability:Add({5215, 6783, 9913}, true, true)
 Prowl.cooldown_duration = 10
 Prowl.requires_cat = true
@@ -1950,6 +1951,16 @@ function UI:UpdateDisplay()
 		clawPanel.freeCastOverlayOn = false
 		clawPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
 	end
+	if Player.cd and Player.cd.queue_time then
+		if not clawCooldownPanel.swingQueueOverlayOn then
+			clawCooldownPanel.swingQueueOverlayOn = true
+			clawCooldownPanel.border:SetTexture(ADDON_PATH .. 'swingqueue.blp')
+		end
+	elseif clawCooldownPanel.swingQueueOverlayOn then
+		clawCooldownPanel.swingQueueOverlayOn = false
+		clawCooldownPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
+	end
+
 	clawPanel.dimmer:SetShown(dim)
 	clawPanel.text.center:SetText(text_center)
 	clawPanel.text.tr:SetText(text_tr)
@@ -2236,15 +2247,47 @@ function events:UNIT_SPELLCAST_STOP(srcName)
 	end
 end
 
+function events:UNIT_SPELLCAST_SENT(srcName, dstName, castGUID, spellId)
+	if srcName ~= 'player' or not spellId or castGUID:sub(6, 6) ~= '3' then
+		return
+	end
+	local ability = abilities.bySpellId[spellId]
+	if not ability then
+		return
+	end
+	if ability.swing_queue then
+		ability.queue_time = GetTime()
+	end
+end
+
+function events:UNIT_SPELLCAST_FAILED(srcName, castGUID, spellId)
+	if srcName ~= 'player' or not spellId or castGUID:sub(6, 6) ~= '3' then
+		return
+	end
+	local ability = abilities.bySpellId[spellId]
+	if not ability then
+		return
+	end
+	if ability.swing_queue then
+		ability.queue_time = nil
+	end
+end
+events.UNIT_SPELLCAST_FAILED_QUIET = events.UNIT_SPELLCAST_FAILED
+
 function events:UNIT_SPELLCAST_SUCCEEDED(srcName, castGUID, spellId)
-	if srcName ~= 'player' or castGUID:sub(6, 6) ~= '3' then
+	if srcName ~= 'player' or not spellId or castGUID:sub(6, 6) ~= '3' then
 		return
 	end
-	local ability = spellId and abilities.bySpellId[spellId]
-	if not ability or not ability.traveling then
+	local ability = abilities.bySpellId[spellId]
+	if not ability then
 		return
 	end
-	ability.next_castGUID = castGUID
+	if ability.traveling then
+		ability.next_castGUID = castGUID
+	end
+	if ability.swing_queue then
+		ability.queue_time = nil
+	end
 end
 
 function events:UNIT_POWER_FREQUENT(srcName, powerType)
