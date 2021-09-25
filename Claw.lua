@@ -1663,8 +1663,8 @@ APL.Cat_Finisher = function(self)
 		return Pool(FerociousBite)
 	end
 	if Rip:Usable(0, true) and Target.timeToDie > (self.rip_remains + (Rip:TickTime() * (self.mangle_remains > 0 and 2 or 3))) then
-		if Rip:Up() then
-			if Clearcasting:Up() or self.rip_remains > Player:EnergyTimeToMax(72) then
+		if self.rip_remains > 0 then
+			if Clearcasting:Up() or self.rip_remains > (Player.gcd * 2) or Player:EnergyTimeToMax(72) < Player.gcd then
 				return self:Cat_Generator()
 			end
 			return WaitForDrop(Rip)
