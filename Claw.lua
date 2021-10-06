@@ -101,6 +101,7 @@ local function InitOpts()
 		mana_threshold_powershift = 20,
 		tick_padding_ms = 100,
 		front_mode = false,
+		faerie_fire = true,
 		cower_pct = 90,
 	})
 end
@@ -1589,7 +1590,7 @@ APL.Bear = function(self)
 		elseif Enrage:Usable() and Player.rage.current < 30 then
 			UseCooldown(Enrage)
 		end
-		if FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) then
+		if Opt.faerie_fire and FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) then
 			return FaerieFireFeral
 		end
 	end
@@ -1615,7 +1616,7 @@ APL.Bear = function(self)
 	if Lacerate:Usable() and Lacerate:Stack() < 5 and Target.timeToDie > (Lacerate:TickTime() * 3) then
 		return Lacerate
 	end
-	if FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) then
+	if Opt.faerie_fire and FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) then
 		return FaerieFireFeral
 	end
 	if Swipe:Usable() and Player.rage.current >= (15 + Swipe:RageCost()) then
@@ -1624,7 +1625,7 @@ APL.Bear = function(self)
 	if Lacerate:Usable() and Player.rage.current >= (15 + Lacerate:RageCost()) and Target.timeToDie > (Lacerate:TickTime() * 2) then
 		return Lacerate
 	end
-	if FaerieFireFeral:Usable() and self.ff_mine and Player.group_size > 1 then
+	if Opt.faerie_fire and FaerieFireFeral:Usable() and self.ff_mine and Player.group_size > 1 then
 		return FaerieFireFeral
 	end
 end
@@ -1689,7 +1690,7 @@ APL.Cat_Generator = function(self)
 		if MangleCat:ShapeshiftForEnergy() and CatForm:Usable() then
 			return CatForm
 		end
-		if FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) and not MangleCat:Usable() then
+		if Opt.faerie_fire and FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) and not MangleCat:Usable() then
 			return FaerieFireFeral
 		end
 		return Pool(MangleCat)
@@ -1698,7 +1699,7 @@ APL.Cat_Generator = function(self)
 		if Shred:ShapeshiftForEnergy() and CatForm:Usable() then
 			return CatForm
 		end
-		if FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) and not Shred:Usable() then
+		if Opt.faerie_fire and FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) and not Shred:Usable() then
 			return FaerieFireFeral
 		end
 		return Pool(Shred)
@@ -1713,7 +1714,7 @@ APL.Cat_Generator = function(self)
 			if MangleCat:ShapeshiftForEnergy() and CatForm:Usable() then
 				return CatForm
 			end
-			if FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) and not MangleCat:Usable() then
+			if Opt.faerie_fire and FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) and not MangleCat:Usable() then
 				return FaerieFireFeral
 			end
 			return Pool(MangleCat)
@@ -1729,7 +1730,7 @@ APL.Cat_Generator = function(self)
 			if Claw:ShapeshiftForEnergy() and CatForm:Usable() then
 				return CatForm
 			end
-			if FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) and not Claw:Usable() then
+			if Opt.faerie_fire and FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) and not Claw:Usable() then
 				return FaerieFireFeral
 			end
 			return Pool(Claw)
@@ -2618,6 +2619,12 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		return Status('Front mode (unable to Shred/Ravage, displays F in top right)', Opt.front_mode)
 	end
+	if startsWith(msg[1], 'fa') then
+		if msg[2] then
+			Opt.faerie_fire = msg[2] == 'on'
+		end
+		return Status('Use Faerie Fire (turn off when playing with Balance druid)', Opt.faerie_fire)
+	end
 	if startsWith(msg[1], 'cow') then
 		if msg[2] then
 			Opt.cower_pct = max(0, min(100, tonumber(msg[2]) or 90))
@@ -2656,6 +2663,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'mana |cFFFFD000[percent]|r -  powershift when mana is above a percent threshold (default is 20%)',
 		'pad |cFFFFD000[0-500]|r - powershift when next energy tick is at least X milliseconds away (default is 100ms)',
 		'front |cFF00C000on|r/|cFFC00000off|r - enable front mode (unable to Shred/Ravage)',
+		'faerie |cFF00C000on|r/|cFFC00000off|r - use Faerie Fire (turn off when playing with Balance druid)',
 		'cower |cFFFFD000[percent]|r -  recommend Cower when above a percent threat threshold (default is 90%)',
 		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
