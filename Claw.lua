@@ -18,6 +18,7 @@ local GetTime = _G.GetTime
 local GetUnitSpeed = _G.GetUnitSpeed
 local UnitCastingInfo = _G.UnitCastingInfo
 local UnitChannelInfo = _G.UnitChannelInfo
+local UnitAttackPower = _G.UnitAttackPower
 local UnitAura = _G.UnitAura
 local UnitHealth = _G.UnitHealth
 local UnitHealthMax = _G.UnitHealthMax
@@ -103,6 +104,7 @@ local function InitOpts()
 		front_mode = false,
 		faerie_fire = true,
 		cower_pct = 90,
+		swipe_st_ap = 2700,
 	})
 end
 
@@ -176,6 +178,7 @@ local Player = {
 	movement_speed = 100,
 	threat = 0,
 	threat_pct = 0,
+	attack_power = 0,
 	last_swing_taken = 0,
 	last_swing_taken_physical = 0,
 	previous_gcd = {},-- list of previous GCD abilities
@@ -1212,7 +1215,7 @@ function Player:UpdateAbilities()
 end
 
 function Player:Update()
-	local _, start, duration, remains, spellId, speed, max_speed, threat, threat_pct
+	local _, start, duration, remains, spellId, speed, max_speed, threat, threat_pct, ap_base, ap_neg, ap_pos
 	self.ctime = GetTime()
 	self.time = self.ctime - self.time_diff
 	self.main =  nil
@@ -1256,6 +1259,8 @@ function Player:Update()
 	_, threat, threat_pct = UnitDetailedThreatSituation('player', 'target')
 	self.threat = threat or 0
 	self.threat_pct = threat_pct or 0
+	ap_base, ap_pos, ap_neg = UnitAttackPower('player')
+	self.attack_power = ap_base + ap_pos + ap_neg
 
 	trackAuras:Purge()
 	if Opt.auto_aoe then
@@ -1607,7 +1612,7 @@ APL.Bear = function(self)
 	if MangleBear:Usable((Player.enemies >= 3 and 0 or 0.5), true) then
 		return MangleBear
 	end
-	if Lacerate:Usable(0, true) and Lacerate:Stack() >= 3 and Lacerate:Remains() < 5 and Target.timeToDie > Lacerate:Remains() then
+	if Lacerate:Usable(0, true) and Lacerate:Stack() >= 3 and Lacerate:Remains() < 6 and Target.timeToDie > Lacerate:Remains() then
 		return Lacerate
 	end
 	if Swipe:Usable() and Player.enemies >= 3 and (Player.rage.current >= (15 + Swipe:RageCost()) or not MangleBear:Ready(3)) then
@@ -1620,10 +1625,18 @@ APL.Bear = function(self)
 		return FaerieFireFeral
 	end
 	if Swipe:Usable() and Player.rage.current >= (15 + Swipe:RageCost()) then
-		return Swipe
+		if Player.enemies >= 2 or Player.group_size == 1 then
+			return Swipe
+		end
+		if Player.attack_power >= Opt.swipe_st_ap then
+			return Swipe
+		end
 	end
-	if Lacerate:Usable() and Player.rage.current >= (15 + Lacerate:RageCost()) and Target.timeToDie > (Lacerate:TickTime() * 2) then
+	if Lacerate:Usable() and Player.rage.current >= (15 + Lacerate:RageCost()) and (Player.group_size > 1 or Target.timeToDie > (Lacerate:TickTime() * 2)) then
 		return Lacerate
+	end
+	if Swipe:Usable() and Player.rage.current >= (15 + Swipe:RageCost()) then
+		return Swipe
 	end
 	if Opt.faerie_fire and FaerieFireFeral:Usable() and self.ff_mine and Player.group_size > 1 then
 		return FaerieFireFeral
@@ -2631,6 +2644,12 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		return Status('Recommend Cower when threat reaches', Opt.cower_pct, '%')
 	end
+	if startsWith(msg[1], 'swap') then
+		if msg[2] then
+			Opt.swipe_st_ap = max(0, min(10000, tonumber(msg[2]) or 2700))
+		end
+		return Status('Recommend Swipe in single target above when above', Opt.swipe_st_ap, 'attack power')
+	end
 	if msg[1] == 'reset' then
 		clawPanel:ClearAllPoints()
 		clawPanel:SetPoint('CENTER', 0, -169)
@@ -2665,6 +2684,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'front |cFF00C000on|r/|cFFC00000off|r - enable front mode (unable to Shred/Ravage)',
 		'faerie |cFF00C000on|r/|cFFC00000off|r - use Faerie Fire (turn off when playing with Balance druid)',
 		'cower |cFFFFD000[percent]|r -  recommend Cower when above a percent threat threshold (default is 90%)',
+		'swap |cFFFFD000[attack power]|r -  recommend Swipe in single target above X attack power (default is 2700)',
 		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
 		print('  ' .. SLASH_Claw1 .. ' ' .. cmd)
