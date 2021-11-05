@@ -1401,20 +1401,20 @@ function Ability:ManaCost()
 	return self.mana_cost
 end
 
-function Ability:ShapeshiftForEnergy()
+function Ability:ShapeshiftForEnergy(energy)
 	if Target.timeToDie < 2 or Player:ManaPct() < Opt.mana_threshold_powershift then
 		return false -- don't powershift if the target is about to die or we are low on mana
 	end
 	if CatForm:ShapeshiftEnergyGain() < Player.energy.per_tick * (Opt.conserve_powershift and 2 or 1) then
 		return false -- if conserving mana, only powershift for at least 2 ticks of energy gain
 	end
-	if self:EnergyCost() - Player.energy.current > Player.energy.per_tick * 2 then
+	if (energy or self:EnergyCost()) - Player.energy.current > Player.energy.per_tick * 2 then
 		return true -- don't care about clipping energy ticks if it's still worth powershifting after the next tick
 	end
 	if Player.execute_remains + (Opt.tick_padding_ms / 1000) >= Player.energy.time_until_tick then
 		return false -- prevent clipping an energy tick
 	end
-	if self:EnergyCost() - Player.energy.current > Player.energy.per_tick then
+	if (energy or self:EnergyCost()) - Player.energy.current > Player.energy.per_tick then
 		return true -- powershift if we will have to wait 2 or more ticks to use the ability
 	end
 	return false
@@ -1672,13 +1672,13 @@ end
 
 APL.Cat_Finisher = function(self)
 	if FerociousBite:Usable(0, true) and self.rip_remains > (6 + Player:EnergyTimeToMax(FerociousBite:EnergyCost())) then
-		if FerociousBite:ShapeshiftForEnergy() and CatForm:Usable() and Target.timeToDie > 1.8 then
+		if FerociousBite:EnergyCost() > Player.energy.current and CatForm:Usable() and Target.timeToDie > 1.8 then
 			return CatForm
 		end
 		return Pool(FerociousBite)
 	end
 	if Rip:Usable(0, true) and Target.timeToDie > (self.rip_remains + (Rip:TickTime() * (self.mangle_remains > 0 and 2 or 3))) then
-		if self.rip_remains > 2.5 or (self.rip_remains > 0 and (Clearcasting:Up() or Player:EnergyTimeToMax(72) < (self.rip_remains + 0.5))) then
+		if self.rip_remains > 1.5 or (self.rip_remains > 0 and (Clearcasting:Up() or Player:EnergyTimeToMax(72) < (self.rip_remains + 0.5))) then
 			return self:Cat_Generator()
 		end
 		if Rip:ShapeshiftForEnergy() and CatForm:Usable() then
