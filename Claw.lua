@@ -105,6 +105,7 @@ local function InitOpts()
 		faerie_fire = true,
 		cower_pct = 90,
 		swipe_st_ap = 2700,
+		swipe_st_threat = 10000,
 	})
 end
 
@@ -178,6 +179,7 @@ local Player = {
 	movement_speed = 100,
 	threat = 0,
 	threat_pct = 0,
+	thread_lead = 0,
 	attack_power = 0,
 	last_swing_taken = 0,
 	last_swing_taken_physical = 0,
@@ -1214,8 +1216,22 @@ function Player:UpdateAbilities()
 	end
 end
 
+function Player:UpdateThreat()
+	local _, threat, threat_pct
+	_, threat, threat_pct = UnitDetailedThreatSituation('player', 'target')
+	self.threat = threat or 0
+	self.threat_pct = threat_pct or 0
+	self.threat_lead = 0
+	if self.threat >= 3 and DETAILS_PLUGIN_TINY_THREAT then
+		local threat_table = DETAILS_PLUGIN_TINY_THREAT.player_list_indexes
+		if threat_table and threat_table[1] and threat_table[2] and threat_table[1][1] == Player.name then
+			self.threat_lead = max(0, threat_table[1][6] - threat_table[2][6])
+		end
+	end
+end
+
 function Player:Update()
-	local _, start, duration, remains, spellId, speed, max_speed, threat, threat_pct, ap_base, ap_neg, ap_pos
+	local _, start, duration, remains, spellId, speed, max_speed, ap_base, ap_neg, ap_pos
 	self.ctime = GetTime()
 	self.time = self.ctime - self.time_diff
 	self.main =  nil
@@ -1256,11 +1272,9 @@ function Player:Update()
 	speed, max_speed = GetUnitSpeed('player')
 	self.moving = speed ~= 0
 	self.movement_speed = max_speed / 7 * 100
-	_, threat, threat_pct = UnitDetailedThreatSituation('player', 'target')
-	self.threat = threat or 0
-	self.threat_pct = threat_pct or 0
 	ap_base, ap_pos, ap_neg = UnitAttackPower('player')
 	self.attack_power = ap_base + ap_pos + ap_neg
+	self:UpdateThreat()
 
 	trackAuras:Purge()
 	if Opt.auto_aoe then
@@ -1278,6 +1292,7 @@ function Player:Init()
 	end
 	clawPreviousPanel.ability = nil
 	Player.guid = UnitGUID('player')
+	Player.name = UnitName('player')
 	Player.level = UnitLevel('player')
 	_, Player.instance = IsInInstance()
 	Player:SetTargetMode(1)
@@ -1628,7 +1643,10 @@ APL.Bear = function(self)
 		if Player.enemies >= 2 or Player.group_size == 1 then
 			return Swipe
 		end
-		if Player.attack_power >= Opt.swipe_st_ap then
+		if Opt.swipe_st_ap > 0 and Player.attack_power >= Opt.swipe_st_ap then
+			return Swipe
+		end
+		if Opt.swipe_st_threat > 0 and Player.threat_lead >= Opt.swipe_st_threat then
 			return Swipe
 		end
 	end
@@ -2644,7 +2662,14 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		if msg[2] then
 			Opt.swipe_st_ap = max(0, min(10000, tonumber(msg[2]) or 2700))
 		end
-		return Status('Recommend Swipe in single target above when above', Opt.swipe_st_ap, 'attack power')
+		return Status('Recommend Swipe in single target above when above', Opt.swipe_st_ap, 'attack power (0 is off)')
+	end
+	if startsWith(msg[1], 'swt') then
+		if msg[2] then
+			Opt.swipe_st_threat = max(0, min(100000, tonumber(msg[2]) or 10000))
+		end
+		Status('Recommend Swipe in single target when', Opt.swipe_st_threat, 'threat above next highest threat (0 is off)')
+		return Status('This feature requires Details! Tiny Threat plugin to be enabled! Tiny Threat status', DETAILS_PLUGIN_TINY_THREAT and DETAILS_PLUGIN_TINY_THREAT.Enabled)
 	end
 	if msg[1] == 'reset' then
 		clawPanel:ClearAllPoints()
@@ -2680,7 +2705,8 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'front |cFF00C000on|r/|cFFC00000off|r - enable front mode (unable to Shred/Ravage)',
 		'faerie |cFF00C000on|r/|cFFC00000off|r - use Faerie Fire (turn off when playing with Balance druid)',
 		'cower |cFFFFD000[percent]|r -  recommend Cower when above a percent threat threshold (default is 90%)',
-		'swap |cFFFFD000[attack power]|r -  recommend Swipe in single target above X attack power (default is 2700)',
+		'swap |cFFFFD000[attack power]|r -  recommend Swipe in single target above X attack power (default is 2700, 0 is off)',
+		'swt |cFFFFD000[threat]|r -  recommend Swipe in single target when X threat above next highest (default is 10000, 0 is off)',
 		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
 		print('  ' .. SLASH_Claw1 .. ' ' .. cmd)
