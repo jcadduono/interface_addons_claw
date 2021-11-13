@@ -987,7 +987,11 @@ local Clearcasting = Ability:Add({16870}, true, true)
 -- Racials
 
 -- Class Debuffs
-local DemoralizingShout = Ability:Add({1160, 6190, 11554, 11555, 11556, 25202, 25203})
+local CurseOfRecklessness = Ability:Add({704, 7658, 7659, 11717, 27226}) -- Applied by Warlocks
+local DemoralizingShout = Ability:Add({1160, 6190, 11554, 11555, 11556, 25202, 25203}) -- Applied by Warriors, doesn't stack with Demoralizing Roar
+local ExposeArmor = Ability:Add({8647, 8649, 8650, 11197, 11198, 26866}) -- Applied by Rogues, doesn't stack with Sunder Armor
+local PierceArmor = Ability:Add({38187}) -- Applied by Murloc MC on Tidewalker
+local SunderArmor = Ability:Add({7386, 7405, 8380, 11596, 11597, 25225}) -- Applied by Warriors, doesn't stack with Expose Armor
 -- Trinket Effects
 
 -- End Abilities
@@ -1689,11 +1693,14 @@ APL.Cat = function(self)
 end
 
 APL.Cat_Finisher = function(self)
-	if FerociousBite:Usable(0, true) and self.rip_remains > (6 + Player:EnergyTimeToMax(FerociousBite:EnergyCost())) then
-		if FerociousBite:EnergyCost() > Player.energy.current and CatForm:Usable() and Target.timeToDie > 1.8 then
-			return CatForm
+	if FerociousBite:Usable(0, true) then
+		self.ar_pen = (self.ff_remains > 0 and 610 or 0) + (ExposeArmor:Up() and 3075 or 0) + (SunderArmor:Stack() * 520) + (CurseOfRecklessnesss:Up() and 800 or 0) + (PierceArmor:Up() and 5775 or 0)
+		if self.ar_pen > 5000 or self.rip_remains > ((self.ar_pen > 4400 and 0 or self.ar_pen > 3200 and 3 or 6) + Player:EnergyTimeToMax(FerociousBite:EnergyCost())) then
+			if FerociousBite:EnergyCost() > Player.energy.current and CatForm:Usable() and Target.timeToDie > 1.8 then
+				return CatForm
+			end
+			return Pool(FerociousBite)
 		end
-		return Pool(FerociousBite)
 	end
 	if Rip:Usable(0, true) and Target.timeToDie > (self.rip_remains + (Rip:TickTime() * (self.mangle_remains > 0 and 2 or 3))) then
 		if self.rip_remains > 1.5 or (self.rip_remains > 0 and (Clearcasting:Up() or Player:EnergyTimeToMax(72) < (self.rip_remains + 0.5))) then
