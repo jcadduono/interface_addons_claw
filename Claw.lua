@@ -102,6 +102,7 @@ local function InitOpts()
 		mana_threshold_powershift = 20,
 		tick_padding_ms = 100,
 		front_mode = false,
+		finish_4cp = false,
 		faerie_fire = true,
 		cower_pct = 90,
 		swipe_st_ap = 2700,
@@ -990,7 +991,6 @@ local Clearcasting = Ability:Add({16870}, true, true)
 local CurseOfRecklessness = Ability:Add({704, 7658, 7659, 11717, 27226}) -- Applied by Warlocks
 local DemoralizingShout = Ability:Add({1160, 6190, 11554, 11555, 11556, 25202, 25203}) -- Applied by Warriors, doesn't stack with Demoralizing Roar
 local ExposeArmor = Ability:Add({8647, 8649, 8650, 11197, 11198, 26866}) -- Applied by Rogues, doesn't stack with Sunder Armor
-local PierceArmor = Ability:Add({38187}) -- Applied by Murloc MC on Tidewalker
 local SunderArmor = Ability:Add({7386, 7405, 8380, 11596, 11597, 25225}) -- Applied by Warriors, doesn't stack with Expose Armor
 -- Trinket Effects
 
@@ -1333,7 +1333,7 @@ function Target:Update()
 		self.boss = false
 		self.stunnable = true
 		self.classification = 'normal'
-		self.type = 'Humanoid'
+		self.creature_type = 'Humanoid'
 		self.player = false
 		self.level = Player.level
 		self.hostile = true
@@ -1361,7 +1361,7 @@ function Target:Update()
 	self.boss = false
 	self.stunnable = true
 	self.classification = UnitClassification('target')
-	self.type = UnitCreatureType('target')
+	self.creature_type = UnitCreatureType('target')
 	self.player = UnitIsPlayer('target')
 	self.level = UnitLevel('target')
 	self.hostile = UnitCanAttack('player', 'target') and not UnitIsDead('target')
@@ -1686,7 +1686,7 @@ APL.Cat = function(self)
 	if Ravage:Usable(0, true) then
 		return Pool(Ravage)
 	end
-	if Player.combo_points >= ((PrimalFury.known or Target.timeToDie < 2) and 4 or 5) then
+	if Player.combo_points >= ((Target.timeToDie < 2 or (PrimalFury.rank >= 2 and Opt.finish_4cp)) and 4 or 5) then
 		return self:Cat_Finisher()
 	end
 	return self:Cat_Generator()
@@ -1694,7 +1694,7 @@ end
 
 APL.Cat_Finisher = function(self)
 	if FerociousBite:Usable(0, true) then
-		self.ar_pen = (self.ff_remains > 0 and 610 or 0) + (ExposeArmor:Up() and 3075 or 0) + (SunderArmor:Stack() * 520) + (CurseOfRecklessnesss:Up() and 800 or 0) + (PierceArmor:Up() and 5775 or 0)
+		self.ar_pen = (self.ff_remains > 0 and 610 or 0) + (ExposeArmor:Up() and 3075 or 0) + (SunderArmor:Stack() * 520) + (CurseOfRecklessness:Up() and 800 or 0)
 		if self.ar_pen > 5000 or self.rip_remains > ((self.ar_pen > 4400 and 0 or self.ar_pen > 3200 and 3 or 6) + Player:EnergyTimeToMax(FerociousBite:EnergyCost())) then
 			if FerociousBite:EnergyCost() > Player.energy.current and CatForm:Usable() and Target.timeToDie > 1.8 then
 				return CatForm
@@ -1702,7 +1702,7 @@ APL.Cat_Finisher = function(self)
 			return Pool(FerociousBite)
 		end
 	end
-	if Rip:Usable(0, true) and Target.timeToDie > (self.rip_remains + (Rip:TickTime() * (self.mangle_remains > 0 and 2 or 3))) then
+	if Rip:Usable(0, true) and Target.timeToDie > (self.rip_remains + (Rip:TickTime() * (self.mangle_remains > 0 and 3 or 4))) then
 		if self.rip_remains > 1.5 or (self.rip_remains > 0 and (Clearcasting:Up() or Player:EnergyTimeToMax(72) < (self.rip_remains + 0.5))) then
 			return self:Cat_Generator()
 		end
@@ -2653,6 +2653,12 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		return Status('Front mode (unable to Shred/Ravage, displays F in top right)', Opt.front_mode)
 	end
+	if startsWith(msg[1], '4') then
+		if msg[2] then
+			Opt.finish_4cp = msg[2] == 'on'
+		end
+		return Status('Use 4 combo point finishers (not optimal in most gear setups)', Opt.finish_4cp)
+	end
 	if startsWith(msg[1], 'fa') then
 		if msg[2] then
 			Opt.faerie_fire = msg[2] == 'on'
@@ -2710,6 +2716,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'mana |cFFFFD000[percent]|r -  powershift when mana is above a percent threshold (default is 20%)',
 		'pad |cFFFFD000[0-500]|r - powershift when next energy tick is at least X milliseconds away (default is 100ms)',
 		'front |cFF00C000on|r/|cFFC00000off|r - enable front mode (unable to Shred/Ravage)',
+		'4cp |cFF00C000on|r/|cFFC00000off|r - use 4 combo point finishers (off by default, not optimal)',
 		'faerie |cFF00C000on|r/|cFFC00000off|r - use Faerie Fire (turn off when playing with Balance druid)',
 		'cower |cFFFFD000[percent]|r -  recommend Cower when above a percent threat threshold (default is 90%)',
 		'swap |cFFFFD000[attack power]|r -  recommend Swipe in single target above X attack power (default is 2700, 0 is off)',
