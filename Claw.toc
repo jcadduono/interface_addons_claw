@@ -3,5 +3,5 @@
 ## Notes: Claw is an addon for druids that simplifies gameplay and maximizes DPS by doing all the decision making for you
 ## Author: jcadduono @ curseforge.com or Spy#1955 @ BattleTag
 ## SavedVariablesPerCharacter: ClawConfig
-## Version: 2.5.2-6
+## Version: 2.5.2-7
 Claw.lua
