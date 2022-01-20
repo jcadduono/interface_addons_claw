@@ -1246,7 +1246,7 @@ function Player:Update()
 	self.wait_seconds = nil
 	start, duration = GetSpellCooldown(47524)
 	self.gcd_remains = start > 0 and duration - (self.ctime - start) or 0
-	_, _, _, _, remains, _, _, spellId = UnitCastingInfo('player')
+	_, _, _, _, remains, _, _, _, spellId = UnitCastingInfo('player')
 	self.ability_casting = abilities.bySpellId[spellId]
 	self.execute_remains = max(remains and (remains / 1000 - self.ctime) or 0, self.gcd_remains)
 	self.haste_factor = 1 / (1 + GetCombatRatingBonus(CR_HASTE_SPELL) / 100)
