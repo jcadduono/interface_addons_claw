@@ -773,8 +773,8 @@ function Ability:Targets()
 	return 0
 end
 
-function Ability:CastSuccess(dstGUID, timeStamp)
-	self.last_used = timeStamp
+function Ability:CastSuccess(dstGUID)
+	self.last_used = Player.time
 	Player.last_ability = self
 	if self.triggers_gcd then
 		Player.previous_gcd[10] = nil
@@ -790,7 +790,7 @@ function Ability:CastSuccess(dstGUID, timeStamp)
 	end
 end
 
-function Ability:CastLanded(dstGUID, timeStamp, eventType)
+function Ability:CastLanded(dstGUID, event)
 	if not self.traveling then
 		return
 	end
@@ -803,7 +803,7 @@ function Ability:CastLanded(dstGUID, timeStamp, eventType)
 		end
 	end
 	if oldest then
-		Target.estimated_range = min(self.max_range, floor(self.velocity * max(0, timeStamp - oldest.start)))
+		Target.estimated_range = min(self.max_range, floor(self.velocity * max(0, Player.time - oldest.start)))
 		self.traveling[oldest.guid] = nil
 	end
 end
@@ -2080,19 +2080,19 @@ function events:ADDON_LOADED(name)
 end
 
 function events:COMBAT_LOG_EVENT_UNFILTERED()
-	local timeStamp, eventType, _, srcGUID, _, _, _, dstGUID, _, _, _, spellId, spellName, spellSchool, missType = CombatLogGetCurrentEventInfo()
+	local timeStamp, event, _, srcGUID, _, _, _, dstGUID, _, _, _, spellId, spellName, spellSchool, missType = CombatLogGetCurrentEventInfo()
 	Player.time = timeStamp
 	Player.ctime = GetTime()
 	Player.time_diff = Player.ctime - Player.time
 
-	if eventType == 'UNIT_DIED' or eventType == 'UNIT_DESTROYED' or eventType == 'UNIT_DISSIPATES' or eventType == 'SPELL_INSTAKILL' or eventType == 'PARTY_KILL' then
+	if event == 'UNIT_DIED' or event == 'UNIT_DESTROYED' or event == 'UNIT_DISSIPATES' or event == 'SPELL_INSTAKILL' or event == 'PARTY_KILL' then
 		trackAuras:Remove(dstGUID)
 		if Opt.auto_aoe then
 			autoAoe:Remove(dstGUID)
 		end
 		return
 	end
-	if eventType == 'SWING_DAMAGE' or eventType == 'SWING_MISSED' then
+	if event == 'SWING_DAMAGE' or event == 'SWING_MISSED' then
 		if dstGUID == Player.guid then
 			Player.last_swing_taken = Player.time
 			local npcId = tonumber(srcGUID:match('^%w+-%d+-%d+-%d+-%d+-(%d+)') or 0)
@@ -2124,29 +2124,29 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 
 	local ability = spellId and abilities.bySpellId[spellId]
 	if not ability then
-		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', eventType, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
+		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', event, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
 		return
 	end
 
 	if not (
-	   eventType == 'SPELL_CAST_START' or
-	   eventType == 'SPELL_CAST_SUCCESS' or
-	   eventType == 'SPELL_CAST_FAILED' or
-	   eventType == 'SPELL_DAMAGE' or
-	   eventType == 'SPELL_ABSORBED' or
-	   eventType == 'SPELL_PERIODIC_DAMAGE' or
-	   eventType == 'SPELL_MISSED' or
-	   eventType == 'SPELL_ENERGIZE' or
-	   eventType == 'SPELL_AURA_APPLIED' or
-	   eventType == 'SPELL_AURA_REFRESH' or
-	   eventType == 'SPELL_AURA_REMOVED')
+	   event == 'SPELL_CAST_START' or
+	   event == 'SPELL_CAST_SUCCESS' or
+	   event == 'SPELL_CAST_FAILED' or
+	   event == 'SPELL_DAMAGE' or
+	   event == 'SPELL_ABSORBED' or
+	   event == 'SPELL_PERIODIC_DAMAGE' or
+	   event == 'SPELL_MISSED' or
+	   event == 'SPELL_ENERGIZE' or
+	   event == 'SPELL_AURA_APPLIED' or
+	   event == 'SPELL_AURA_REFRESH' or
+	   event == 'SPELL_AURA_REMOVED')
 	then
 		return
 	end
 
 	UI:UpdateCombatWithin(0.05)
-	if eventType == 'SPELL_CAST_SUCCESS' then
-		ability:CastSuccess(dstGUID, timeStamp)
+	if event == 'SPELL_CAST_SUCCESS' then
+		ability:CastSuccess(dstGUID)
 		if Opt.previous and clawPanel:IsVisible() then
 			clawPreviousPanel.ability = ability
 			clawPreviousPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
@@ -2159,24 +2159,24 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 		return -- ignore buffs beyond here
 	end
 	if ability.aura_targets then
-		if eventType == 'SPELL_AURA_APPLIED' then
+		if event == 'SPELL_AURA_APPLIED' then
 			ability:ApplyAura(dstGUID)
-		elseif eventType == 'SPELL_AURA_REFRESH' then
+		elseif event == 'SPELL_AURA_REFRESH' then
 			ability:RefreshAura(dstGUID)
-		elseif eventType == 'SPELL_AURA_REMOVED' then
+		elseif event == 'SPELL_AURA_REMOVED' then
 			ability:RemoveAura(dstGUID)
 		end
 	end
 	if Opt.auto_aoe then
-		if eventType == 'SPELL_MISSED' and (missType == 'EVADE' or missType == 'IMMUNE') then
+		if event == 'SPELL_MISSED' and (missType == 'EVADE' or missType == 'IMMUNE') then
 			autoAoe:Remove(dstGUID)
-		elseif ability.auto_aoe and (eventType == ability.auto_aoe.trigger or ability.auto_aoe.trigger == 'SPELL_AURA_APPLIED' and eventType == 'SPELL_AURA_REFRESH') then
+		elseif ability.auto_aoe and (event == ability.auto_aoe.trigger or ability.auto_aoe.trigger == 'SPELL_AURA_APPLIED' and event == 'SPELL_AURA_REFRESH') then
 			ability:RecordTargetHit(dstGUID)
 		end
 	end
-	if eventType == 'SPELL_ABSORBED' or eventType == 'SPELL_MISSED' or eventType == 'SPELL_DAMAGE' or eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH' then
-		ability:CastLanded(dstGUID, timeStamp, eventType)
-		if Opt.previous and Opt.miss_effect and eventType == 'SPELL_MISSED' and clawPanel:IsVisible() and ability == clawPreviousPanel.ability then
+	if event == 'SPELL_ABSORBED' or event == 'SPELL_MISSED' or event == 'SPELL_DAMAGE' or event == 'SPELL_AURA_APPLIED' or event == 'SPELL_AURA_REFRESH' then
+		ability:CastLanded(dstGUID, event)
+		if Opt.previous and Opt.miss_effect and event == 'SPELL_MISSED' and clawPanel:IsVisible() and ability == clawPreviousPanel.ability then
 			clawPreviousPanel.border:SetTexture(ADDON_PATH .. 'misseffect.blp')
 		end
 	end
