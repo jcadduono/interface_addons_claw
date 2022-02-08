@@ -184,6 +184,10 @@ local Player = {
 	attack_power = 0,
 	last_swing_taken = 0,
 	last_swing_taken_physical = 0,
+	equipped = {
+		staff_of_natural_fury = false,
+		t6_feral = 0,
+	},
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
 	},
@@ -1060,7 +1064,6 @@ end
 
 -- Inventory Items
 local WolfsheadHelm = InventoryItem:Add(8345)
-local StaffOfNaturalFury = InventoryItem:Add(31334)
 -- Equipment
 local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
@@ -1448,7 +1451,7 @@ end
 
 function CatForm:ManaCost()
 	local cost = Ability.ManaCost(self)
-	if StaffOfNaturalFury:Equipped() then
+	if Player.equipped.staff_of_natural_fury then
 		cost = cost - 200
 	end
 	if NaturalShapeshifter.known then
@@ -1470,7 +1473,17 @@ function Claw:EnergyCost()
 	return max(0, cost)
 end
 Rake.EnergyCost = Claw.EnergyCost
-MangleCat.EnergyCost = Claw.EnergyCost
+
+function MangleCat:EnergyCost()
+	local cost = Ability.EnergyCost(self)
+	if Ferocity.known then
+		cost = cost - Ferocity.rank
+	end
+	if Player.equipped.t6_feral >= 2 then
+		cost = cost - 5
+	end
+	return max(0, cost)
+end
 
 function Lacerate:RageCost()
 	local cost = Ability.RageCost(self)
@@ -1727,6 +1740,12 @@ APL.Cat_Generator = function(self)
 		if MangleCat:ShapeshiftForEnergy() and CatForm:Usable() then
 			return CatForm
 		end
+		if Opt.faerie_fire and FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) and not MangleCat:Usable() then
+			return FaerieFireFeral
+		end
+		return Pool(MangleCat)
+	end
+	if Player.equipped.t6_feral >= 2 and not WolfsheadHelm:Equipped() and MangleCat:Usable(0, true) and MangleCat:EnergyCost() == 35 and (between(Player.energy.current, 35 - Player.energy.per_tick, 41 - Player.energy.per_tick) or between(Player.energy.current, 35, 41)) then
 		if Opt.faerie_fire and FaerieFireFeral:Usable() and self.ff_remains < 4 and (self.ff_mine or self.ff_remains == 0) and Target.timeToDie > (4 + self.ff_remains) and not MangleCat:Usable() then
 			return FaerieFireFeral
 		end
@@ -2256,6 +2275,8 @@ function events:PLAYER_EQUIPMENT_CHANGED()
 			inventoryItems[i].can_use = false
 		end
 	end
+	Player.equipped.staff_of_natural_fury = Player:Equipped(31334)
+	Player.equipped.t6_feral = (Player:Equipped(31034) and 1 or 0) + (Player:Equipped(31039) and 1 or 0) + (Player:Equipped(31042) and 1 or 0) + (Player:Equipped(31044) and 1 or 0) + (Player:Equipped(31048) and 1 or 0) + (Player:Equipped(34444) and 1 or 0) + (Player:Equipped(34556) and 1 or 0) + (Player:Equipped(34573) and 1 or 0)
 	Player:UpdateAbilities()
 end
 
