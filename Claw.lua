@@ -9,6 +9,7 @@ local ADDON_PATH = 'Interface\\AddOns\\' .. ADDON .. '\\'
 local min = math.min
 local max = math.max
 local floor = math.floor
+local GetArmorPenetration = _G.GetArmorPenetration
 local GetComboPoints = _G.GetComboPoints
 local GetPowerRegenForPowerType = _G.GetPowerRegenForPowerType
 local GetSpellCharges = _G.GetSpellCharges
@@ -1710,7 +1711,7 @@ end
 
 APL.Cat_Finisher = function(self)
 	if FerociousBite:Usable(0, true) then
-		self.ar_pen = (self.ff_remains > 0 and 610 or 0) + (ExposeArmor:Up() and 3075 or 0) + (SunderArmor:Stack() * 520) + (CurseOfRecklessness:Up() and 800 or 0)
+		self.ar_pen = GetArmorPenetration() + (self.ff_remains > 0 and 610 or 0) + (ExposeArmor:Up() and 3075 or 0) + (SunderArmor:Stack() * 520) + (CurseOfRecklessness:Up() and 800 or 0)
 		if self.ar_pen > 5000 or self.rip_remains > ((self.ar_pen > 4400 and 0 or self.ar_pen > 3200 and 3 or 6) + Player:EnergyTimeToMax(FerociousBite:EnergyCost())) then
 			if FerociousBite:EnergyCost() > Player.energy.current and CatForm:Usable() and Target.timeToDie > 1.8 then
 				return CatForm
