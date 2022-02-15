@@ -4,7 +4,7 @@ VERSION ?= $(shell awk '$$2 == "Version:" { print $$3; exit }' "$(NAME).toc")
 
 ZIP := $(NAME)_$(VERSION).zip
 
-FILES := *.toc *.lua *.xml *.blp
+FILES := *.toc *.lua *.xml *.blp LICENSE
 
 PREFIX ?= /media/classic-wow-addons
 
