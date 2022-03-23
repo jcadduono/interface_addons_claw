@@ -1334,21 +1334,6 @@ function Player:UpdateThreat()
 	end
 end
 
-function Player:UpdateForm()
-	local form = GetShapeshiftFormID() or 0
-	if form == 1 then
-		self.form = FORM.CAT
-	elseif form == 5 or form == 8 then
-		self.form = FORM.BEAR
-	elseif form == 31 or form == 35 then
-		self.form = FORM.MOONKIN
-	elseif form == 3 or form == 4 or form == 27 or form == 29 then
-		self.form = FORM.TRAVEL
-	else
-		self.form = FORM.NONE
-	end
-end
-
 function Player:Update()
 	local _, start, duration, remains, spellId, speed, max_speed, ap_base, ap_neg, ap_pos
 	self.main =  nil
@@ -1396,7 +1381,6 @@ function Player:Update()
 	ap_base, ap_pos, ap_neg = UnitAttackPower('player')
 	self.attack_power = ap_base + ap_pos + ap_neg
 	self:UpdateThreat()
-	self:UpdateForm()
 
 	trackAuras:Purge()
 	if Opt.auto_aoe then
@@ -1557,6 +1541,18 @@ function Ability:ShapeshiftForEnergy(energy)
 		return true -- powershift if we will have to wait 2 or more ticks to use the ability
 	end
 	return false
+end
+
+function BearForm:CastSuccess(...)
+	Ability.CastSuccess(self, ...)
+	Player.form = FORM.BEAR
+	UI:UpdateCombat()
+end
+
+function CatForm:CastSuccess(...)
+	Ability.CastSuccess(self, ...)
+	Player.form = FORM.CAT
+	UI:UpdateCombat()
 end
 
 function BearForm:ShapeshiftRageGain()
@@ -2513,7 +2509,18 @@ end
 
 function events:UPDATE_SHAPESHIFT_FORM()
 	Player.shapeshift_time = GetTime()
-	UI:UpdateCombat()
+	local form = GetShapeshiftFormID() or 0
+	if form == 1 then
+		Player.form = FORM.CAT
+	elseif form == 5 or form == 8 then
+		Player.form = FORM.BEAR
+	elseif form == 31 or form == 35 then
+		Player.form = FORM.MOONKIN
+	elseif form == 3 or form == 4 or form == 27 or form == 29 then
+		Player.form = FORM.TRAVEL
+	else
+		Player.form = FORM.NONE
+	end
 end
 
 function events:ACTIONBAR_SLOT_CHANGED()
