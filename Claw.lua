@@ -474,7 +474,12 @@ end
 local Ability = {}
 Ability.__index = Ability
 local abilities = {
-	all = {}
+	all = {},
+	bySpellId = {},
+	velocity = {},
+	autoAoe = {},
+	trackAuras = {},
+	swingQueue = {},
 }
 
 function Ability:Add(spellId, buff, player)
@@ -1294,11 +1299,11 @@ function Player:UpdateAbilities()
 		Pounce.bleed.rank = Pounce.rank
 	end
 
-	abilities.bySpellId = {}
-	abilities.velocity = {}
-	abilities.autoAoe = {}
-	abilities.trackAuras = {}
-	abilities.swingQueue = {}
+	wipe(abilities.bySpellId)
+	wipe(abilities.velocity)
+	wipe(abilities.autoAoe)
+	wipe(abilities.trackAuras)
+	wipe(abilities.swingQueue)
 	for _, ability in next, abilities.all do
 		if ability.known then
 			for i, spellId in next, ability.spellIds do
@@ -2436,10 +2441,10 @@ end
 
 function events:PLAYER_REGEN_ENABLED()
 	Player.combat_start = 0
-	Player.previous_gcd = {}
 	Player.swing.last_taken = 0
 	Player.swing.last_taken_physical = 0
 	Target.estimated_range = 30
+	wipe(Player.previous_gcd)
 	if Player.last_ability then
 		Player.last_ability = nil
 		clawPreviousPanel:Hide()
