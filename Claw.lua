@@ -2579,13 +2579,14 @@ end
 -- Start Slash Commands
 
 -- this fancy hack allows you to click BattleTag links to add them as a friend!
-local ChatFrame_OnHyperlinkShow_Original = ChatFrame_OnHyperlinkShow
-function ChatFrame_OnHyperlinkShow(chatFrame, link, ...)
+local SetHyperlink = ItemRefTooltip.SetHyperlink
+ItemRefTooltip.SetHyperlink = function(self, link)
 	local linkType, linkData = link:match('(.-):(.*)')
 	if linkType == 'BNadd' then
-		return BattleTagInviteFrame_Show(linkData)
+		BattleTagInviteFrame_Show(linkData)
+		return
 	end
-	return ChatFrame_OnHyperlinkShow_Original(chatFrame, link, ...)
+	SetHyperlink(self, link)
 end
 
 local function Status(desc, opt, ...)
