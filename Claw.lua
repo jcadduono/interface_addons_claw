@@ -5,13 +5,26 @@ if select(2, UnitClass('player')) ~= 'DRUID' then
 end
 local ADDON_PATH = 'Interface\\AddOns\\' .. ADDON .. '\\'
 
--- copy heavily accessed global functions into local scope for performance
-local GetSpellCooldown = _G.GetSpellCooldown
+-- reference heavily accessed global functions from local scope for performance
+local min = math.min
+local max = math.max
+local floor = math.floor
+local GetPowerRegenForPowerType = _G.GetPowerRegenForPowerType
 local GetSpellCharges = _G.GetSpellCharges
+local GetSpellCooldown = _G.GetSpellCooldown
+local GetSpellInfo = _G.GetSpellInfo
 local GetTime = _G.GetTime
-local UnitCastingInfo = _G.UnitCastingInfo
+local GetUnitSpeed = _G.GetUnitSpeed
+local UnitAttackSpeed = _G.UnitAttackSpeed
 local UnitAura = _G.UnitAura
--- end copy global functions
+local UnitCastingInfo = _G.UnitCastingInfo
+local UnitChannelInfo = _G.UnitChannelInfo
+local UnitDetailedThreatSituation = _G.UnitDetailedThreatSituation
+local UnitHealth = _G.UnitHealth
+local UnitHealthMax = _G.UnitHealthMax
+local UnitPower = _G.UnitPower
+local UnitPowerMax = _G.UnitPowerMax
+-- end reference global functions
 
 -- useful functions
 local function between(n, min, max)
@@ -22,7 +35,7 @@ local function startsWith(str, start) -- case insensitive check to see if a stri
 	if type(str) ~= 'string' then
 		return false
 	end
-   return string.lower(str:sub(1, start:len())) == start:lower()
+	return string.lower(str:sub(1, start:len())) == start:lower()
 end
 -- end useful functions
 
@@ -34,7 +47,6 @@ BINDING_HEADER_CLAW = ADDON
 
 local function InitOpts()
 	local function SetDefaults(t, ref)
-		local k, v
 		for k, v in next, ref do
 			if t[k] == nil then
 				local pchar
@@ -104,13 +116,16 @@ local UI = {
 	glows = {},
 }
 
+-- combat event related functions container
+local CombatEvent = {}
+
 -- automatically registered events container
 local events = {}
 
 local timer = {
 	combat = 0,
 	display = 0,
-	health = 0
+	health = 0,
 }
 
 -- specialization constants
@@ -137,39 +152,83 @@ local Player = {
 	time_diff = 0,
 	ctime = 0,
 	combat_start = 0,
+	level = 1,
 	spec = 0,
 	form = FORM.NONE,
+	group_size = 1,
 	target_mode = 0,
 	gcd = 1.5,
-	health = 0,
-	health_max = 0,
-	mana = 0,
-	mana_max = 100,
-	mana_regen = 0,
-	energy = 0,
-	energy_max = 100,
-	energy_regen = 0,
-	rage = 0,
-	rage_max = 100,
-	astral_power = 0,
-	astral_power_max = 100,
-	combo_points = 0,
-	combo_points_max = 5,
+	gcd_remains = 0,
+	cast_remains = 0,
+	execute_remains = 0,
+	haste_factor = 1,
 	moving = false,
-	movement_speed = 100,
-	last_swing_taken = 0,
+	health = {
+		current = 0,
+		max = 100,
+		pct = 0,
+	},
+	mana = {
+		current = 0,
+		deficit = 0,
+		max = 100,
+		regen = 0,
+	},
+	energy = {
+		current = 0,
+		deficit = 0,
+		max = 100,
+		regen = 0,
+	},
+	rage = {
+		current = 0,
+		deficit = 0,
+		max = 100,
+	},
+	combo_points = {
+		current = 0,
+		deficit = 0,
+		max = 5,
+	},
+	threat = {
+		status = 0,
+		pct = 0,
+		lead = 0,
+	},
+	swing = {
+		mh = {
+			last = 0,
+			speed = 0,
+			remains = 0,
+		},
+		oh = {
+			last = 0,
+			speed = 0,
+			remains = 0,
+		},
+		last_taken = 0,
+	},
+	set_bonus = {
+		t28 = 0,
+	},
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
 	},
-	berserk_remains = 0,
 	main_freecast = false,
+	berserk_remains = 0,
 }
 
 -- current target information
 local Target = {
 	boss = false,
 	guid = 0,
-	health_array = {},
+	health = {
+		current = 0,
+		loss_per_sec = 0,
+		max = 100,
+		pct = 100,
+		history = {},
+	},
 	hostile = false,
 	estimated_range = 30,
 }
@@ -193,6 +252,8 @@ clawPanel.dimmer:SetColorTexture(0, 0, 0, 0.6)
 clawPanel.dimmer:Hide()
 clawPanel.swipe = CreateFrame('Cooldown', nil, clawPanel, 'CooldownFrameTemplate')
 clawPanel.swipe:SetAllPoints(clawPanel)
+clawPanel.swipe:SetDrawBling(false)
+clawPanel.swipe:SetDrawEdge(false)
 clawPanel.text = CreateFrame('Frame', nil, clawPanel)
 clawPanel.text:SetAllPoints(clawPanel)
 clawPanel.text.tl = clawPanel.text:CreateFontString(nil, 'OVERLAY')
@@ -247,8 +308,19 @@ clawCooldownPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
 clawCooldownPanel.border = clawCooldownPanel:CreateTexture(nil, 'ARTWORK')
 clawCooldownPanel.border:SetAllPoints(clawCooldownPanel)
 clawCooldownPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-clawCooldownPanel.cd = CreateFrame('Cooldown', nil, clawCooldownPanel, 'CooldownFrameTemplate')
-clawCooldownPanel.cd:SetAllPoints(clawCooldownPanel)
+clawCooldownPanel.dimmer = clawCooldownPanel:CreateTexture(nil, 'BORDER')
+clawCooldownPanel.dimmer:SetAllPoints(clawCooldownPanel)
+clawCooldownPanel.dimmer:SetColorTexture(0, 0, 0, 0.6)
+clawCooldownPanel.dimmer:Hide()
+clawCooldownPanel.swipe = CreateFrame('Cooldown', nil, clawCooldownPanel, 'CooldownFrameTemplate')
+clawCooldownPanel.swipe:SetAllPoints(clawCooldownPanel)
+clawCooldownPanel.swipe:SetDrawBling(false)
+clawCooldownPanel.swipe:SetDrawEdge(false)
+clawCooldownPanel.text = clawCooldownPanel:CreateFontString(nil, 'OVERLAY')
+clawCooldownPanel.text:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
+clawCooldownPanel.text:SetAllPoints(clawCooldownPanel)
+clawCooldownPanel.text:SetJustifyH('CENTER')
+clawCooldownPanel.text:SetJustifyV('CENTER')
 local clawInterruptPanel = CreateFrame('Frame', 'clawInterruptPanel', UIParent)
 clawInterruptPanel:SetFrameStrata('BACKGROUND')
 clawInterruptPanel:SetSize(64, 64)
@@ -263,8 +335,10 @@ clawInterruptPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
 clawInterruptPanel.border = clawInterruptPanel:CreateTexture(nil, 'ARTWORK')
 clawInterruptPanel.border:SetAllPoints(clawInterruptPanel)
 clawInterruptPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-clawInterruptPanel.cast = CreateFrame('Cooldown', nil, clawInterruptPanel, 'CooldownFrameTemplate')
-clawInterruptPanel.cast:SetAllPoints(clawInterruptPanel)
+clawInterruptPanel.swipe = CreateFrame('Cooldown', nil, clawInterruptPanel, 'CooldownFrameTemplate')
+clawInterruptPanel.swipe:SetAllPoints(clawInterruptPanel)
+clawInterruptPanel.swipe:SetDrawBling(false)
+clawInterruptPanel.swipe:SetDrawEdge(false)
 local clawExtraPanel = CreateFrame('Frame', 'clawExtraPanel', UIParent)
 clawExtraPanel:SetFrameStrata('BACKGROUND')
 clawExtraPanel:SetSize(64, 64)
@@ -383,14 +457,13 @@ function autoAoe:Remove(guid)
 end
 
 function autoAoe:Clear()
-	local guid
 	for guid in next, self.targets do
 		self.targets[guid] = nil
 	end
 end
 
 function autoAoe:Update()
-	local count, i = 0
+	local count = 0
 	for i in next, self.targets do
 		count = count + 1
 	end
@@ -409,7 +482,7 @@ function autoAoe:Update()
 end
 
 function autoAoe:Purge()
-	local update, guid, t
+	local update
 	for guid, t in next, self.targets do
 		if Player.time - t > Opt.auto_aoe_ttl then
 			self.targets[guid] = nil
@@ -434,7 +507,12 @@ end
 local Ability = {}
 Ability.__index = Ability
 local abilities = {
-	all = {}
+	all = {},
+	bySpellId = {},
+	velocity = {},
+	autoAoe = {},
+	trackAuras = {},
+	bloodtalons = {},
 }
 
 function Ability:Add(spellId, buff, player, spellId2)
@@ -445,14 +523,15 @@ function Ability:Add(spellId, buff, player, spellId2)
 		name = false,
 		icon = false,
 		requires_charge = false,
+		requires_react = false,
 		triggers_gcd = true,
 		hasted_duration = false,
 		hasted_cooldown = false,
 		hasted_ticks = false,
 		known = false,
+		rank = 0,
 		mana_cost = 0,
 		energy_cost = 0,
-		ap_cost = 0,
 		cp_cost = 0,
 		rage_cost = 0,
 		cooldown_duration = 0,
@@ -461,8 +540,8 @@ function Ability:Add(spellId, buff, player, spellId2)
 		max_range = 40,
 		velocity = 0,
 		last_used = 0,
-		auraTarget = buff and 'player' or 'target',
-		auraFilter = (buff and 'HELPFUL' or 'HARMFUL') .. (player and '|PLAYER' or '')
+		aura_target = buff and 'player' or 'target',
+		aura_filter = (buff and 'HELPFUL' or 'HARMFUL') .. (player and '|PLAYER' or '')
 	}
 	setmetatable(ability, self)
 	abilities.all[#abilities.all + 1] = ability
@@ -481,7 +560,7 @@ function Ability:Match(spell)
 end
 
 function Ability:Ready(seconds)
-	return self:Cooldown() <= (seconds or 0)
+	return self:Cooldown() <= (seconds or 0) and (not self.requires_react or self:React() > (seconds or 0))
 end
 
 function Ability:Usable(seconds, pool)
@@ -489,20 +568,17 @@ function Ability:Usable(seconds, pool)
 		return false
 	end
 	if not pool then
-		if self:ManaCost() > Player.mana then
+		if self:ManaCost() > Player.mana.current then
 			return false
 		end
-		if Player.form == FORM.CAT and self:EnergyCost() > Player.energy then
+		if Player.form == FORM.CAT and self:EnergyCost() > Player.energy.current then
 			return false
 		end
-		if Player.form == FORM.BEAR and self:RageCost() > Player.rage then
+		if Player.form == FORM.BEAR and self:RageCost() > Player.rage.current then
 			return false
 		end
 	end
-	if Player.spec == SPEC.BALANCE and self:APCost() > Player.astral_power then
-		return false
-	end
-	if self:CPCost() > Player.combo_points then
+	if self:CPCost() > Player.combo_points.current then
 		return false
 	end
 	if self.requires_charge and self:Charges() == 0 then
@@ -512,19 +588,19 @@ function Ability:Usable(seconds, pool)
 end
 
 function Ability:Remains()
-	if self:Casting() or self:Traveling() then
+	if self:Casting() or self:Traveling() > 0 then
 		return self:Duration()
 	end
-	local _, i, id, expires
+	local _, id, expires
 	for i = 1, 40 do
-		_, _, _, _, _, expires, _, _, _, id = UnitAura(self.auraTarget, i, self.auraFilter)
+		_, _, _, _, _, expires, _, _, _, id = UnitAura(self.aura_target, i, self.aura_filter)
 		if not id then
 			return 0
 		elseif self:Match(id) then
 			if expires == 0 then
 				return 600 -- infinite duration
 			end
-			return max(expires - Player.ctime - Player.execute_remains, 0)
+			return max(0, expires - Player.ctime - Player.execute_remains)
 		end
 	end
 	return 0
@@ -537,31 +613,37 @@ function Ability:Refreshable()
 	return self:Down()
 end
 
-function Ability:Up()
-	return self:Remains() > 0
+function Ability:Up(...)
+	return self:Remains(...) > 0
 end
 
-function Ability:Down()
-	return not self:Up()
+function Ability:Down(...)
+	return self:Remains(...) <= 0
 end
 
 function Ability:SetVelocity(velocity)
 	if velocity > 0 then
 		self.velocity = velocity
-		self.travel_start = {}
+		self.traveling = {}
 	else
-		self.travel_start = nil
+		self.traveling = nil
 		self.velocity = 0
 	end
 end
 
-function Ability:Traveling()
-	if self.travel_start and self.travel_start[Target.guid] then
-		if Player.time - self.travel_start[Target.guid] < self.max_range / self.velocity then
-			return true
-		end
-		self.travel_start[Target.guid] = nil
+function Ability:Traveling(all)
+	if not self.traveling then
+		return 0
 	end
+	local count = 0
+	for _, cast in next, self.traveling do
+		if all or cast.dstGUID == Target.guid then
+			if Player.time - cast.start < self.max_range / self.velocity then
+				count = count + 1
+			end
+		end
+	end
+	return count
 end
 
 function Ability:TravelTime()
@@ -569,16 +651,25 @@ function Ability:TravelTime()
 end
 
 function Ability:Ticking()
+	local count, ticking = 0, {}
 	if self.aura_targets then
-		local count, guid, aura = 0
 		for guid, aura in next, self.aura_targets do
 			if aura.expires - Player.time > Player.execute_remains then
-				count = count + 1
+				ticking[guid] = true
 			end
 		end
-		return count
 	end
-	return self:Up() and 1 or 0
+	if self.traveling then
+		for _, cast in next, self.traveling do
+			if Player.time - cast.start < self.max_range / self.velocity then
+				ticking[cast.dstGUID] = true
+			end
+		end
+	end
+	for _ in next, ticking do
+		count = count + 1
+	end
+	return count
 end
 
 function Ability:TickTime()
@@ -601,9 +692,9 @@ function Ability:Cooldown()
 end
 
 function Ability:Stack()
-	local _, i, id, expires, count
+	local _, id, expires, count
 	for i = 1, 40 do
-		_, _, count, _, _, expires, _, _, _, id = UnitAura(self.auraTarget, i, self.auraFilter)
+		_, _, count, _, _, expires, _, _, _, id = UnitAura(self.aura_target, i, self.aura_filter)
 		if not id then
 			return 0
 		elseif self:Match(id) then
@@ -614,7 +705,7 @@ function Ability:Stack()
 end
 
 function Ability:ManaCost()
-	return self.mana_cost > 0 and (self.mana_cost / 100 * Player.mana_max) or 0
+	return self.mana_cost > 0 and (self.mana_cost / 100 * Player.mana.max) or 0
 end
 
 function Ability:EnergyCost()
@@ -633,29 +724,41 @@ function Ability:RageCost()
 	return self.rage_cost
 end
 
-function Ability:Charges()
-	return (GetSpellCharges(self.spellId)) or 0
-end
-
 function Ability:ChargesFractional()
 	local charges, max_charges, recharge_start, recharge_time = GetSpellCharges(self.spellId)
+	if self:Casting() then
+		if charges >= max_charges then
+			return charges - 1
+		end
+		charges = charges - 1
+	end
 	if charges >= max_charges then
 		return charges
 	end
 	return charges + ((max(0, Player.ctime - recharge_start + Player.execute_remains)) / recharge_time)
 end
 
-function Ability:FullRechargeTime()
-	local charges, max_charges, recharge_start, recharge_time = GetSpellCharges(self.spellId)
-	if charges >= max_charges then
-		return 0
-	end
-	return (max_charges - charges - 1) * recharge_time + (recharge_time - (Player.ctime - recharge_start) - Player.execute_remains)
+function Ability:Charges()
+	return floor(self:ChargesFractional())
 end
 
 function Ability:MaxCharges()
 	local _, max_charges = GetSpellCharges(self.spellId)
 	return max_charges or 0
+end
+
+function Ability:FullRechargeTime()
+	local charges, max_charges, recharge_start, recharge_time = GetSpellCharges(self.spellId)
+	if self:Casting() then
+		if charges >= max_charges then
+			return recharge_time
+		end
+		charges = charges - 1
+	end
+	if charges >= max_charges then
+		return 0
+	end
+	return (max_charges - charges - 1) * recharge_time + (recharge_time - (Player.ctime - recharge_start) - Player.execute_remains)
 end
 
 function Ability:Duration()
@@ -673,17 +776,17 @@ end
 function Ability:CastTime()
 	local _, _, _, castTime = GetSpellInfo(self.spellId)
 	if castTime == 0 then
-		return self.triggers_gcd and Player.gcd or 0
+		return 0
 	end
 	return castTime / 1000
 end
 
 function Ability:CastEnergyRegen()
-	return Player.energy_regen * self:CastTime() - self:EnergyCost()
+	return Player.energy.regen * self:CastTime() - self:EnergyCost()
 end
 
 function Ability:WontCapEnergy(reduction)
-	return (Player.energy + self:CastEnergyRegen()) < (Player.energy_max - (reduction or 5))
+	return (Player.energy.current + self:CastEnergyRegen()) < (Player.energy.max - (reduction or 5))
 end
 
 function Ability:Previous(n)
@@ -700,14 +803,16 @@ end
 function Ability:AutoAoe(removeUnaffected, trigger)
 	self.auto_aoe = {
 		remove = removeUnaffected,
-		targets = {}
+		targets = {},
+		target_count = 0,
+		trigger = 'SPELL_DAMAGE',
 	}
 	if trigger == 'periodic' then
 		self.auto_aoe.trigger = 'SPELL_PERIODIC_DAMAGE'
 	elseif trigger == 'apply' then
 		self.auto_aoe.trigger = 'SPELL_AURA_APPLIED'
-	else
-		self.auto_aoe.trigger = 'SPELL_DAMAGE'
+	elseif trigger == 'cast' then
+		self.auto_aoe.trigger = 'SPELL_CAST_SUCCESS'
 	end
 end
 
@@ -724,21 +829,86 @@ function Ability:UpdateTargetsHit()
 		if self.auto_aoe.remove then
 			autoAoe:Clear()
 		end
-		local guid
+		self.auto_aoe.target_count = 0
 		for guid in next, self.auto_aoe.targets do
 			autoAoe:Add(guid)
 			self.auto_aoe.targets[guid] = nil
+			self.auto_aoe.target_count = self.auto_aoe.target_count + 1
 		end
 		autoAoe:Update()
 	end
 end
 
--- start DoT tracking
+function Ability:Targets()
+	if self.auto_aoe and self:Up() then
+		return self.auto_aoe.target_count
+	end
+	return 0
+end
+
+function Ability:CastSuccess(dstGUID)
+	self.last_used = Player.time
+	Player.last_ability = self
+	if self.triggers_gcd then
+		Player.previous_gcd[10] = nil
+		table.insert(Player.previous_gcd, 1, self)
+	end
+	if self.aura_targets and self.requires_react then
+		self:RemoveAura(self.aura_target == 'player' and Player.guid or dstGUID)
+	end
+	if Opt.auto_aoe and self.auto_aoe and self.auto_aoe.trigger == 'SPELL_CAST_SUCCESS' then
+		autoAoe:Add(dstGUID, true)
+	end
+	if self.traveling and self.next_castGUID then
+		self.traveling[self.next_castGUID] = {
+			guid = self.next_castGUID,
+			start = self.last_used,
+			dstGUID = dstGUID,
+		}
+		self.next_castGUID = nil
+	end
+	if self.triggers_bt then
+		self.bt_trigger = self.last_used
+	end
+	if Opt.previous then
+		clawPreviousPanel.ability = self
+		clawPreviousPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
+		clawPreviousPanel.icon:SetTexture(self.icon)
+		clawPreviousPanel:SetShown(clawPanel:IsVisible())
+	end
+end
+
+function Ability:CastLanded(dstGUID, event, missType)
+	if self.traveling then
+		local oldest
+		for guid, cast in next, self.traveling do
+			if Player.time - cast.start >= self.max_range / self.velocity + 0.2 then
+				self.traveling[guid] = nil -- spell traveled 0.2s past max range, delete it, this should never happen
+			elseif cast.dstGUID == dstGUID and (not oldest or cast.start < oldest.start) then
+				oldest = cast
+			end
+		end
+		if oldest then
+			Target.estimated_range = min(self.max_range, floor(self.velocity * max(0, Player.time - oldest.start)))
+			self.traveling[oldest.guid] = nil
+		end
+	end
+	if self.range_est_start then
+		Target.estimated_range = floor(max(5, min(self.max_range, self.velocity * (Player.time - self.range_est_start))))
+		self.range_est_start = nil
+	elseif self.max_range < Target.estimated_range then
+		Target.estimated_range = self.max_range
+	end
+	if Opt.previous and Opt.miss_effect and event == 'SPELL_MISSED' and clawPreviousPanel.ability == self then
+		clawPreviousPanel.border:SetTexture(ADDON_PATH .. 'misseffect.blp')
+	end
+end
+
+-- Start DoT tracking
 
 local trackAuras = {}
 
 function trackAuras:Purge()
-	local _, ability, guid, expires
 	for _, ability in next, abilities.trackAuras do
 		for guid, aura in next, ability.aura_targets do
 			if aura.expires <= Player.time then
@@ -749,7 +919,6 @@ function trackAuras:Purge()
 end
 
 function trackAuras:Remove(guid)
-	local _, ability
 	for _, ability in next, abilities.trackAuras do
 		ability:RemoveAura(guid)
 	end
@@ -782,13 +951,20 @@ function Ability:RefreshAura(guid)
 	aura.expires = Player.time + min(duration * 1.3, (aura.expires - Player.time) + duration)
 end
 
+function Ability:RefreshAuraAll()
+	local duration = self:Duration()
+	for guid, aura in next, self.aura_targets do
+		aura.expires = Player.time + min(duration * 1.3, (aura.expires - Player.time) + duration)
+	end
+end
+
 function Ability:RemoveAura(guid)
 	if self.aura_targets[guid] then
 		self.aura_targets[guid] = nil
 	end
 end
 
--- end DoT tracking
+-- End DoT tracking
 
 -- Druid Abilities
 ---- Multiple Specializations
@@ -872,6 +1048,7 @@ Rake.tick_interval = 3
 Rake.hasted_ticks = true
 Rake.triggers_bt = true
 Rake:TrackAuras()
+Rake:AutoAoe(false, 'apply')
 local Shred = Ability:Add(5221, false, true)
 Shred.energy_cost = 40
 Shred.triggers_bt = true
@@ -901,6 +1078,7 @@ Maim.cp_cost = 1
 ------ Talents
 local Bloodtalons = Ability:Add(319439, true, true, 145152)
 Bloodtalons.buff_duration = 30
+Bloodtalons:TrackAuras()
 local BrutalSlash = Ability:Add(202028, false, true)
 BrutalSlash.cooldown_duration = 8
 BrutalSlash.energy_cost = 25
@@ -1033,7 +1211,7 @@ end
 function InventoryItem:Charges()
 	local charges = GetItemCount(self.itemId, false, true) or 0
 	if self.created_by and (self.created_by:Previous() or Player.previous_gcd[1] == self.created_by) then
-		charges = max(charges, self.max_charges)
+		charges = max(self.max_charges, charges)
 	end
 	return charges
 end
@@ -1041,7 +1219,7 @@ end
 function InventoryItem:Count()
 	local count = GetItemCount(self.itemId, false, false) or 0
 	if self.created_by and (self.created_by:Previous() or Player.previous_gcd[1] == self.created_by) then
-		count = max(count, 1)
+		count = max(1, count)
 	end
 	return count
 end
@@ -1075,77 +1253,41 @@ function InventoryItem:Usable(seconds)
 end
 
 -- Inventory Items
-local GreaterFlaskOfEndlessFathoms = InventoryItem:Add(168652)
-GreaterFlaskOfEndlessFathoms.buff = Ability:Add(298837, true, true)
-local GreaterFlaskOfTheCurrents = InventoryItem:Add(168651)
-GreaterFlaskOfTheCurrents.buff = Ability:Add(298836, true, true)
-local SuperiorBattlePotionOfAgility = InventoryItem:Add(168489)
-SuperiorBattlePotionOfAgility.buff = Ability:Add(298146, true, true)
-SuperiorBattlePotionOfAgility.buff.triggers_gcd = false
-local PotionOfUnbridledFury = InventoryItem:Add(169299)
-PotionOfUnbridledFury.buff = Ability:Add(300714, true, true)
-PotionOfUnbridledFury.buff.triggers_gcd = false
+local EternalAugmentRune = InventoryItem:Add(190384)
+EternalAugmentRune.buff = Ability:Add(367405, true, true)
+local EternalFlask = InventoryItem:Add(171280)
+EternalFlask.buff = Ability:Add(307166, true, true)
+local PhialOfSerenity = InventoryItem:Add(177278) -- Provided by Summon Steward
+PhialOfSerenity.max_charges = 3
+local PotionOfPhantomFire = InventoryItem:Add(171349)
+PotionOfPhantomFire.buff = Ability:Add(307495, true, true)
+local PotionOfSpectralAgility = InventoryItem:Add(171270)
+PotionOfSpectralAgility.buff = Ability:Add(307159, true, true)
+local SpectralFlaskOfPower = InventoryItem:Add(171276)
+SpectralFlaskOfPower.buff = Ability:Add(307185, true, true)
 -- Equipment
 local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
+Trinket.SoleahsSecretTechnique = InventoryItem:Add(190958)
+Trinket.SoleahsSecretTechnique.buff = Ability:Add(368512, true, true)
 -- End Inventory Items
 
 -- Start Player API
-
-function Player:Health()
-	return self.health
-end
-
-function Player:HealthMax()
-	return self.health_max
-end
-
-function Player:HealthPct()
-	return self.health / self.health_max * 100
-end
-
-function Player:Mana()
-	return self.mana
-end
-
-function Player:Energy()
-	return self.energy
-end
-
-function Player:EnergyRegen()
-	return self.energy_regen
-end
-
-function Player:EnergyDeficit(energy)
-	return (energy or self.energy_max) - self.energy
-end
-
-function Player:EnergyTimeToMax(energy)
-	local deficit = self:EnergyDeficit(energy)
-	if deficit <= 0 then
-		return 0
-	end
-	return deficit / self:EnergyRegen()
-end
-
-function Player:ComboPoints()
-	return self.combo_points
-end
-
-function Player:Rage()
-	return self.rage
-end
-
-function Player:RageDeficit()
-	return self.rage_max - self.rage
-end
 
 function Player:Stealthed()
 	return Prowl:Up() or (Shadowmeld.known and Shadowmeld:Up()) or (IncarnationKingOfTheJungle.known and self.berserk_remains > 0)
 end
 
-function Player:UnderAttack()
-	return (Player.time - self.last_swing_taken) < 3
+function Player:ResetSwing(mainHand, offHand, missed)
+	local mh, oh = UnitAttackSpeed('player')
+	if mainHand then
+		self.swing.mh.speed = (mh or 0)
+		self.swing.mh.last = self.time
+	end
+	if offHand then
+		self.swing.oh.speed = (oh or 0)
+		self.swing.oh.last = self.time
+	end
 end
 
 function Player:TimeInCombat()
@@ -1155,8 +1297,16 @@ function Player:TimeInCombat()
 	return 0
 end
 
+function Player:UnderMeleeAttack()
+	return (self.time - self.swing.last_taken) < 3
+end
+
+function Player:UnderAttack()
+	return self.threat.status >= 3 or self:UnderMeleeAttack()
+end
+
 function Player:BloodlustActive()
-	local _, i, id
+	local _, id
 	for i = 1, 40 do
 		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL')
 		if not id then
@@ -1179,11 +1329,7 @@ function Player:BloodlustActive()
 end
 
 function Player:Equipped(itemID, slot)
-	if slot then
-		return GetInventoryItemID('player', slot) == itemID, slot
-	end
-	local i
-	for i = 1, 19 do
+	for i = (slot or 1), (slot or 19) do
 		if GetInventoryItemID('player', i) == itemID then
 			return true, i
 		end
@@ -1191,9 +1337,9 @@ function Player:Equipped(itemID, slot)
 	return false
 end
 
-function Player:BonusIdEquipped(bonusId)
-	local i, id, link, item
-	for i = 1, 19 do
+function Player:BonusIdEquipped(bonusId, slot)
+	local link, item
+	for i = (slot or 1), (slot or 19) do
 		link = GetInventoryItemLink('player', i)
 		if link then
 			item = link:match('Hitem:%d+:([%d:]+)')
@@ -1213,19 +1359,27 @@ function Player:InArenaOrBattleground()
 	return self.instance == 'arena' or self.instance == 'pvp'
 end
 
+function Player:UpdateTime(timeStamp)
+	self.ctime = GetTime()
+	if timeStamp then
+		self.time_diff = self.ctime - timeStamp
+	end
+	self.time = self.ctime - self.time_diff
+end
+
 function Player:UpdateAbilities()
-	self.mana_max = UnitPowerMax('player', 0)
-	self.energy_max = UnitPowerMax('player', 3)
-	self.rage_max = UnitPowerMax('player', 1)
-	self.combo_points_max = UnitPowerMax('player', 4)
+	self.rescan_abilities = false
+	self.mana.max = UnitPowerMax('player', 0)
+	self.rage.max = UnitPowerMax('player', 1)
+	self.energy.max = UnitPowerMax('player', 3)
+	self.combo_points.max = UnitPowerMax('player', 4)
 
-	local _, ability, spellId, node
-
+	local node
 	for _, ability in next, abilities.all do
 		ability.known = false
 		for _, spellId in next, ability.spellIds do
 			ability.spellId, ability.name, _, ability.icon = spellId, GetSpellInfo(spellId)
-			if IsPlayerSpell(spellId) then
+			if IsPlayerSpell(spellId) or (ability.learn_spellId and IsPlayerSpell(ability.learn_spellId)) then
 				ability.known = true
 				break
 			end
@@ -1233,15 +1387,20 @@ function Player:UpdateAbilities()
 		if C_LevelLink.IsSpellLocked(ability.spellId) then
 			ability.known = false -- spell is locked, do not mark as known
 		end
-		if ability.bonus_id then -- used for checking Legendary crafted effects
+		if ability.bonus_id then -- used for checking enchants and Legendary crafted effects
 			ability.known = self:BonusIdEquipped(ability.bonus_id)
 		end
 		if ability.conduit_id then
 			node = C_Soulbinds.FindNodeIDActuallyInstalled(C_Soulbinds.GetActiveSoulbindID(), ability.conduit_id)
 			if node then
 				node = C_Soulbinds.GetNode(node)
-				if node and node.state == 3 then
-					ability.known = true
+				if node then
+					if node.conduitID == 0 then
+						self.rescan_abilities = true -- rescan on next target, conduit data has not finished loading
+					else
+						ability.known = node.state == 3
+						ability.rank = node.conduitRank
+					end
 				end
 			end
 		end
@@ -1260,11 +1419,11 @@ function Player:UpdateAbilities()
 		Berserk.known = false
 	end
 
-	abilities.bySpellId = {}
-	abilities.velocity = {}
-	abilities.autoAoe = {}
-	abilities.trackAuras = {}
-	abilities.bloodtalons = {}
+	wipe(abilities.bySpellId)
+	wipe(abilities.velocity)
+	wipe(abilities.autoAoe)
+	wipe(abilities.trackAuras)
+	wipe(abilities.bloodtalons)
 	for _, ability in next, abilities.all do
 		if ability.known then
 			abilities.bySpellId[ability.spellId] = ability
@@ -1287,20 +1446,113 @@ function Player:UpdateAbilities()
 	end
 end
 
+function Player:UpdateThreat()
+	local _, status, pct
+	_, status, pct = UnitDetailedThreatSituation('player', 'target')
+	self.threat.status = status or 0
+	self.threat.pct = pct or 0
+	self.threat.lead = 0
+	if self.threat.status >= 3 and DETAILS_PLUGIN_TINY_THREAT then
+		local threat_table = DETAILS_PLUGIN_TINY_THREAT.player_list_indexes
+		if threat_table and threat_table[1] and threat_table[2] and threat_table[1][1] == Player.name then
+			self.threat.lead = max(0, threat_table[1][6] - threat_table[2][6])
+		end
+	end
+end
+
+function Player:Update()
+	local _, start, duration, remains, spellId, speed_mh, speed_oh
+	self.main =  nil
+	self.cd = nil
+	self.interrupt = nil
+	self.extra = nil
+	self.pool_energy = nil
+	self:UpdateTime()
+	start, duration = GetSpellCooldown(61304)
+	self.gcd_remains = start > 0 and duration - (self.ctime - start) or 0
+	_, _, _, _, remains, _, _, _, spellId = UnitCastingInfo('player')
+	self.ability_casting = abilities.bySpellId[spellId]
+	self.cast_remains = remains and (remains / 1000 - self.ctime) or 0
+	self.execute_remains = max(self.cast_remains, self.gcd_remains)
+	self.haste_factor = 1 / (1 + UnitSpellHaste('player') / 100)
+	speed_mh, speed_oh = UnitAttackSpeed('player')
+	self.swing.mh.speed = speed_mh or 0
+	self.swing.oh.speed = speed_oh or 0
+	self.swing.mh.remains = max(0, self.swing.mh.last + self.swing.mh.speed - self.time)
+	self.swing.oh.remains = max(0, self.swing.oh.last + self.swing.oh.speed - self.time)
+	self.moving = GetUnitSpeed('player') ~= 0
+	self:UpdateThreat()
+
+	self.mana.regen = GetPowerRegenForPowerType(0)
+	self.mana.current = UnitPower('player', 0) + (self.mana.regen * self.execute_remains)
+	if self.ability_casting then
+		self.mana.current = self.mana.current - self.ability_casting:ManaCost()
+	end
+	self.mana.current = min(max(self.mana.current, 0), self.mana.max)
+	if self.form == FORM.CAT then
+		self.gcd = 1
+		self.energy.regen = GetPowerRegenForPowerType(3)
+		self.energy.current = UnitPower('player', 3) + (self.energy.regen * self.execute_remains)
+		self.energy.current = min(max(self.energy.current, 0), self.energy.max)
+		self.energy.deficit = self.energy.max - self.energy.current
+		self.combo_points.current = UnitPower('player', 4)
+	else
+		self.gcd = 1.5 * self.haste_factor
+	end
+	if self.form == FORM.BEAR then
+		self.rage.current = UnitPower('player', 1)
+		self.rage.deficit = self.rage.max - self.rage.current
+	end
+	self.berserk_remains = (Berserk.known and Berserk:Remains()) or (IncarnationKingOfTheJungle.known and IncarnationKingOfTheJungle:Remains()) or 0
+
+	trackAuras:Purge()
+	if Opt.auto_aoe then
+		for _, ability in next, abilities.autoAoe do
+			ability:UpdateTargetsHit()
+		end
+		autoAoe:Purge()
+	end
+end
+
+function Player:Init()
+	local _
+	if #UI.glows == 0 then
+		UI:CreateOverlayGlows()
+		UI:HookResourceFrame()
+	end
+	clawPreviousPanel.ability = nil
+	self.guid = UnitGUID('player')
+	self.name = UnitName('player')
+	self.level = UnitLevel('player')
+	_, self.instance = IsInInstance()
+	events:GROUP_ROSTER_UPDATE()
+	events:PLAYER_SPECIALIZATION_CHANGED('player')
+end
+
 -- End Player API
 
 -- Start Target API
 
-function Target:UpdateHealth()
+function Target:UpdateHealth(reset)
 	timer.health = 0
-	self.health = UnitHealth('target')
-	self.health_max = UnitHealthMax('target')
-	table.remove(self.health_array, 1)
-	self.health_array[25] = self.health
-	self.timeToDieMax = self.health / Player.health_max * 15
-	self.healthPercentage = self.health_max > 0 and (self.health / self.health_max * 100) or 100
-	self.healthLostPerSec = (self.health_array[1] - self.health) / 5
-	self.timeToDie = self.healthLostPerSec > 0 and min(self.timeToDieMax, self.health / self.healthLostPerSec) or self.timeToDieMax
+	self.health.current = UnitHealth('target')
+	self.health.max = UnitHealthMax('target')
+	if self.health.current <= 0 then
+		self.health.current = Player.health.max
+		self.health.max = self.health.current
+	end
+	if reset then
+		for i = 1, 25 do
+			self.health.history[i] = self.health.current
+		end
+	else
+		table.remove(self.health.history, 1)
+		self.health.history[25] = self.health.current
+	end
+	self.timeToDieMax = self.health.current / Player.health.max * 10
+	self.health.pct = self.health.max > 0 and (self.health.current / self.health.max * 100) or 100
+	self.health.loss_per_sec = (self.health.history[1] - self.health.current) / 5
+	self.timeToDie = self.health.loss_per_sec > 0 and min(self.timeToDieMax, self.health.current / self.health.loss_per_sec) or self.timeToDieMax
 end
 
 function Target:Update()
@@ -1315,13 +1567,9 @@ function Target:Update()
 		self.stunnable = true
 		self.classification = 'normal'
 		self.player = false
-		self.level = UnitLevel('player')
-		self.hostile = true
-		local i
-		for i = 1, 25 do
-			self.health_array[i] = 0
-		end
-		self:UpdateHealth()
+		self.level = Player.level
+		self.hostile = false
+		self:UpdateHealth(true)
 		if Opt.always_on then
 			UI:UpdateCombat()
 			clawPanel:Show()
@@ -1334,10 +1582,7 @@ function Target:Update()
 	end
 	if guid ~= self.guid then
 		self.guid = guid
-		local i
-		for i = 1, 25 do
-			self.health_array[i] = UnitHealth('target')
-		end
+		self:UpdateHealth(true)
 	end
 	self.boss = false
 	self.stunnable = true
@@ -1345,12 +1590,11 @@ function Target:Update()
 	self.player = UnitIsPlayer('target')
 	self.level = UnitLevel('target')
 	self.hostile = UnitCanAttack('player', 'target') and not UnitIsDead('target')
-	self:UpdateHealth()
 	if not self.player and self.classification ~= 'minus' and self.classification ~= 'normal' then
-		if self.level == -1 or (Player.instance == 'party' and self.level >= UnitLevel('player') + 2) then
+		if self.level == -1 or (Player.instance == 'party' and self.level >= Player.level + 2) then
 			self.boss = true
 			self.stunnable = false
-		elseif Player.instance == 'raid' or (self.health_max > Player.health_max * 10) then
+		elseif Player.instance == 'raid' or (self.health.max > Player.health.max * 10) then
 			self.stunnable = false
 		end
 	end
@@ -1359,6 +1603,13 @@ function Target:Update()
 		clawPanel:Show()
 		return true
 	end
+end
+
+function Target:Stunned()
+	if MightyBash:Up() or Maim:Up() then
+		return true
+	end
+	return false
 end
 
 -- End Target API
@@ -1380,6 +1631,16 @@ end
 
 function Ability:Bloodtalons()
 	return self.bt_trigger and (Player.time - self.bt_trigger) < 4
+end
+
+function Bloodtalons:ApplyAura(...)
+	Ability.ApplyAura(self, ...)
+	self:Reset()
+end
+
+function Bloodtalons:RefreshAura(...)
+	Ability.RefreshAura(self, ...)
+	self:Reset()
 end
 
 function Bloodtalons:ActiveTriggers()
@@ -1408,6 +1669,13 @@ function Bloodtalons:Reset()
 	local _, ability
 	for _, ability in next, abilities.bloodtalons do
 		ability.bt_trigger = 0
+	end
+end
+
+function FerociousBite:CastLanded(dstGUID, event, ...)
+	Ability.CastLanded(self, dstGUID, event, ...)
+	if Sabertooth.known and Rip.aura_targets[dstGUID] and (event == 'SPELL_DAMAGE' or event == 'SPELL_ABSORBED') then
+		Rip:RefreshAura(dstGUID)
 	end
 end
 
@@ -1476,7 +1744,7 @@ function Rip:ApplyAura(guid)
 		duration = 4 + (4 * self.next_combo_points)
 	elseif self.next_applied_by == PrimalWrath then
 		duration = 2 + (2 * self.next_combo_points)
-	elseif self.next_applied_by == FerociousBite then
+	else -- Ferocious Bite
 		return
 	end
 	local aura = {
@@ -1501,9 +1769,9 @@ function Rip:RefreshAura(guid)
 		duration = 2 + (2 * self.next_combo_points)
 		max_duration = 1.3 * duration
 		aura.multiplier = self.next_multiplier
-	elseif self.next_applied_by == FerociousBite then
+	else -- Ferocious Bite
 		duration = self.next_combo_points
-		max_duration = 1.3 * (4 + (4 * Player.combo_points_max))
+		max_duration = 1.3 * (4 + (4 * Player.combo_points.max))
 	end
 	aura.expires = Player.time + min(max_duration, (aura.expires - Player.time) + duration)
 end
@@ -1576,6 +1844,13 @@ end
 
 function PrimalWrath:NextMultiplier()
 	return Rip:NextMultiplier()
+end
+
+function Shred:CastSuccess(...)
+	Ability.CastSuccess(self, ...)
+	if Opt.auto_aoe and not Bloodtalons.known and Player.berserk_remains == 0 then
+		Player:SetTargetMode(1)
+	end
 end
 
 function ThrashCat:ApplyAura(guid)
@@ -1672,20 +1947,30 @@ local APL = {
 	[SPEC.RESTORATION] = {},
 }
 
-APL[SPEC.BALANCE].main = function(self)
+APL[SPEC.BALANCE].Main = function(self)
 	if Player:TimeInCombat() == 0 then
-		if Opt.pot and not Player:InArenaOrBattleground() then
-			if GreaterFlaskOfEndlessFathoms:Usable() and GreaterFlaskOfEndlessFathoms.buff:Remains() < 300 then
-				UseCooldown(GreaterFlaskOfTheCurrents)
+		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 300 and Player.group_size > 1 then
+			UseCooldown(Trinket.SoleahsSecretTechnique)
+		end
+		if not Player:InArenaOrBattleground() then
+			if EternalAugmentRune:Usable() and EternalAugmentRune.buff:Remains() < 300 then
+				UseCooldown(EternalAugmentRune)
 			end
-			if Target.boss and PotionOfUnbridledFury:Usable() then
-				UseCooldown(PotionOfUnbridledFury)
+			if EternalFlask:Usable() and EternalFlask.buff:Remains() < 300 and SpectralFlaskOfPower.buff:Remains() < 300 then
+				UseCooldown(EternalFlask)
 			end
+			if Opt.pot and SpectralFlaskOfPower:Usable() and SpectralFlaskOfPower.buff:Remains() < 300 and EternalFlask.buff:Remains() < 300 then
+				UseCooldown(SpectralFlaskOfPower)
+			end
+		end
+	else
+		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 10 and Player.group_size > 1 then
+			UseExtra(Trinket.SoleahsSecretTechnique)
 		end
 	end
 end
 
-APL[SPEC.FERAL].main = function(self)
+APL[SPEC.FERAL].Main = function(self)
 	if Player:TimeInCombat() == 0 then
 --[[
 actions.precombat=flask
@@ -1701,18 +1986,28 @@ actions.precombat+=/prowl
 actions.precombat+=/potion,dynamic_prepot=1
 actions.precombat+=/berserk
 ]]
+		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 300 and Player.group_size > 1 then
+			UseCooldown(Trinket.SoleahsSecretTechnique)
+		end
 		if Prowl:Usable() then
 			UseCooldown(Prowl)
 		elseif CatForm:Down() then
 			UseCooldown(CatForm)
 		end
-		if Opt.pot and not Player:InArenaOrBattleground() then
-			if GreaterFlaskOfTheCurrents:Usable() and GreaterFlaskOfTheCurrents.buff:Remains() < 300 then
-				UseCooldown(GreaterFlaskOfTheCurrents)
+		if not Player:InArenaOrBattleground() then
+			if EternalAugmentRune:Usable() and EternalAugmentRune.buff:Remains() < 300 then
+				UseCooldown(EternalAugmentRune)
 			end
-			if Target.boss and PotionOfUnbridledFury:Usable() then
-				UseCooldown(PotionOfUnbridledFury)
+			if EternalFlask:Usable() and EternalFlask.buff:Remains() < 300 and SpectralFlaskOfPower.buff:Remains() < 300 then
+				UseCooldown(EternalFlask)
 			end
+			if Opt.pot and SpectralFlaskOfPower:Usable() and SpectralFlaskOfPower.buff:Remains() < 300 and EternalFlask.buff:Remains() < 300 then
+				UseCooldown(SpectralFlaskOfPower)
+			end
+		end
+	else
+		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 10 and Player.group_size > 1 then
+			UseExtra(Trinket.SoleahsSecretTechnique)
 		end
 	end
 --[[
@@ -1737,10 +2032,10 @@ actions+=/run_action_list,name=generators
 		return Rake
 	end
 	self:cooldowns()
-	if Player:HealthPct() < (Player:ComboPoints() >= 5 and 85 or 65) and Regrowth:Usable() and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() and not Player:Stealthed() then
+	if Player.health.pct < (Player.combo_points.current >= 5 and 85 or 65) and Regrowth:Usable() and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() and not Player:Stealthed() then
 		UseExtra(Regrowth)
 	end
-	if Player:ComboPoints() >= 5 then
+	if Player.combo_points.current >= 5 then
 		return self:finishers()
 	end
 	if Bloodtalons.known and Bloodtalons:Down() then
@@ -1749,7 +2044,7 @@ actions+=/run_action_list,name=generators
 	if ApexPredatorsCarving.known and FerociousBite:Usable() and ApexPredatorsCarving:Up() and (not Bloodtalons.known or Bloodtalons:Up() or Rip:Ticking() > 4) then
 		return FerociousBite
 	end
-	if Sabertooth.known and Player.enemies == 1 and Player:ComboPoints() >= 3 and Rip:Down() and Rip:Usable() and Rip:NextMultiplier() >= Player.rip_multiplier_max and (TigersFury:Remains() < 1.5 or Bloodtalons:Remains() < 1.5 or Bloodtalons:Stack() == 1) then
+	if Sabertooth.known and Player.enemies == 1 and Player.combo_points.current >= 3 and Rip:Down() and Rip:Usable() and Rip:NextMultiplier() >= Player.rip_multiplier_max and (TigersFury:Remains() < 1.5 or Bloodtalons:Remains() < 1.5 or Bloodtalons:Stack() == 1) then
 		return Rip
 	end
 	return self:generators()
@@ -1768,14 +2063,14 @@ actions.cooldowns+=/shadowmeld,if=combo_points<5&energy>=action.rake.cost&dot.ra
 actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 ]]
 	if Player.use_cds then
-		if Berserk:Usable() and Player:Energy() >= 40 and (TigersFury:Ready(5) or TigersFury:Up()) then
+		if Berserk:Usable() and Player.energy.current >= 40 and (TigersFury:Ready(5) or TigersFury:Up()) then
 			return UseCooldown(Berserk)
 		end
-		if IncarnationKingOfTheJungle:Usable() and Player:Energy() >= 40 and (not TigersFury:Ready(15) or TigersFury:Up()) then
+		if IncarnationKingOfTheJungle:Usable() and Player.energy.current >= 40 and (not TigersFury:Ready(15) or TigersFury:Up()) then
 			return UseCooldown(IncarnationKingOfTheJungle)
 		end
 	end
-	if TigersFury:Usable() and Player:EnergyDeficit() >= 60 then
+	if TigersFury:Usable() and Player.energy.deficit >= 60 then
 		return UseCooldown(TigersFury)
 	end
 	if Thorns:Usable() and Player:UnderAttack() and Thorns:WontCapEnergy() then
@@ -1791,14 +2086,14 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 			UseCooldown(Trinket2)
 		end
 	end
-	if FeralFrenzy:Usable() and Player:ComboPoints() <= (Player.berserk_remains > 0 and 2 or 1) then
+	if FeralFrenzy:Usable() and Player.combo_points.current <= (Player.berserk_remains > 0 and 2 or 1) then
 		return UseCooldown(FeralFrenzy)
 	end
 	if Player.use_cds then
-		if ConvokeTheSpirits:Usable() and Player:ComboPoints() <= (Player.berserk_remains > 0 and 2 or 1) and (not SavageRoar.known or SavageRoar:Remains() > 4) and Rip:Remains() > 4 and ((Predator.known and not Target.boss) or not TigersFury:Ready() and (TigersFury:Remains() < 3 or Target.timeToDie < 6)) then
+		if ConvokeTheSpirits:Usable() and Player.combo_points.current <= (Player.berserk_remains > 0 and 2 or 1) and (not SavageRoar.known or SavageRoar:Remains() > 4) and Rip:Remains() > 4 and ((Predator.known and not Target.boss) or not TigersFury:Ready() and (TigersFury:Remains() < 3 or Target.timeToDie < 6)) then
 			return UseCooldown(ConvokeTheSpirits)
 		end
-		if Shadowmeld:Usable() and Player:ComboPoints() < 5 and Player:Energy() >= Rake:EnergyCost() and Rake:Multiplier() < 1.5 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and (not SavageRoar.known or SavageRoar:Remains() > 1.5) and ((not Berserk.known and not IncarnationKingOfTheJungle.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationKingOfTheJungle.known and not IncarnationKingOfTheJungle:Ready(18))) then
+		if Shadowmeld:Usable() and Player.combo_points.current < 5 and Player.energy.current >= Rake:EnergyCost() and Rake:Multiplier() < 1.5 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and (not SavageRoar.known or SavageRoar:Remains() > 1.5) and ((not Berserk.known and not IncarnationKingOfTheJungle.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationKingOfTheJungle.known and not IncarnationKingOfTheJungle:Ready(18))) then
 			return UseCooldown(Shadowmeld)
 		end
 	end
@@ -1817,10 +2112,10 @@ actions.bloodtalons+=/swipe_cat,if=buff.bt_swipe.down
 actions.bloodtalons+=/thrash_cat,if=buff.bt_thrash.down
 ]]
 	if Bloodtalons:ActiveTriggers() == 0 or Bloodtalons:SecondsSinceLastTrigger() > 3 then
-		local energy = Player:Energy() + (3.5 * Player:EnergyRegen()) + (Clearcasting:Up() and 40 or 0)
+		local energy = Player.energy.current + (3.5 * Player.energy.regen) + (Clearcasting:Up() and 40 or 0)
 		local energy_need = 115 - (IncarnationKingOfTheJungle.known and Player.berserk_remains > 0 and 23 or 0)
 		if energy < energy_need then
-			Player.pool_energy = Player:Energy() + (energy_need - energy)
+			Player.pool_energy = Player.energy.current + (energy_need - energy)
 		end
 	end
 	if Rake:Usable() and not Rake:Bloodtalons() and (Rake:Down() or (Rake:Refreshable() and Rake:NextMultiplier() > Rake:Multiplier())) then
@@ -1918,7 +2213,7 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 			return Pool(ThrashCat)
 		end
 	end
-	if BrutalSlash:Usable() and Player.enemies > 2 and (Player:Energy() < 50 or Player:ComboPoints() < 4) then
+	if BrutalSlash:Usable() and Player.enemies > 2 and (Player.energy.current < 50 or Player.combo_points.current < 4) then
 		return BrutalSlash
 	end
 	if ScentOfBlood.known and SwipeCat:Usable(0, true) and ScentOfBlood:Up() then
@@ -1934,7 +2229,7 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 	end
 	if BrutalSlash:Usable() and Clearcasting:Down() then
 		if Player.berserk_remains > 0 then
-			if Player:ComboPoints() == 4 and (not Bloodtalons.known or (Bloodtalons:Down() and BrutalSlash:Bloodtalons())) then
+			if Player.combo_points.current == 4 and (not Bloodtalons.known or (Bloodtalons:Down() and BrutalSlash:Bloodtalons())) then
 				return BrutalSlash
 			end
 		elseif Player:EnergyTimeToMax() > 1.5 and ((TigersFury:Up() and (not Bloodtalons.known or BrutalSlash:Bloodtalons())) or BrutalSlash:ChargesFractional() > 2.5) then
@@ -1947,7 +2242,7 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 	if SwipeCat:Usable(0, true) and Player.enemies > 1 and Player.berserk_remains == 0 then
 		return Pool(SwipeCat)
 	end
-	if Shred:Usable() and (Clearcasting:Up() or Rake:Remains() > ((Shred:EnergyCost() + Rake:EnergyCost() - Player:Energy()) / Player:EnergyRegen())) then
+	if Shred:Usable() and (Clearcasting:Up() or Rake:Remains() > ((Shred:EnergyCost() + Rake:EnergyCost() - Player.energy.current) / Player.energy.regen)) then
 		return Shred
 	end
 end
@@ -1966,7 +2261,7 @@ actions.owlweave+=/moonkin_form,if=energy<40&(dot.rip.remains>4.5|combo_points<5
 		if SunfireBA:Usable() and SunfireBA:Refreshable() then
 			return SunfireBA
 		end
-	elseif SunfireBA:Refreshable() and Player:Energy() < 40 and (Rip:Remains() > 4.5 or Player:ComboPoints() < 5) and not TigersFury:Ready(6.5) and Clearcasting:Down() and (not ApexPredatorsCarving.known or ApexPredatorsCarving:Down()) and not Player:BloodlustActive() and (Berserk:Remains() > 5 or Berserk:Down()) and (not ConvokeTheSpirits.known or not ConvokeTheSpirits:Ready()) then
+	elseif SunfireBA:Refreshable() and Player.energy.current < 40 and (Rip:Remains() > 4.5 or Player.combo_points.current < 5) and not TigersFury:Ready(6.5) and Clearcasting:Down() and (not ApexPredatorsCarving.known or ApexPredatorsCarving:Down()) and not Player:BloodlustActive() and (Berserk:Remains() > 5 or Berserk:Down()) and (not ConvokeTheSpirits.known or not ConvokeTheSpirits:Ready()) then
 		if HeartOfTheWild:Usable() then
 			UseCooldown(HeartOfTheWild)
 		elseif MoonkinForm:Usable() then
@@ -1975,15 +2270,25 @@ actions.owlweave+=/moonkin_form,if=energy<40&(dot.rip.remains>4.5|combo_points<5
 	end
 end
 
-APL[SPEC.GUARDIAN].main = function(self)
+APL[SPEC.GUARDIAN].Main = function(self)
 	if Player:TimeInCombat() == 0 then
-		if Opt.pot and not Player:InArenaOrBattleground() then
-			if GreaterFlaskOfTheCurrents:Usable() and GreaterFlaskOfTheCurrents.buff:Remains() < 300 then
-				UseCooldown(GreaterFlaskOfTheCurrents)
+		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 300 and Player.group_size > 1 then
+			UseCooldown(Trinket.SoleahsSecretTechnique)
+		end
+		if not Player:InArenaOrBattleground() then
+			if EternalAugmentRune:Usable() and EternalAugmentRune.buff:Remains() < 300 then
+				UseCooldown(EternalAugmentRune)
 			end
-			if Target.boss and SuperiorBattlePotionOfAgility:Usable() then
-				UseCooldown(SuperiorBattlePotionOfAgility)
+			if EternalFlask:Usable() and EternalFlask.buff:Remains() < 300 and SpectralFlaskOfPower.buff:Remains() < 300 then
+				UseCooldown(EternalFlask)
 			end
+			if Opt.pot and SpectralFlaskOfPower:Usable() and SpectralFlaskOfPower.buff:Remains() < 300 and EternalFlask.buff:Remains() < 300 then
+				UseCooldown(SpectralFlaskOfPower)
+			end
+		end
+	else
+		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 10 and Player.group_size > 1 then
+			UseExtra(Trinket.SoleahsSecretTechnique)
 		end
 	end
 --[[
@@ -2027,7 +2332,7 @@ actions+=/swipe
 	if Swipe:Usable() and Player.enemies > 4 and (not IncarnationGuardianOfUrsoc.known or IncarnationGuardianOfUrsoc:Down()) then
 		return Swipe
 	end
-	if Maul:Usable() and Player.enemies < 4 and not Player:UnderAttack() and (Player:RageDeficit() < 10 or (SavageCombatant.known and SavageCombatant:Stack() >= 3)) then
+	if Maul:Usable() and Player.enemies < 4 and not Player:UnderAttack() and (Player.rage.deficit < 10 or (SavageCombatant.known and SavageCombatant:Stack() >= 3)) then
 		return Maul
 	end
 	if Mangle:Usable() and Thrash:Up() then
@@ -2061,10 +2366,10 @@ actions.cooldowns+=/use_items
 	if BearForm:Down() then
 		return
 	end
-	if FrenziedRegeneration:Usable() and Player:HealthPct() <= Opt.frenzied_threshold then
+	if FrenziedRegeneration:Usable() and Player.health.pct <= Opt.frenzied_threshold then
 		UseExtra(FrenziedRegeneration)
 	end
-	if Thorns:Usable() and Player:UnderAttack() and Player:HealthPct() > 60 then
+	if Thorns:Usable() and Player:UnderAttack() and Player.health.pct > 60 then
 		return UseCooldown(Thorns)
 	end
 	if Barkskin:Usable() then
@@ -2075,8 +2380,27 @@ actions.cooldowns+=/use_items
 	end
 end
 
-APL[SPEC.RESTORATION].main = function(self)
-
+APL[SPEC.RESTORATION].Main = function(self)
+	if Player:TimeInCombat() == 0 then
+		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 300 and Player.group_size > 1 then
+			UseCooldown(Trinket.SoleahsSecretTechnique)
+		end
+		if not Player:InArenaOrBattleground() then
+			if EternalAugmentRune:Usable() and EternalAugmentRune.buff:Remains() < 300 then
+				UseCooldown(EternalAugmentRune)
+			end
+			if EternalFlask:Usable() and EternalFlask.buff:Remains() < 300 and SpectralFlaskOfPower.buff:Remains() < 300 then
+				UseCooldown(EternalFlask)
+			end
+			if Opt.pot and SpectralFlaskOfPower:Usable() and SpectralFlaskOfPower.buff:Remains() < 300 and EternalFlask.buff:Remains() < 300 then
+				UseCooldown(SpectralFlaskOfPower)
+			end
+		end
+	else
+		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 10 and Player.group_size > 1 then
+			UseExtra(Trinket.SoleahsSecretTechnique)
+		end
+	end
 end
 
 APL.Interrupt = function(self)
@@ -2109,7 +2433,7 @@ end
 hooksecurefunc('ActionButton_ShowOverlayGlow', UI.DenyOverlayGlow) -- Disable Blizzard's built-in action button glowing
 
 function UI:UpdateGlowColorAndScale()
-	local w, h, glow, i
+	local w, h, glow
 	local r = Opt.glow.color.r
 	local g = Opt.glow.color.g
 	local b = Opt.glow.color.b
@@ -2129,7 +2453,6 @@ function UI:UpdateGlowColorAndScale()
 end
 
 function UI:CreateOverlayGlows()
-	local b, i
 	local GenerateGlow = function(button)
 		if button then
 			local glow = CreateFrame('Frame', nil, button, 'ActionBarButtonSpellActivationAlert')
@@ -2178,7 +2501,7 @@ function UI:CreateOverlayGlows()
 end
 
 function UI:UpdateGlows()
-	local glow, icon, i
+	local glow, icon
 	for i = 1, #self.glows do
 		glow = self.glows[i]
 		icon = glow.button.icon:GetTexture()
@@ -2351,11 +2674,27 @@ end
 
 function UI:UpdateDisplay()
 	timer.display = 0
-	local dim, text_center, text_bl, text_tr
+	local dim, dim_cd, text_center, text_cd, text_bl, text_tr
+
 	if Opt.dimmer then
 		dim = not ((not Player.main) or
 		           (Player.main.spellId and IsUsableSpell(Player.main.spellId)) or
 		           (Player.main.itemId and IsUsableItem(Player.main.itemId)))
+		dim_cd = not ((not Player.cd) or
+		           (Player.cd.spellId and IsUsableSpell(Player.cd.spellId)) or
+		           (Player.cd.itemId and IsUsableItem(Player.cd.itemId)))
+	end
+	if Player.main and Player.main.requires_react then
+		local react = Player.main:React()
+		if react > 0 then
+			text_center = format('%.1f', react)
+		end
+	end
+	if Player.cd and Player.cd.requires_react then
+		local react = Player.cd:React()
+		if react > 0 then
+			text_cd = format('%.1f', react)
+		end
 	end
 	if Player.pool_energy then
 		local deficit = Player.pool_energy - UnitPower('player', 3)
@@ -2385,69 +2724,22 @@ function UI:UpdateDisplay()
 		clawPanel.freeCastOverlayOn = false
 		clawPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
 	end
+
 	clawPanel.dimmer:SetShown(dim)
 	clawPanel.text.center:SetText(text_center)
 	clawPanel.text.bl:SetText(text_bl)
 	clawPanel.text.tr:SetText(text_tr)
 	--clawPanel.text.bl:SetText(format('%.1fs', Target.timeToDie))
+	clawCooldownPanel.text:SetText(text_cd)
+	clawCooldownPanel.dimmer:SetShown(dim_cd)
 end
 
 function UI:UpdateCombat()
 	timer.combat = 0
-	local _, start, duration, remains, spellId, speed, max_speed
-	Player.ctime = GetTime()
-	Player.time = Player.ctime - Player.time_diff
-	Player.main =  nil
-	Player.cd = nil
-	Player.interrupt = nil
-	Player.extra = nil
-	Player.pool_energy = nil
-	start, duration = GetSpellCooldown(61304)
-	Player.gcd_remains = start > 0 and duration - (Player.ctime - start) or 0
-	_, _, _, _, remains, _, _, _, spellId = UnitCastingInfo('player')
-	Player.ability_casting = abilities.bySpellId[spellId]
-	Player.execute_remains = max(remains and (remains / 1000 - Player.ctime) or 0, Player.gcd_remains)
-	Player.haste_factor = 1 / (1 + UnitSpellHaste('player') / 100)
-	Player.health = UnitHealth('player')
-	Player.health_max = UnitHealthMax('player')
-	if Player.form == FORM.CAT then
-		Player.gcd = 1
-		Player.energy_regen = GetPowerRegen()
-		Player.energy_max = UnitPowerMax('player', 3)
-		Player.energy = UnitPower('player', 3) + (Player.energy_regen * Player.execute_remains)
-		Player.energy = min(max(Player.energy, 0), Player.energy_max)
-		Player.combo_points = UnitPower('player', 4)
-	else
-		Player.mana_regen = GetPowerRegen()
-		Player.gcd = 1.5 * Player.haste_factor
-	end
-	if Player.form == FORM.BEAR then
-		Player.rage = UnitPower('player', 1)
-	end
-	Player.mana = UnitPower('player', 0) + (Player.mana_regen * Player.execute_remains)
-	if Player.ability_casting then
-		Player.mana = Player.mana - Player.ability_casting:ManaCost()
-	end
-	Player.mana = min(max(Player.mana, 0), Player.mana_max)
-	speed, max_speed = GetUnitSpeed('player')
-	Player.moving = speed ~= 0
-	Player.movement_speed = max_speed / 7 * 100
-	if Berserk.known then
-		Player.berserk_remains = Berserk:Remains()
-	elseif IncarnationKingOfTheJungle.known then
-		Player.berserk_remains = IncarnationKingOfTheJungle:Remains()
-	end
+	
+	Player:Update()
 
-	trackAuras:Purge()
-	if Opt.auto_aoe then
-		local ability
-		for _, ability in next, abilities.autoAoe do
-			ability:UpdateTargetsHit()
-		end
-		autoAoe:Purge()
-	end
-
-	Player.main = APL[Player.spec]:main()
+	Player.main = APL[Player.spec]:Main()
 	if Player.main then
 		clawPanel.icon:SetTexture(Player.main.icon)
 		if Opt.multipliers and Player.main.Multiplier then
@@ -2455,23 +2747,26 @@ function UI:UpdateCombat()
 		else
 			clawPanel.text.multiplier_diff = nil
 		end
-		Player.main_freecast = Player.main.energy_cost > 0 and Player.main:EnergyCost() == 0
+		Player.main_freecast = (Player.main.energy_cost > 0 and Player.main:EnergyCost() == 0)
 	end
 	if Player.cd then
 		clawCooldownPanel.icon:SetTexture(Player.cd.icon)
+		if Player.cd.spellId then
+			local start, duration = GetSpellCooldown(Player.cd.spellId)
+			clawCooldownPanel.swipe:SetCooldown(start, duration)
+		end
 	end
 	if Player.extra then
 		clawExtraPanel.icon:SetTexture(Player.extra.icon)
 	end
 	if Opt.interrupt then
-		local ends, notInterruptible
-		_, _, _, start, ends, _, _, notInterruptible = UnitCastingInfo('target')
+		local _, _, _, start, ends, _, _, notInterruptible = UnitCastingInfo('target')
 		if not start then
 			_, _, _, start, ends, _, notInterruptible = UnitChannelInfo('target')
 		end
 		if start and not notInterruptible then
 			Player.interrupt = APL.Interrupt()
-			clawInterruptPanel.cast:SetCooldown(start / 1000, (ends - start) / 1000)
+			clawInterruptPanel.swipe:SetCooldown(start / 1000, (ends - start) / 1000)
 		end
 		if Player.interrupt then
 			clawInterruptPanel.icon:SetTexture(Player.interrupt.icon)
@@ -2480,6 +2775,13 @@ function UI:UpdateCombat()
 		clawInterruptPanel.border:SetShown(Player.interrupt)
 		clawInterruptPanel:SetShown(start and not notInterruptible)
 	end
+	if Opt.previous and clawPreviousPanel.ability then
+		if (Player.time - clawPreviousPanel.ability.last_used) > 10 then
+			clawPreviousPanel.ability = nil
+			clawPreviousPanel:Hide()
+		end
+	end
+
 	clawPanel.icon:SetShown(Player.main)
 	clawPanel.border:SetShown(Player.main)
 	clawCooldownPanel:SetShown(Player.cd)
@@ -2517,132 +2819,188 @@ function events:ADDON_LOADED(name)
 	end
 end
 
-function events:COMBAT_LOG_EVENT_UNFILTERED()
-	local timeStamp, eventType, _, srcGUID, _, _, _, dstGUID, _, _, _, spellId, spellName, _, missType = CombatLogGetCurrentEventInfo()
-	Player.time = timeStamp
-	Player.ctime = GetTime()
-	Player.time_diff = Player.ctime - Player.time
+CombatEvent.TRIGGER = function(timeStamp, event, _, srcGUID, _, _, _, dstGUID, _, _, _, ...)
+	Player:UpdateTime(timeStamp)
+	local e = event
+	if (
+	   e == 'UNIT_DESTROYED' or
+	   e == 'UNIT_DISSIPATES' or
+	   e == 'SPELL_INSTAKILL' or
+	   e == 'PARTY_KILL')
+	then
+		e = 'UNIT_DIED'
+	elseif (
+	   e == 'SPELL_CAST_START' or
+	   e == 'SPELL_CAST_SUCCESS' or
+	   e == 'SPELL_CAST_FAILED' or
+	   e == 'SPELL_DAMAGE' or
+	   e == 'SPELL_ENERGIZE' or
+	   e == 'SPELL_PERIODIC_DAMAGE' or
+	   e == 'SPELL_MISSED' or
+	   e == 'SPELL_AURA_APPLIED' or
+	   e == 'SPELL_AURA_REFRESH' or
+	   e == 'SPELL_AURA_REMOVED')
+	then
+		e = 'SPELL'
+	end
+	if CombatEvent[e] then
+		return CombatEvent[e](event, srcGUID, dstGUID, ...)
+	end
+end
 
-	if eventType == 'UNIT_DIED' or eventType == 'UNIT_DESTROYED' or eventType == 'UNIT_DISSIPATES' or eventType == 'SPELL_INSTAKILL' or eventType == 'PARTY_KILL' then
-		trackAuras:Remove(dstGUID)
+CombatEvent.UNIT_DIED = function(event, srcGUID, dstGUID)
+	trackAuras:Remove(dstGUID)
+	if Opt.auto_aoe then
+		autoAoe:Remove(dstGUID)
+	end
+end
+
+CombatEvent.SWING_DAMAGE = function(event, srcGUID, dstGUID, amount, overkill, spellSchool, resisted, blocked, absorbed, critical, glancing, crushing, offHand)
+	if srcGUID == Player.guid then
+		Player:ResetSwing(not offHand, offHand)
 		if Opt.auto_aoe then
-			autoAoe:Remove(dstGUID)
+			autoAoe:Add(dstGUID, true)
+		end
+	elseif dstGUID == Player.guid then
+		Player.swing.last_taken = Player.time
+		if Opt.auto_aoe then
+			autoAoe:Add(srcGUID, true)
 		end
 	end
-	if eventType == 'SWING_DAMAGE' or eventType == 'SWING_MISSED' then
-		if dstGUID == Player.guid then
-			Player.last_swing_taken = Player.time
+end
+
+CombatEvent.SWING_MISSED = function(event, srcGUID, dstGUID, missType, offHand, amountMissed)
+	if srcGUID == Player.guid then
+		Player:ResetSwing(not offHand, offHand, true)
+		if Opt.auto_aoe and not (missType == 'EVADE' or missType == 'IMMUNE') then
+			autoAoe:Add(dstGUID, true)
 		end
+	elseif dstGUID == Player.guid then
+		Player.swing.last_taken = Player.time
 		if Opt.auto_aoe then
-			if dstGUID == Player.guid then
-				autoAoe:Add(srcGUID, true)
-			elseif srcGUID == Player.guid and not (missType == 'EVADE' or missType == 'IMMUNE') then
-				autoAoe:Add(dstGUID, true)
-			end
+			autoAoe:Add(srcGUID, true)
 		end
 	end
+end
 
+CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellSchool, missType, overCap, powerType)
 	if srcGUID ~= Player.guid then
 		return
 	end
-
 	local ability = spellId and abilities.bySpellId[spellId]
 	if not ability then
-		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', eventType, spellName or 'Unknown', spellId or 0))
-		return
-	end
-
-	if not (
-	   eventType == 'SPELL_CAST_START' or
-	   eventType == 'SPELL_CAST_SUCCESS' or
-	   eventType == 'SPELL_CAST_FAILED' or
-	   eventType == 'SPELL_AURA_REMOVED' or
-	   eventType == 'SPELL_DAMAGE' or
-	   eventType == 'SPELL_ABSORBED' or
-	   eventType == 'SPELL_PERIODIC_DAMAGE' or
-	   eventType == 'SPELL_MISSED' or
-	   eventType == 'SPELL_AURA_APPLIED' or
-	   eventType == 'SPELL_AURA_REFRESH' or
-	   eventType == 'SPELL_AURA_REMOVED')
-	then
+		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', event, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
 		return
 	end
 
 	UI:UpdateCombatWithin(0.05)
-	if eventType == 'SPELL_CAST_SUCCESS' then
-		Player.last_ability = ability
-		ability.last_used = Player.time
-		if ability.triggers_gcd then
-			Player.previous_gcd[10] = nil
-			table.insert(Player.previous_gcd, 1, ability)
-		end
-		if ability.triggers_bt then
-			ability.bt_trigger = Player.time
-		end
-		if ability.travel_start then
-			ability.travel_start[dstGUID] = Player.time
-		end
-		if Opt.previous and clawPanel:IsVisible() then
-			clawPreviousPanel.ability = ability
-			clawPreviousPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-			clawPreviousPanel.icon:SetTexture(ability.icon)
-			clawPreviousPanel:Show()
-		end
-		return
-	end
-	if ability == Bloodtalons and (eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH') then
-		Bloodtalons:Reset()
-	end
-
-	if dstGUID == Player.guid then
-		return -- ignore buffs beyond here
+	if event == 'SPELL_CAST_SUCCESS' then
+		return ability:CastSuccess(dstGUID)
+	elseif event == 'SPELL_CAST_START' then
+		return ability.CastStart and ability:CastStart(dstGUID)
+	elseif event == 'SPELL_CAST_FAILED'  then
+		return ability.CastFailed and ability:CastFailed(dstGUID, missType)
+	elseif event == 'SPELL_ENERGIZE' then
+		return ability.Energize and ability:Energize(missType, overCap, powerType)
 	end
 	if ability.aura_targets then
-		if eventType == 'SPELL_AURA_APPLIED' then
+		if event == 'SPELL_AURA_APPLIED' then
 			ability:ApplyAura(dstGUID)
-		elseif eventType == 'SPELL_AURA_REFRESH' then
+		elseif event == 'SPELL_AURA_REFRESH' then
 			ability:RefreshAura(dstGUID)
-		elseif eventType == 'SPELL_AURA_REMOVED' then
+		elseif event == 'SPELL_AURA_REMOVED' then
 			ability:RemoveAura(dstGUID)
 		end
 	end
+	if dstGUID == Player.guid then
+		return -- ignore buffs beyond here
+	end
 	if Opt.auto_aoe then
-		if eventType == 'SPELL_MISSED' and (missType == 'EVADE' or missType == 'IMMUNE') then
+		if event == 'SPELL_MISSED' and (missType == 'EVADE' or missType == 'IMMUNE') then
 			autoAoe:Remove(dstGUID)
-		elseif ability.auto_aoe and (eventType == ability.auto_aoe.trigger or ability.auto_aoe.trigger == 'SPELL_AURA_APPLIED' and eventType == 'SPELL_AURA_REFRESH') then
+		elseif ability.auto_aoe and (event == ability.auto_aoe.trigger or ability.auto_aoe.trigger == 'SPELL_AURA_APPLIED' and event == 'SPELL_AURA_REFRESH') then
 			ability:RecordTargetHit(dstGUID)
-		elseif ability == Shred and Player.berserk_remains == 0 and not Bloodtalons.known then
-			Player:SetTargetMode(1)
-		elseif ability == Rake and (eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH') then
-			autoAoe:Add(dstGUID, true)
 		end
 	end
-	if eventType == 'SPELL_ABSORBED' or eventType == 'SPELL_MISSED' or eventType == 'SPELL_DAMAGE' or eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH' then
-		if ability.travel_start and ability.travel_start[dstGUID] then
-			ability.travel_start[dstGUID] = nil
-		end
-		if Sabertooth.known and ability == FerociousBite and Rip.aura_targets[dstGUID] and (eventType == 'SPELL_DAMAGE' or eventType == 'SPELL_ABSORBED') then
-			Rip:RefreshAura(dstGUID)
-		end
-		if Opt.previous and Opt.miss_effect and eventType == 'SPELL_MISSED' and clawPanel:IsVisible() and ability == clawPreviousPanel.ability then
-			clawPreviousPanel.border:SetTexture(ADDON_PATH .. 'misseffect.blp')
-		end
+	if event == 'SPELL_DAMAGE' or event == 'SPELL_ABSORBED' or event == 'SPELL_MISSED' or event == 'SPELL_AURA_APPLIED' or event == 'SPELL_AURA_REFRESH' then
+		ability:CastLanded(dstGUID, event, missType)
 	end
+end
+
+function events:COMBAT_LOG_EVENT_UNFILTERED()
+	CombatEvent.TRIGGER(CombatLogGetCurrentEventInfo())
 end
 
 function events:PLAYER_TARGET_CHANGED()
 	Target:Update()
+	if Player.rescan_abilities then
+		Player:UpdateAbilities()
+	end
 end
 
-function events:UNIT_FACTION(unitID)
-	if unitID == 'target' then
+function events:UNIT_FACTION(unitId)
+	if unitId == 'target' then
 		Target:Update()
 	end
 end
 
-function events:UNIT_FLAGS(unitID)
-	if unitID == 'target' then
+function events:UNIT_FLAGS(unitId)
+	if unitId == 'target' then
 		Target:Update()
+	end
+end
+
+function events:UNIT_HEALTH(unitId)
+	if unitId == 'player' then
+		Player.health.current = UnitHealth('player')
+		Player.health.max = UnitHealthMax('player')
+		Player.health.pct = Player.health.current / Player.health.max * 100
+	end
+end
+
+function events:UNIT_SPELLCAST_START(unitId, castGUID, spellId)
+	if Opt.interrupt and unitId == 'target' then
+		UI:UpdateCombatWithin(0.05)
+	end
+end
+
+function events:UNIT_SPELLCAST_STOP(unitId, castGUID, spellId)
+	if Opt.interrupt and unitId == 'target' then
+		UI:UpdateCombatWithin(0.05)
+	end
+end
+events.UNIT_SPELLCAST_FAILED = events.UNIT_SPELLCAST_STOP
+events.UNIT_SPELLCAST_INTERRUPTED = events.UNIT_SPELLCAST_STOP
+
+function events:UNIT_SPELLCAST_SENT(unitId, destName, castGUID, spellId)
+	if unitId ~= 'player' or not spellId or castGUID:sub(6, 6) ~= '3' then
+		return
+	end
+	local ability = abilities.bySpellId[spellId]
+	if not ability then
+		return
+	end
+	if ability == Rip or ability == PrimalWrath or (Sabertooth.known and ability == FerociousBite) then
+		Rip.next_applied_by = ability
+		Rip.next_combo_points = UnitPower('player', 4)
+		Rip.next_multiplier = Rip:NextMultiplier()
+	elseif ability == Rake then
+		Rake.next_multiplier = Rake:NextMultiplier()
+	elseif ability == ThrashCat then
+		ThrashCat.next_multiplier = ThrashCat:NextMultiplier()
+	end
+end
+
+function events:UNIT_SPELLCAST_SUCCEEDED(unitId, castGUID, spellId)
+	if unitId ~= 'player' or not spellId or castGUID:sub(6, 6) ~= '3' then
+		return
+	end
+	local ability = abilities.bySpellId[spellId]
+	if not ability then
+		return
+	end
+	if ability.traveling then
+		ability.next_castGUID = castGUID
 	end
 end
 
@@ -2652,17 +3010,16 @@ end
 
 function events:PLAYER_REGEN_ENABLED()
 	Player.combat_start = 0
-	Player.last_swing_taken = 0
+	Player.swing.last_taken = 0
 	Target.estimated_range = 30
-	Player.previous_gcd = {}
+	wipe(Player.previous_gcd)
 	if Player.last_ability then
 		Player.last_ability = nil
 		clawPreviousPanel:Hide()
 	end
-	local _, ability, guid
 	for _, ability in next, abilities.velocity do
-		for guid in next, ability.travel_start do
-			ability.travel_start[guid] = nil
+		for guid in next, ability.traveling do
+			ability.traveling[guid] = nil
 		end
 	end
 	if Opt.auto_aoe then
@@ -2678,7 +3035,7 @@ function events:PLAYER_REGEN_ENABLED()
 end
 
 function events:PLAYER_EQUIPMENT_CHANGED()
-	local _, i, equipType, hasCooldown
+	local _, equipType, hasCooldown
 	Trinket1.itemId = GetInventoryItemID('player', 13) or 0
 	Trinket2.itemId = GetInventoryItemID('player', 14) or 0
 	for _, i in next, Trinket do -- use custom APL lines for these trinkets
@@ -2704,72 +3061,23 @@ function events:PLAYER_EQUIPMENT_CHANGED()
 			inventoryItems[i].can_use = false
 		end
 	end
+
+	Player:ResetSwing(true, true)
 	Player:UpdateAbilities()
 end
 
-function events:PLAYER_SPECIALIZATION_CHANGED(unitName)
-	if unitName ~= 'player' then
+function events:PLAYER_SPECIALIZATION_CHANGED(unitId)
+	if unitId ~= 'player' then
 		return
 	end
 	Player.spec = GetSpecialization() or 0
-	Player.berserk_remains = 0
 	clawPreviousPanel.ability = nil
 	Player:SetTargetMode(1)
-	Target:Update()
 	events:PLAYER_EQUIPMENT_CHANGED()
 	events:UPDATE_SHAPESHIFT_FORM()
 	events:PLAYER_REGEN_ENABLED()
-end
-
-function events:SPELL_UPDATE_COOLDOWN()
-	if Opt.spell_swipe then
-		local _, start, duration, castStart, castEnd
-		_, _, _, castStart, castEnd = UnitCastingInfo('player')
-		if castStart then
-			start = castStart / 1000
-			duration = (castEnd - castStart) / 1000
-		else
-			start, duration = GetSpellCooldown(61304)
-		end
-		clawPanel.swipe:SetCooldown(start, duration)
-	end
-end
-
-function events:UNIT_POWER_UPDATE(srcName, powerType)
-	if srcName == 'player' and (powerType == 'COMBO_POINTS' or powerType == 'LUNAR_POWER') then
-		UI:UpdateCombatWithin(0.05)
-	end
-end
-
-function events:UNIT_SPELLCAST_SENT(srcName, destName, castId, spellId)
-	if srcName ~= 'player' then
-		return
-	end
-	local ability = abilities.bySpellId[spellId]
-	if not ability then
-		return
-	end
-	if ability == Rip or ability == PrimalWrath or (Sabertooth.known and ability == FerociousBite) then
-		Rip.next_applied_by = ability
-		Rip.next_combo_points = UnitPower('player', 4)
-		Rip.next_multiplier = Rip:NextMultiplier()
-	elseif ability == Rake then
-		Rake.next_multiplier = Rake:NextMultiplier()
-	elseif ability == ThrashCat then
-		ThrashCat.next_multiplier = ThrashCat:NextMultiplier()
-	end
-end
-
-function events:UNIT_SPELLCAST_START(srcName)
-	if Opt.interrupt and srcName == 'target' then
-		UI:UpdateCombatWithin(0.05)
-	end
-end
-
-function events:UNIT_SPELLCAST_STOP(srcName)
-	if Opt.interrupt and srcName == 'target' then
-		UI:UpdateCombatWithin(0.05)
-	end
+	UI.OnResourceFrameShow()
+	Player:Update()
 end
 
 function events:UPDATE_SHAPESHIFT_FORM()
@@ -2789,7 +3097,33 @@ function events:UPDATE_SHAPESHIFT_FORM()
 	UI.OnResourceFrameShow()
 end
 
+function events:SPELL_UPDATE_COOLDOWN()
+	if Opt.spell_swipe then
+		local _, start, duration, castStart, castEnd
+		_, _, _, castStart, castEnd = UnitCastingInfo('player')
+		if castStart then
+			start = castStart / 1000
+			duration = (castEnd - castStart) / 1000
+		else
+			start, duration = GetSpellCooldown(61304)
+		end
+		clawPanel.swipe:SetCooldown(start, duration)
+	end
+end
+
 function events:PLAYER_PVP_TALENT_UPDATE()
+	Player:UpdateAbilities()
+end
+
+function events:SOULBIND_ACTIVATED()
+	Player:UpdateAbilities()
+end
+
+function events:SOULBIND_NODE_UPDATED()
+	Player:UpdateAbilities()
+end
+
+function events:SOULBIND_PATH_CHANGED()
 	Player:UpdateAbilities()
 end
 
@@ -2797,15 +3131,14 @@ function events:ACTIONBAR_SLOT_CHANGED()
 	UI:UpdateGlows()
 end
 
+function events:GROUP_ROSTER_UPDATE()
+	Player.group_size = max(1, min(40, GetNumGroupMembers()))
+end
+
 function events:PLAYER_ENTERING_WORLD()
-	if #UI.glows == 0 then
-		UI:CreateOverlayGlows()
-		UI:HookResourceFrame()
-	end
-	local _
-	_, Player.instance = IsInInstance()
-	Player.guid = UnitGUID('player')
-	events:PLAYER_SPECIALIZATION_CHANGED('player')
+	Player:Init()
+	Target:Update()
+	C_Timer.After(5, function() events:PLAYER_EQUIPMENT_CHANGED() end)
 end
 
 clawPanel.button:SetScript('OnClick', function(self, button, down)
@@ -2836,7 +3169,6 @@ clawPanel:SetScript('OnUpdate', function(self, elapsed)
 end)
 
 clawPanel:SetScript('OnEvent', function(self, event, ...) events[event](self, ...) end)
-local event
 for event in next, events do
 	clawPanel:RegisterEvent(event)
 end
@@ -2942,7 +3274,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 	end
 	if msg[1] == 'alpha' then
 		if msg[2] then
-			Opt.alpha = max(min((tonumber(msg[2]) or 100), 100), 0) / 100
+			Opt.alpha = max(0, min(100, tonumber(msg[2]) or 100)) / 100
 			UI:UpdateAlpha()
 		end
 		return Status('Icon transparency', Opt.alpha * 100 .. '%')
@@ -2991,9 +3323,9 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		if msg[2] == 'color' then
 			if msg[5] then
-				Opt.glow.color.r = max(min(tonumber(msg[3]) or 0, 1), 0)
-				Opt.glow.color.g = max(min(tonumber(msg[4]) or 0, 1), 0)
-				Opt.glow.color.b = max(min(tonumber(msg[5]) or 0, 1), 0)
+				Opt.glow.color.r = max(0, min(1, tonumber(msg[3]) or 0))
+				Opt.glow.color.g = max(0, min(1, tonumber(msg[4]) or 0))
+				Opt.glow.color.b = max(0, min(1, tonumber(msg[5]) or 0))
 				UI:UpdateGlowColorAndScale()
 			end
 			return Status('Glow color', '|cFFFF0000' .. Opt.glow.color.r, '|cFF00FF00' .. Opt.glow.color.g, '|cFF0000FF' .. Opt.glow.color.b)
@@ -3138,7 +3470,6 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		return Status('Position has been reset to', 'default')
 	end
 	print(ADDON, '(version: |cFFFFD000' .. GetAddOnMetadata(ADDON, 'Version') .. '|r) - Commands:')
-	local _, cmd
 	for _, cmd in next, {
 		'locked |cFF00C000on|r/|cFFC00000off|r - lock the ' .. ADDON .. ' UI so that it can\'t be moved',
 		'snap |cFF00C000above|r/|cFF00C000below|r/|cFFC00000off|r - snap the ' .. ADDON .. ' UI to the Personal Resource Display',
