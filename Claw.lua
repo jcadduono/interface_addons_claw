@@ -1100,7 +1100,6 @@ local JungleStalker = Ability:Add(252071, true, true)
 JungleStalker.buff_duration = 30
 local LunarInspiration = Ability:Add(155580, false, true)
 local Predator = Ability:Add(202021, false, true)
-local Sabertooth = Ability:Add(202031, false, true)
 local SavageRoar = Ability:Add(52610, true, true)
 SavageRoar.buff_duration = 12
 SavageRoar.energy_cost = 25
@@ -1276,6 +1275,10 @@ Trinket.SoleahsSecretTechnique.buff = Ability:Add(368512, true, true)
 
 function Player:Stealthed()
 	return Prowl:Up() or (Shadowmeld.known and Shadowmeld:Up()) or (IncarnationKingOfTheJungle.known and self.berserk_remains > 0)
+end
+
+function Player:EnergyTimeToMax(energy)
+	return (energy and max(0, energy - self.energy.current) or self.energy.deficit) / self.energy.regen
 end
 
 function Player:ResetSwing(mainHand, offHand, missed)
@@ -1672,13 +1675,6 @@ function Bloodtalons:Reset()
 	end
 end
 
-function FerociousBite:CastLanded(dstGUID, event, ...)
-	Ability.CastLanded(self, dstGUID, event, ...)
-	if Sabertooth.known and Rip.aura_targets[dstGUID] and (event == 'SPELL_DAMAGE' or event == 'SPELL_ABSORBED') then
-		Rip:RefreshAura(dstGUID)
-	end
-end
-
 function FerociousBite:EnergyCost()
 	if ApexPredatorsCarving.known and ApexPredatorsCarving:Up() then
 		return 0
@@ -2044,33 +2040,28 @@ actions+=/run_action_list,name=generators
 	if ApexPredatorsCarving.known and FerociousBite:Usable() and ApexPredatorsCarving:Up() and (not Bloodtalons.known or Bloodtalons:Up() or Rip:Ticking() > 4) then
 		return FerociousBite
 	end
-	if Sabertooth.known and Player.enemies == 1 and Player.combo_points.current >= 3 and Rip:Down() and Rip:Usable() and Rip:NextMultiplier() >= Player.rip_multiplier_max and (TigersFury:Remains() < 1.5 or Bloodtalons:Remains() < 1.5 or Bloodtalons:Stack() == 1) then
-		return Rip
-	end
 	return self:generators()
 end
 
 APL[SPEC.FERAL].cooldowns = function(self)
 --[[
-actions.cooldowns=berserk,if=energy>=30&(cooldown.tigers_fury.remains>5|buff.tigers_fury.up)
-actions.cooldowns+=/tigers_fury,if=energy.deficit>=60
+actions.cooldowns+=/berserk,if=dot.rip.ticking&(cooldown.convoke_the_spirits.up|cooldown.convoke_the_spirits.remains>32|fight_remains<20)
+actions.cooldowns+=/tigers_fury,if=energy.deficit>40|buff.bs_inc.up|(talent.predator.enabled&variable.shortest_ttd<3)|(!dot.rip.ticking&buff.bloodtalons.up)
 actions.cooldowns+=/berserking
 actions.cooldowns+=/thorns,if=active_enemies>desired_targets|raid_event.adds.in>45
 actions.cooldowns+=/feral_frenzy,if=combo_points=0
 actions.cooldowns+=/incarnation,if=energy>=30&(cooldown.tigers_fury.remains>15|buff.tigers_fury.up)
 actions.cooldowns+=/potion,if=target.time_to_die<65|(time_to_die<180&(buff.berserk.up|buff.incarnation.up))
 actions.cooldowns+=/shadowmeld,if=combo_points<5&energy>=action.rake.cost&dot.rake.pmultiplier<1.7&buff.tigers_fury.up&(!talent.incarnation.enabled|cooldown.incarnation.remains>18)&!buff.incarnation.up
+actions.cooldowns+=/convoke_the_spirits,if=(dot.rip.remains>4&combo_points<5&(dot.rake.ticking|spell_targets.thrash_cat>1)&energy.deficit>=20&cooldown.bs_inc.remains>10)|fight_remains<5|(buff.bs_inc.up&buff.bs_inc.remains>12)
 actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 ]]
 	if Player.use_cds then
-		if Berserk:Usable() and Player.energy.current >= 40 and (TigersFury:Ready(5) or TigersFury:Up()) then
+		if Berserk:Usable() and Rip:Up() and (not ConvokeTheSpirits.known or ConvokeTheSpirits:Ready() or not ConvokeTheSpirits:Ready(32) or (Target.boss and Target.timeToDie < 25)) then
 			return UseCooldown(Berserk)
 		end
-		if IncarnationKingOfTheJungle:Usable() and Player.energy.current >= 40 and (not TigersFury:Ready(15) or TigersFury:Up()) then
-			return UseCooldown(IncarnationKingOfTheJungle)
-		end
 	end
-	if TigersFury:Usable() and Player.energy.deficit >= 60 then
+	if TigersFury:Usable() and (Player.energy.deficit > 40 or Player.berserk_remains > 0 or (Bloodtalons.known and Rip:Down() and Bloodtalons:Up())) then
 		return UseCooldown(TigersFury)
 	end
 	if Thorns:Usable() and Player:UnderAttack() and Thorns:WontCapEnergy() then
@@ -2090,11 +2081,11 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 		return UseCooldown(FeralFrenzy)
 	end
 	if Player.use_cds then
-		if ConvokeTheSpirits:Usable() and Player.combo_points.current <= (Player.berserk_remains > 0 and 2 or 1) and (not SavageRoar.known or SavageRoar:Remains() > 4) and Rip:Remains() > 4 and ((Predator.known and not Target.boss) or not TigersFury:Ready() and (TigersFury:Remains() < 3 or Target.timeToDie < 6)) then
-			return UseCooldown(ConvokeTheSpirits)
-		end
-		if Shadowmeld:Usable() and Player.combo_points.current < 5 and Player.energy.current >= Rake:EnergyCost() and Rake:Multiplier() < 1.5 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and (not SavageRoar.known or SavageRoar:Remains() > 1.5) and ((not Berserk.known and not IncarnationKingOfTheJungle.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationKingOfTheJungle.known and not IncarnationKingOfTheJungle:Ready(18))) then
+		if Shadowmeld:Usable() and Player.combo_points.current < 5 and Player.energy.current >= Rake:EnergyCost() and Rake:Multiplier() < 1.7 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and (not SavageRoar.known or SavageRoar:Remains() > 1.5) and ((not Berserk.known and not IncarnationKingOfTheJungle.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationKingOfTheJungle.known and not IncarnationKingOfTheJungle:Ready(18))) then
 			return UseCooldown(Shadowmeld)
+		end
+		if ConvokeTheSpirits:Usable() and ((Rip:Remains() > 4 and Player.combo_points.current < 5 and (Rake:Up() or Player.enemies > 1) and Player.energy.deficit >= 20 and not Berserk:Ready(10)) or (Target.boss and Target.timeToDie < 5) or Player.berserk_remains > 12) then
+			return UseCooldown(ConvokeTheSpirits)
 		end
 	end
 end
@@ -2169,13 +2160,10 @@ actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_ga
 			return Pool(Rip)
 		end
 	end
-	if Sabertooth.known and FerociousBite:Usable(0, true) and Rip:Up() and between(Player.enemies, 2, 3) and Rip:LowestRemainsOthers() > ((Player.berserk_remains > 0 and 5 or 8) * (Player.enemies - 1)) then
-		return Pool(FerociousBite, ((ApexPredatorsCarving.known and ApexPredatorsCarving:Up()) or Rip:Remains() < 1) and 0 or 25)
-	end
 	if PrimalWrath:Usable(0, true) and Player.enemies > 1 and (Player.enemies >= 5 or Rip:NextMultiplier() > (Rip:MultiplierSum() / Player.enemies) or Rip:LowestRemainsOthers() < (Player.berserk_remains > 0 and 3.6 or 7.2)) then
 		return Pool(PrimalWrath)
 	end
-	if Rip:Usable(0, true) and Target.timeToDie > (8 + Rip:Remains()) and (Player.enemies == 1 or not PrimalWrath.known) and (Rip:Down() or ((not Sabertooth.known or Rip:NextMultiplier() >= Player.rip_multiplier_max) and Rip:Remains() < 7.2) or (Rip:Remains() < 19.2 and Rip:NextMultiplier() > Rip:Multiplier())) then
+	if Rip:Usable(0, true) and Target.timeToDie > (8 + Rip:Remains()) and (Player.enemies == 1 or not PrimalWrath.known) and (Rip:Remains() < 7.2 or (Rip:Remains() < 19.2 and Rip:NextMultiplier() > Rip:Multiplier())) then
 		return Pool(Rip)
 	end
 	if SavageRoar:Usable(0, true) and SavageRoar:Remains() < 12 then
@@ -2220,7 +2208,7 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 		return Pool(SwipeCat)
 	end
 	if Player.enemies < 6 or not PrimalWrath.known then
-		if Rake:Usable(0, true) and (Rake:Down() or Target.timeToDie > 4 and Rake:Refreshable()) then
+		if Rake:Usable(0, true) and (Rake:Down() or (Target.timeToDie > 4 and Rake:Refreshable() and (Rake:NextMultiplier() * 1.2) >= Rake:Multiplier())) then
 			return Pool(Rake)
 		end
 		if LunarInspiration.known and Moonfire:Usable() and Moonfire:Refreshable() then
@@ -2980,7 +2968,7 @@ function events:UNIT_SPELLCAST_SENT(unitId, destName, castGUID, spellId)
 	if not ability then
 		return
 	end
-	if ability == Rip or ability == PrimalWrath or (Sabertooth.known and ability == FerociousBite) then
+	if ability == Rip or ability == PrimalWrath then
 		Rip.next_applied_by = ability
 		Rip.next_combo_points = UnitPower('player', 4)
 		Rip.next_multiplier = Rip:NextMultiplier()
