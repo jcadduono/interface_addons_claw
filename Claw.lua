@@ -977,6 +977,9 @@ local CatForm = Ability:Add(768, true, true)
 local Growl = Ability:Add(6795, false, true)
 Growl.buff_duration = 3
 Growl.cooldown_duration = 8
+local MarkOfTheWild = Ability:Add(1126, true)
+MarkOfTheWild.buff_duration = 3600
+MarkOfTheWild.mana_cost = 20
 local MoonkinForm = Ability:Add(197625, true, true)
 local Moonfire = Ability:Add(8921, false, true, 164812)
 Moonfire.buff_duration = 16
@@ -1960,7 +1963,13 @@ APL[SPEC.BALANCE].Main = function(self)
 				UseCooldown(SpectralFlaskOfPower)
 			end
 		end
+		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 300 then
+			return MarkOfTheWild
+		end
 	else
+		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 10 then
+			UseExtra(MarkOfTheWild)
+		end
 		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 10 and Player.group_size > 1 then
 			UseExtra(Trinket.SoleahsSecretTechnique)
 		end
@@ -2002,7 +2011,13 @@ actions.precombat+=/berserk
 				UseCooldown(SpectralFlaskOfPower)
 			end
 		end
+		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 300 then
+			return MarkOfTheWild
+		end
 	else
+		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 10 then
+			UseExtra(MarkOfTheWild)
+		end
 		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 10 and Player.group_size > 1 then
 			UseExtra(Trinket.SoleahsSecretTechnique)
 		end
@@ -2278,7 +2293,13 @@ APL[SPEC.GUARDIAN].Main = function(self)
 				UseCooldown(SpectralFlaskOfPower)
 			end
 		end
+		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 300 then
+			return MarkOfTheWild
+		end
 	else
+		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 10 then
+			UseExtra(MarkOfTheWild)
+		end
 		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 10 and Player.group_size > 1 then
 			UseExtra(Trinket.SoleahsSecretTechnique)
 		end
@@ -2388,7 +2409,13 @@ APL[SPEC.RESTORATION].Main = function(self)
 				UseCooldown(SpectralFlaskOfPower)
 			end
 		end
+		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 300 then
+			return MarkOfTheWild
+		end
 	else
+		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 10 then
+			UseExtra(MarkOfTheWild)
+		end
 		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 10 and Player.group_size > 1 then
 			UseExtra(Trinket.SoleahsSecretTechnique)
 		end
