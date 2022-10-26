@@ -1068,7 +1068,7 @@ SwipeCat.energy_cost = 35
 SwipeCat.triggers_bt = true
 SwipeCat:AutoAoe(true)
 local TigersFury = Ability:Add(5217, true, true)
-TigersFury.buff_duration = 12
+TigersFury.buff_duration = 15
 TigersFury.cooldown_duration = 30
 TigersFury.triggers_gcd = false
 local Maim = Ability:Add(22570, false, true, 203123)
@@ -2062,7 +2062,10 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 			return UseCooldown(Berserk)
 		end
 	end
-	if TigersFury:Usable() and (Player.energy.deficit > 40 or Player.berserk_remains > 0 or (Bloodtalons.known and Rip:Down() and Bloodtalons:Up())) then
+	if TigersFury:Usable() and (
+		(TigersFury:Down() and (Player.energy.deficit > 40 or Player.berserk_remains > 0 or (Bloodtalons.known and Rip:Down() and Bloodtalons:Up()))) or
+		(TigersFury:Refreshable() and Player.energy.deficit > 60)
+	) then
 		return UseCooldown(TigersFury)
 	end
 	if Thorns:Usable() and Player:UnderAttack() and Thorns:WontCapEnergy() then
