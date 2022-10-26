@@ -1071,7 +1071,7 @@ SwipeCat.energy_cost = 35
 SwipeCat.triggers_bt = true
 SwipeCat:AutoAoe(true)
 local TigersFury = Ability:Add(5217, true, true)
-TigersFury.buff_duration = 15
+TigersFury.buff_duration = 10
 TigersFury.cooldown_duration = 30
 TigersFury.triggers_gcd = false
 local Maim = Ability:Add(22570, false, true, 203123)
@@ -1103,10 +1103,6 @@ local JungleStalker = Ability:Add(252071, true, true)
 JungleStalker.buff_duration = 30
 local LunarInspiration = Ability:Add(155580, false, true)
 local Predator = Ability:Add(202021, false, true)
-local SavageRoar = Ability:Add(52610, true, true)
-SavageRoar.buff_duration = 12
-SavageRoar.energy_cost = 25
-SavageRoar.cp_cost = 1
 local ScentOfBlood = Ability:Add(285564, true, true, 285646)
 ScentOfBlood.buff_duration = 6
 local PrimalWrath = Ability:Add(285381, false, true)
@@ -1693,6 +1689,10 @@ function Regrowth:ManaCost()
 	return Ability.ManaCost(self)
 end
 
+function TigersFury:Multiplier()
+	return 1.21
+end
+
 function Rake:ApplyAura(guid)
 	local aura = {
 		expires = Player.time + self.buff_duration,
@@ -1727,9 +1727,7 @@ function Rake:NextMultiplier()
 		elseif Shadowmeld:Match(id) or Prowl:Match(id) or Berserk:Match(id) or IncarnationKingOfTheJungle:Match(id) then
 			stealthed = true
 		elseif TigersFury:Match(id) then
-			multiplier = multiplier * 1.15
-		elseif SavageRoar:Match(id) then
-			multiplier = multiplier * 1.15
+			multiplier = multiplier * TigersFury:Multiplier()
 		end
 	end
 	if stealthed then
@@ -1808,13 +1806,10 @@ end
 function Rip:MultiplierMax()
 	local multiplier = 1.00
 	if TigersFury.known then
-		multiplier = multiplier * 1.15
-	end
-	if SavageRoar.known then
-		multiplier = multiplier * 1.15
+		multiplier = multiplier * TigersFury:Multiplier()
 	end
 	if Bloodtalons.known then
-		multiplier = multiplier * 1.30
+		multiplier = multiplier * 1.25
 	end
 	return multiplier
 end
@@ -1828,11 +1823,9 @@ function Rip:NextMultiplier()
 			break
 		end
 		if TigersFury:Match(id) then
-			multiplier = multiplier * 1.15
-		elseif SavageRoar:Match(id) then
-			multiplier = multiplier * 1.15
+			multiplier = multiplier * TigersFury:Multiplier()
 		elseif Bloodtalons:Match(id) then
-			multiplier = multiplier * 1.30
+			multiplier = multiplier * 1.25
 		end
 	end
 	return multiplier
@@ -1885,9 +1878,7 @@ function ThrashCat:NextMultiplier()
 			break
 		end
 		if TigersFury:Match(id) then
-			multiplier = multiplier * 1.15
-		elseif SavageRoar:Match(id) then
-			multiplier = multiplier * 1.15
+			multiplier = multiplier * TigersFury:Multiplier()
 		end
 	end
 	return multiplier
@@ -2100,7 +2091,7 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 		return UseCooldown(FeralFrenzy)
 	end
 	if Player.use_cds then
-		if Shadowmeld:Usable() and Player.combo_points.current < 5 and Player.energy.current >= Rake:EnergyCost() and Rake:Multiplier() < 1.7 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and (not SavageRoar.known or SavageRoar:Remains() > 1.5) and ((not Berserk.known and not IncarnationKingOfTheJungle.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationKingOfTheJungle.known and not IncarnationKingOfTheJungle:Ready(18))) then
+		if Shadowmeld:Usable() and Player.combo_points.current < 5 and Player.energy.current >= Rake:EnergyCost() and Rake:Multiplier() < 1.7 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and ((not Berserk.known and not IncarnationKingOfTheJungle.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationKingOfTheJungle.known and not IncarnationKingOfTheJungle:Ready(18))) then
 			return UseCooldown(Shadowmeld)
 		end
 		if ConvokeTheSpirits:Usable() and ((Rip:Remains() > 4 and Player.combo_points.current < 5 and (Rake:Up() or Player.enemies > 1) and Player.energy.deficit >= 20 and not Berserk:Ready(10)) or (Target.boss and Target.timeToDie < 5) or Player.berserk_remains > 12) then
@@ -2157,7 +2148,6 @@ end
 APL[SPEC.FERAL].finishers = function(self)
 --[[
 actions.finishers=pool_resource,for_next=1
-actions.finishers+=/savage_roar,if=buff.savage_roar.down
 actions.finishers+=/pool_resource,for_next=1
 actions.finishers+=/primal_wrath,target_if=spell_targets.primal_wrath>1&dot.rip.remains<4
 actions.finishers+=/pool_resource,for_next=1
@@ -2165,13 +2155,9 @@ actions.finishers+=/primal_wrath,target_if=spell_targets.primal_wrath>=2
 actions.finishers+=/pool_resource,for_next=1
 actions.finishers+=/rip,target_if=!ticking|(remains<=duration*0.3)&(!talent.sabertooth.enabled)|(remains<=duration*0.8&persistent_multiplier>dot.rip.pmultiplier)&target.time_to_die>8
 actions.finishers+=/pool_resource,for_next=1
-actions.finishers+=/savage_roar,if=buff.savage_roar.remains<12
 actions.finishers+=/pool_resource,for_next=1
 actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_gained_on_refresh
 ]]
-	if SavageRoar:Usable(0, true) and SavageRoar:Down() then
-		return Pool(SavageRoar)
-	end
 	if Target.timeToDie > max(8, Rip:Remains() + 4) and Rip:Multiplier() < Player.rip_multiplier_max and Rip:NextMultiplier() >= Player.rip_multiplier_max then
 		if PrimalWrath:Usable(0, true) and Player.enemies >= 3 then
 			return Pool(PrimalWrath)
@@ -2184,9 +2170,6 @@ actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_ga
 	end
 	if Rip:Usable(0, true) and Target.timeToDie > (8 + Rip:Remains()) and (Player.enemies == 1 or not PrimalWrath.known) and (Rip:Remains() < 7.2 or (Rip:Remains() < 19.2 and Rip:NextMultiplier() > Rip:Multiplier())) then
 		return Pool(Rip)
-	end
-	if SavageRoar:Usable(0, true) and SavageRoar:Remains() < 12 then
-		return Pool(SavageRoar)
 	end
 	if FerociousBite:Usable(0, true) then
 		return Pool(FerociousBite, (ApexPredatorsCarving.known and ApexPredatorsCarving:Up()) and 0 or 25)
