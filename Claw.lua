@@ -2597,7 +2597,7 @@ UI.anchor_points = {
 		},
 		[FORM.CAT] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 42 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -24 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -30 }
 		},
 		[FORM.BEAR] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 42 },
