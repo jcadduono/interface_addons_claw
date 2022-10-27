@@ -982,26 +982,29 @@ end
 
 -- Druid Abilities
 ---- Multiple Specializations
+------ Baseline
 local Barkskin = Ability:Add(22812, true, true)
 Barkskin.buff_duration = 12
 Barkskin.cooldown_duration = 90
 Barkskin.tiggers_gcd = false
 local BearForm = Ability:Add(5487, true, true)
 local CatForm = Ability:Add(768, true, true)
+local FerociousBite = Ability:Add(22568, false, true)
+FerociousBite.cp_cost = 1
+FerociousBite.energy_cost = 25
 local Growl = Ability:Add(6795, false, true)
 Growl.buff_duration = 3
 Growl.cooldown_duration = 8
+local Mangle = Ability:Add(33917, false, true)
+Mangle.cooldown_duration = 6
+Mangle.hasted_cooldown = true
 local MarkOfTheWild = Ability:Add(1126, true)
 MarkOfTheWild.buff_duration = 3600
 MarkOfTheWild.mana_cost = 20
-local MoonkinForm = Ability:Add(197625, true, true)
 local Moonfire = Ability:Add(8921, false, true, 164812)
-Moonfire.buff_duration = 16
+Moonfire.buff_duration = 18
 Moonfire.tick_interval = 2
 Moonfire.hasted_ticks = true
-local SkullBash = Ability:Add(106839, false, true)
-SkullBash.cooldown_duration = 15
-SkullBash.triggers_gcd = false
 local Prowl = Ability:Add(5215, true, true)
 Prowl.cooldown_duration = 6
 local Rebirth = Ability:Add(20484, true, true)
@@ -1012,52 +1015,37 @@ Regrowth.buff_duration = 12
 Regrowth.mana_cost = 14
 Regrowth.tick_interval = 2
 Regrowth.hasted_ticks = true
-local SurvivalInstincts = Ability:Add(61336, true, true)
-SurvivalInstincts.buff_duration = 6
-SurvivalInstincts.cooldown_duration = 240
-local Typhoon = Ability:Add(132469, false, true)
-Typhoon.buff_duration = 6
-Typhoon.cooldown_duration = 30
+local Shred = Ability:Add(5221, false, true)
+Shred.energy_cost = 40
+Shred.triggers_bt = true
 ------ Procs
 
 ------ Talents
+local FrenziedRegeneration = Ability:Add(22842, true, true)
+FrenziedRegeneration.buff_duration = 3
+FrenziedRegeneration.cooldown_duration = 36
+FrenziedRegeneration.rage_cost = 10
+FrenziedRegeneration.tick_interval = 1
+FrenziedRegeneration.hasted_cooldown = true
+FrenziedRegeneration.requires_charge = true
 local HeartOfTheWild = Ability:Add(319454, true, true, 108291)
 HeartOfTheWild.buff_duration = 45
 HeartOfTheWild.cooldown_duration = 300
+local IncapacitatingRoar = Ability:Add(99, false, true)
+IncapacitatingRoar.buff_duration = 3
+IncapacitatingRoar.cooldown_duration = 30
+local Ironfur = Ability:Add(192081, true, true)
+Ironfur.buff_duration = 8
+Ironfur.cooldown_duration = 0.5
+Ironfur.rage_cost = 40
+local Maim = Ability:Add(22570, false, true, 203123)
+Maim.cooldown_duration = 20
+Maim.energy_cost = 30
+Maim.cp_cost = 1
 local MightyBash = Ability:Add(5211, false, true)
 MightyBash.buff_duration = 4
 MightyBash.cooldown_duration = 60
-local StarsurgeBA = Ability:Add(197626, false, true)
-StarsurgeBA.cooldown_duration = 10
-local SunfireBA = Ability:Add(197630, false, true, 164815)
-SunfireBA.buff_duration = 12
-local WildCharge = Ability:Add(102401, false, true)
-WildCharge.cooldown_duration = 15
-local WildChargeCat = Ability:Add(49376, false, true)
-WildChargeCat.cooldown_duration = 15
----- Balance
-local Sunfire = Ability:Add(93402, false, true, 164815)
-Sunfire.buff_duration = 18
-Sunfire.tick_interval = 2
-Sunfire.hasted_ticks = true
-Sunfire:AutoAoe(false, 'apply')
-local SolarBeam = Ability:Add(78675, false, true, 81261)
-SolarBeam.buff_duration = 8
-SolarBeam.cooldown_duration = 60
------- Talents
-
------- Procs
-
----- Feral
-local Berserk = Ability:Add(106951, true, true)
-Berserk.buff_duration = 20
-local Rip = Ability:Add(1079, false, true)
-Rip.buff_duration = 4
-Rip.energy_cost = 20
-Rip.cp_cost = 1
-Rip.tick_interval = 2
-Rip.hasted_ticks = true
-Rip:TrackAuras()
+local MoonkinForm = Ability:Add(197625, true, true)
 local Rake = Ability:Add(1822, false, true, 155722)
 Rake.buff_duration = 15
 Rake.energy_cost = 35
@@ -1066,12 +1054,46 @@ Rake.hasted_ticks = true
 Rake.triggers_bt = true
 Rake:TrackAuras()
 Rake:AutoAoe(false, 'apply')
-local Shred = Ability:Add(5221, false, true)
-Shred.energy_cost = 40
-Shred.triggers_bt = true
-local FerociousBite = Ability:Add(22568, false, true)
-FerociousBite.cp_cost = 1
-FerociousBite.energy_cost = 25
+local Rip = Ability:Add(1079, false, true)
+Rip.buff_duration = 4
+Rip.energy_cost = 20
+Rip.cp_cost = 1
+Rip.tick_interval = 2
+Rip.hasted_ticks = true
+Rip:TrackAuras()
+local SkullBash = Ability:Add(106839, false, true)
+SkullBash.cooldown_duration = 15
+SkullBash.triggers_gcd = false
+local Starfire = Ability:Add(197628, false, true)
+Starfire.mana_cost = 3
+local Starsurge = Ability:Add(197626, false, true)
+Starsurge.cooldown_duration = 10
+Starsurge.mana_cost = 3
+local Sunfire = Ability:Add(93402, false, true, 164815)
+Sunfire.buff_duration = 18
+Sunfire.tick_interval = 2
+Sunfire.hasted_ticks = true
+Sunfire:AutoAoe(false, 'apply')
+local SurvivalInstincts = Ability:Add(61336, true, true)
+SurvivalInstincts.buff_duration = 6
+SurvivalInstincts.cooldown_duration = 180
+SurvivalInstincts.requires_charge = true
+local Swipe = Ability:Add(213771, false, true)
+Swipe:AutoAoe(true)
+Swipe.learn_spellId = 213764
+local SwipeCat = Ability:Add(106785, false, true)
+SwipeCat.energy_cost = 35
+SwipeCat.triggers_bt = true
+SwipeCat:AutoAoe(true)
+SwipeCat.learn_spellId = 213764
+local Thrash = Ability:Add(77758, false, true, 192090)
+Thrash.buff_duration = 15
+Thrash.cooldown_duration = 6
+Thrash.rage_cost = -5
+Thrash.tick_interval = 3
+Thrash.hasted_cooldown = true
+Thrash.hasted_ticks = true
+Thrash:AutoAoe(true)
 local ThrashCat = Ability:Add(106832, false, true, 106830)
 ThrashCat.buff_duration = 15
 ThrashCat.energy_cost = 40
@@ -1080,25 +1102,25 @@ ThrashCat.hasted_ticks = true
 ThrashCat.triggers_bt = true
 ThrashCat:AutoAoe(true)
 ThrashCat:TrackAuras()
-local SwipeCat = Ability:Add(106785, false, true)
-SwipeCat.energy_cost = 35
-SwipeCat.triggers_bt = true
-SwipeCat:AutoAoe(true)
-SwipeCat.learn_spellId = 213764
-local TigersFury = Ability:Add(5217, true, true)
-TigersFury.buff_duration = 10
-TigersFury.cooldown_duration = 30
-TigersFury.triggers_gcd = false
-local Maim = Ability:Add(22570, false, true, 203123)
-Maim.cooldown_duration = 20
-Maim.energy_cost = 30
-Maim.cp_cost = 1
+local Typhoon = Ability:Add(132469, false, true)
+Typhoon.buff_duration = 6
+Typhoon.cooldown_duration = 30
+local WildCharge = Ability:Add(102401, false, true)
+WildCharge.cooldown_duration = 15
+WildCharge.Cat = Ability:Add(49376, false, true)
+WildCharge.Cat.cooldown_duration = 15
+WildCharge.Cat.learn_spellId = 102401
+---- Balance
 ------ Talents
-local ApexPredatorsCraving = Ability:Add(391881, true, true, 391882)
-ApexPredatorsCraving.buff_duration = 15
-local Bloodtalons = Ability:Add(319439, true, true, 145152)
-Bloodtalons.buff_duration = 30
-Bloodtalons:TrackAuras()
+local SolarBeam = Ability:Add(78675, false, true, 81261)
+SolarBeam.buff_duration = 8
+SolarBeam.cooldown_duration = 60
+------ Procs
+
+---- Feral
+------ Talents
+local Berserk = Ability:Add(106951, true, true)
+Berserk.buff_duration = 20
 local BrutalSlash = Ability:Add(202028, false, true)
 BrutalSlash.cooldown_duration = 8
 BrutalSlash.energy_cost = 25
@@ -1129,62 +1151,39 @@ local PrimalWrath = Ability:Add(285381, false, true)
 PrimalWrath.energy_cost = 1
 PrimalWrath.cp_cost = 1
 PrimalWrath:AutoAoe(true)
-local SuddenAmbush = Ability:Add(384667, true, true, 391974)
-SuddenAmbush.buff_duration = 15
+local TigersFury = Ability:Add(5217, true, true)
+TigersFury.buff_duration = 10
+TigersFury.cooldown_duration = 30
+TigersFury.triggers_gcd = false
 local Veinripper = Ability:Add(391978, true, true)
 ------ Procs
+local ApexPredatorsCraving = Ability:Add(391881, true, true, 391882)
+ApexPredatorsCraving.buff_duration = 15
+local Bloodtalons = Ability:Add(319439, true, true, 145152)
+Bloodtalons.buff_duration = 30
+Bloodtalons:TrackAuras()
 local Clearcasting = Ability:Add(16864, true, true, 135700)
 Clearcasting.buff_duration = 15
 local PredatorySwiftness = Ability:Add(16974, true, true, 69369)
 PredatorySwiftness.buff_duration = 12
+local SuddenAmbush = Ability:Add(384667, true, true, 391974)
+SuddenAmbush.buff_duration = 15
 ---- Guardian
-local FrenziedRegeneration = Ability:Add(22842, true, true)
-FrenziedRegeneration.buff_duration = 3
-FrenziedRegeneration.cooldown_duration = 36
-FrenziedRegeneration.rage_cost = 10
-FrenziedRegeneration.tick_interval = 1
-FrenziedRegeneration.hasted_cooldown = true
-FrenziedRegeneration.requires_charge = true
-local IncapacitatingRoar = Ability:Add(99, false, true)
-IncapacitatingRoar.buff_duration = 3
-IncapacitatingRoar.cooldown_duration = 30
-local Ironfur = Ability:Add(192081, true, true)
-Ironfur.buff_duration = 7
-Ironfur.cooldown_duration = 0.5
-Ironfur.rage_cost = 45
-local Mangle = Ability:Add(33917, false, true)
-Mangle.rage_cost = -8
-Mangle.cooldown_duration = 6
-Mangle.hasted_cooldown = true
-local Maul = Ability:Add(6807, false, true)
-Maul.rage_cost = 45
-local Thrash = Ability:Add(77758, false, true, 192090)
-Thrash.buff_duration = 15
-Thrash.cooldown_duration = 6
-Thrash.rage_cost = -5
-Thrash.tick_interval = 3
-Thrash.hasted_cooldown = true
-Thrash.hasted_ticks = true
-Thrash:AutoAoe(true)
-local Swipe = Ability:Add(213771, false, true)
-Swipe:AutoAoe(true)
-Swipe.learn_spellId = 213764
 ------ Talents
 local Brambles = Ability:Add(203953, false, true, 213709)
 Brambles.tick_interval = 1
 Brambles:AutoAoe()
-local BristlingFur = Ability:Add(155835, true, true)
-BristlingFur.buff_duration = 8
-BristlingFur.cooldown_duration = 40
-local GalacticGuardian = Ability:Add(203964, false, true, 213708)
-GalacticGuardian.buff_duration = 15
 local IncarnationGuardianOfUrsoc = Ability:Add(102558, true, true)
 IncarnationGuardianOfUrsoc.buff_duration = 30
 IncarnationGuardianOfUrsoc.cooldown_duration = 180
-local Pulverize = Ability:Add(80313, true, true, 158792)
-Pulverize.buff_duration = 20
+local Maul = Ability:Add(6807, false, true)
+Maul.rage_cost = 40
+local Pulverize = Ability:Add(80313, false, true)
+Pulverize.buff_duration = 10
+Pulverize.cooldown_duration = 45
 ------ Procs
-
+local GalacticGuardian = Ability:Add(203964, false, true, 213708)
+GalacticGuardian.buff_duration = 15
 ---- Restoration
 
 ------ Talents
@@ -1434,10 +1433,6 @@ function Player:UpdateAbilities()
 		end
 	end
 
-	WildChargeCat.known = WildCharge.known
-	if self.spec == SPEC.GUARDIAN then
-		Swipe.known = true
-	end
 	if IncarnationAvatarOfAshamane.known then
 		Berserk.known = false
 	end
@@ -2338,7 +2333,6 @@ actions.cooldowns+=/fireblood
 actions.cooldowns+=/ancestral_call
 actions.cooldowns+=/barkskin,if=buff.bear_form.up
 actions.cooldowns+=/lunar_beam,if=buff.bear_form.up
-actions.cooldowns+=/bristling_fur,if=buff.bear_form.up
 actions.cooldowns+=/use_items
 ]]
 	if BearForm:Down() then
@@ -2352,9 +2346,6 @@ actions.cooldowns+=/use_items
 	end
 	if Barkskin:Usable() then
 		return UseCooldown(Barkskin)
-	end
-	if BristlingFur:Usable() then
-		return UseCooldown(BristlingFur)
 	end
 end
 
