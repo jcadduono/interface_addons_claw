@@ -1096,19 +1096,22 @@ FeralFrenzy.energy_cost = 25
 FeralFrenzy.tick_interval = 2
 FeralFrenzy.hasted_ticks = true
 FeralFrenzy.triggers_bt = true
-local IncarnationKingOfTheJungle = Ability:Add(102543, true, true)
-IncarnationKingOfTheJungle.buff_duration = 30
-IncarnationKingOfTheJungle.cooldown_duration = 180
-local JungleStalker = Ability:Add(252071, true, true)
-JungleStalker.buff_duration = 30
-local LunarInspiration = Ability:Add(155580, false, true)
-local Predator = Ability:Add(202021, false, true)
-local ScentOfBlood = Ability:Add(285564, true, true, 285646)
-ScentOfBlood.buff_duration = 6
+local IncarnationAvatarOfAshamane = Ability:Add(102543, true, true)
+IncarnationAvatarOfAshamane.buff_duration = 30
+IncarnationAvatarOfAshamane.cooldown_duration = 180
+local MoonfireCat = Ability:Add(155625, false, true)
+MoonfireCat.buff_duration = 16
+MoonfireCat.energy_cost = 30
+MoonfireCat.tick_interval = 2
+MoonfireCat.hasted_ticks = true
+MoonfireCat.triggers_bt = true
+MoonfireCat.learn_spellId = 155580 -- Lunar Inspiration
 local PrimalWrath = Ability:Add(285381, false, true)
 PrimalWrath.energy_cost = 1
 PrimalWrath.cp_cost = 1
 PrimalWrath:AutoAoe(true)
+local SuddenAmbush = Ability:Add(384667, true, true, 391974)
+SuddenAmbush.buff_duration = 15
 ------ Procs
 local Clearcasting = Ability:Add(16864, true, true, 135700)
 Clearcasting.buff_duration = 15
@@ -1273,7 +1276,7 @@ Trinket.SoleahsSecretTechnique.buff = Ability:Add(368512, true, true)
 -- Start Player API
 
 function Player:Stealthed()
-	return Prowl:Up() or (Shadowmeld.known and Shadowmeld:Up()) or (IncarnationKingOfTheJungle.known and self.berserk_remains > 0)
+	return Prowl:Up() or (Shadowmeld.known and Shadowmeld:Up()) or (IncarnationAvatarOfAshamane.known and self.berserk_remains > 0)
 end
 
 function Player:EnergyTimeToMax(energy)
@@ -1416,8 +1419,7 @@ function Player:UpdateAbilities()
 	if self.spec == SPEC.GUARDIAN then
 		Swipe.known = true
 	end
-	Moonfire.triggers_bt = LunarInspiration.known
-	if IncarnationKingOfTheJungle.known then
+	if IncarnationAvatarOfAshamane.known then
 		Berserk.known = false
 	end
 
@@ -1505,7 +1507,7 @@ function Player:Update()
 		self.rage.current = UnitPower('player', 1)
 		self.rage.deficit = self.rage.max - self.rage.current
 	end
-	self.berserk_remains = (Berserk.known and Berserk:Remains()) or (IncarnationKingOfTheJungle.known and IncarnationKingOfTheJungle:Remains()) or 0
+	self.berserk_remains = (Berserk.known and Berserk:Remains()) or (IncarnationAvatarOfAshamane.known and IncarnationAvatarOfAshamane:Remains()) or 0
 
 	trackAuras:Purge()
 	if Opt.auto_aoe then
@@ -1625,7 +1627,7 @@ function Ability:EnergyCost()
 		if (self == Shred or self == ThrashCat or self == SwipeCat) and Clearcasting:Up() then
 			return 0
 		end
-		if IncarnationKingOfTheJungle.known and IncarnationKingOfTheJungle:Up() then
+		if IncarnationAvatarOfAshamane.known and IncarnationAvatarOfAshamane:Up() then
 			cost = cost - (cost * 0.20)
 		end
 	end
@@ -1724,7 +1726,7 @@ function Rake:NextMultiplier()
 		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL|PLAYER')
 		if not id then
 			break
-		elseif Shadowmeld:Match(id) or Prowl:Match(id) or Berserk:Match(id) or IncarnationKingOfTheJungle:Match(id) then
+		elseif Shadowmeld:Match(id) or Prowl:Match(id) or Berserk:Match(id) or IncarnationAvatarOfAshamane:Match(id) or SuddenAmbush:Match(id) then
 			stealthed = true
 		elseif TigersFury:Match(id) then
 			multiplier = multiplier * TigersFury:Multiplier()
@@ -1885,7 +1887,7 @@ function ThrashCat:NextMultiplier()
 end
 
 function Prowl:Usable()
-	if Prowl:Up() or Shadowmeld:Up() or (InCombatLockdown() and not JungleStalker:Up()) then
+	if Prowl:Up() or Shadowmeld:Up() or (InCombatLockdown() and not IncarnationAvatarOfAshamane:Up()) then
 		return false
 	end
 	return Ability.Usable(self)
@@ -2080,7 +2082,7 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if Opt.pot and Target.boss and PotionOfUnbridledFury:Usable() and (Target.timeToDie < 65 or (Target.timeToDie < 180 and Player.berserk_remains > 0)) then
 		return UseCooldown(PotionOfUnbridledFury)
 	end
-	if Opt.trinket and ((Target.boss and Target.timeToDie < 20) or Player.berserk_remains > 4 or (TigersFury:Up() and ((not Berserk.known and not IncarnationKingOfTheJungle.known) or (Berserk.known and not Berserk:Ready(TigersFury:Cooldown()) or (IncarnationKingOfTheJungle.known and not IncarnationKingOfTheJungle:Ready(TigersFury:Cooldown())))))) then
+	if Opt.trinket and ((Target.boss and Target.timeToDie < 20) or Player.berserk_remains > 4 or (TigersFury:Up() and ((not Berserk.known and not IncarnationAvatarOfAshamane.known) or (Berserk.known and not Berserk:Ready(TigersFury:Cooldown()) or (IncarnationAvatarOfAshamane.known and not IncarnationAvatarOfAshamane:Ready(TigersFury:Cooldown())))))) then
 		if Trinket1:Usable() then
 			UseCooldown(Trinket1)
 		elseif Trinket2:Usable() then
@@ -2091,7 +2093,7 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 		return UseCooldown(FeralFrenzy)
 	end
 	if Player.use_cds then
-		if Shadowmeld:Usable() and Player.combo_points.current < 5 and Player.energy.current >= Rake:EnergyCost() and Rake:Multiplier() < 1.7 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and ((not Berserk.known and not IncarnationKingOfTheJungle.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationKingOfTheJungle.known and not IncarnationKingOfTheJungle:Ready(18))) then
+		if Shadowmeld:Usable() and Player.combo_points.current < 5 and Player.energy.current >= Rake:EnergyCost() and Rake:Multiplier() < 1.7 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and ((not Berserk.known and not IncarnationAvatarOfAshamane.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationAvatarOfAshamane.known and not IncarnationAvatarOfAshamane:Ready(18))) then
 			return UseCooldown(Shadowmeld)
 		end
 		if ConvokeTheSpirits:Usable() and ((Rip:Remains() > 4 and Player.combo_points.current < 5 and (Rake:Up() or Player.enemies > 1) and Player.energy.deficit >= 20 and not Berserk:Ready(10)) or (Target.boss and Target.timeToDie < 5) or Player.berserk_remains > 12) then
@@ -2114,7 +2116,7 @@ actions.bloodtalons+=/thrash_cat,if=buff.bt_thrash.down
 ]]
 	if Bloodtalons:ActiveTriggers() == 0 or Bloodtalons:SecondsSinceLastTrigger() > 3 then
 		local energy = Player.energy.current + (3.5 * Player.energy.regen) + (Clearcasting:Up() and 40 or 0)
-		local energy_need = 115 - (IncarnationKingOfTheJungle.known and Player.berserk_remains > 0 and 23 or 0)
+		local energy_need = 115 - (IncarnationAvatarOfAshamane.known and Player.berserk_remains > 0 and 23 or 0)
 		if energy < energy_need then
 			Player.pool_energy = Player.energy.current + (energy_need - energy)
 		end
@@ -2122,8 +2124,8 @@ actions.bloodtalons+=/thrash_cat,if=buff.bt_thrash.down
 	if Rake:Usable() and not Rake:Bloodtalons() and (Rake:Down() or (Rake:Refreshable() and Rake:NextMultiplier() > Rake:Multiplier())) then
 		return Rake
 	end
-	if LunarInspiration.known and Moonfire:Usable() and not Moonfire:Bloodtalons() and Moonfire:Refreshable() then
-		return Moonfire
+	if MoonfireCat:Usable() and not MoonfireCat:Bloodtalons() and MoonfireCat:Refreshable() then
+		return MoonfireCat
 	end
 	if ThrashCat:Usable() and Player.enemies >= 2 and not ThrashCat:Bloodtalons() and ThrashCat:Refreshable() then
 		return ThrashCat
@@ -2199,22 +2201,16 @@ actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.co
 		if ThrashCat:Refreshable() and (Player.berserk_remains == 0 or Player.enemies > 3) then
 			return Pool(ThrashCat)
 		end
-		if ScentOfBlood.known and ScentOfBlood:Down() and Player.enemies > 3 then
-			return Pool(ThrashCat)
-		end
 	end
 	if BrutalSlash:Usable() and Player.enemies > 2 and (Player.energy.current < 50 or Player.combo_points.current < 4) then
 		return BrutalSlash
-	end
-	if ScentOfBlood.known and SwipeCat:Usable(0, true) and ScentOfBlood:Up() then
-		return Pool(SwipeCat)
 	end
 	if Player.enemies < 6 or not PrimalWrath.known then
 		if Rake:Usable(0, true) and (Rake:Down() or (Target.timeToDie > 4 and Rake:Refreshable() and (Rake:NextMultiplier() * 1.2) >= Rake:Multiplier())) then
 			return Pool(Rake)
 		end
-		if LunarInspiration.known and Moonfire:Usable() and Moonfire:Refreshable() then
-			return Pool(Moonfire)
+		if MoonfireCat:Usable() and MoonfireCat:Refreshable() then
+			return Pool(MoonfireCat)
 		end
 	end
 	if BrutalSlash:Usable() and Clearcasting:Down() then
