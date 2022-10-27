@@ -932,10 +932,13 @@ function Ability:ApplyAura(guid)
 	if autoAoe.blacklist[guid] then
 		return
 	end
-	local aura = {
-		expires = Player.time + self:Duration()
-	}
+	local aura = {}
+	aura.expires = Player.time + self:Duration(self.next_combo_points, self.next_applied_by)
+	if self.next_multiplier then
+		aura.multiplier = self.next_multiplier
+	end
 	self.aura_targets[guid] = aura
+	return aura
 end
 
 function Ability:RefreshAura(guid)
@@ -944,17 +947,23 @@ function Ability:RefreshAura(guid)
 	end
 	local aura = self.aura_targets[guid]
 	if not aura then
-		self:ApplyAura(guid)
-		return
+		return self:ApplyAura(guid)
 	end
-	local duration = self:Duration()
-	aura.expires = Player.time + min(duration * 1.3, (aura.expires - Player.time) + duration)
+	local duration = self:Duration(self.next_combo_points, self.next_applied_by)
+	aura.expires = max(aura.expires, Player.time + min(duration * 1.3, (aura.expires - Player.time) + duration))
+	if self.next_multiplier then
+		aura.multiplier = self.next_multiplier
+	end
+	return aura
 end
 
 function Ability:RefreshAuraAll()
-	local duration = self:Duration()
+	local duration = self:Duration(self.next_combo_points, self.next_applied_by)
 	for guid, aura in next, self.aura_targets do
-		aura.expires = Player.time + min(duration * 1.3, (aura.expires - Player.time) + duration)
+		aura.expires = max(aura.expires, Player.time + min(duration * 1.3, (aura.expires - Player.time) + duration))
+		if self.next_multiplier then
+			aura.multiplier = self.next_multiplier
+		end
 	end
 end
 
@@ -962,6 +971,11 @@ function Ability:RemoveAura(guid)
 	if self.aura_targets[guid] then
 		self.aura_targets[guid] = nil
 	end
+end
+
+function Ability:Multiplier(guid)
+	local aura = self.aura_targets[guid or Target.guid]
+	return aura and aura.multiplier or 0
 end
 
 -- End DoT tracking
@@ -1070,6 +1084,7 @@ local SwipeCat = Ability:Add(106785, false, true)
 SwipeCat.energy_cost = 35
 SwipeCat.triggers_bt = true
 SwipeCat:AutoAoe(true)
+SwipeCat.learn_spellId = 213764
 local TigersFury = Ability:Add(5217, true, true)
 TigersFury.buff_duration = 10
 TigersFury.cooldown_duration = 30
@@ -1079,6 +1094,8 @@ Maim.cooldown_duration = 20
 Maim.energy_cost = 30
 Maim.cp_cost = 1
 ------ Talents
+local ApexPredatorsCraving = Ability:Add(391881, true, true, 391882)
+ApexPredatorsCraving.buff_duration = 15
 local Bloodtalons = Ability:Add(319439, true, true, 145152)
 Bloodtalons.buff_duration = 30
 Bloodtalons:TrackAuras()
@@ -1089,6 +1106,7 @@ BrutalSlash.hasted_cooldown = true
 BrutalSlash.requires_charge = true
 BrutalSlash.triggers_bt = true
 BrutalSlash:AutoAoe(true)
+local CircleOfLifeAndDeath = Ability:Add(391969, true, true)
 local FeralFrenzy = Ability:Add(274837, false, true, 274838)
 FeralFrenzy.buff_duration = 6
 FeralFrenzy.cooldown_duration = 45
@@ -1106,12 +1124,14 @@ MoonfireCat.tick_interval = 2
 MoonfireCat.hasted_ticks = true
 MoonfireCat.triggers_bt = true
 MoonfireCat.learn_spellId = 155580 -- Lunar Inspiration
+MoonfireCat:TrackAuras()
 local PrimalWrath = Ability:Add(285381, false, true)
 PrimalWrath.energy_cost = 1
 PrimalWrath.cp_cost = 1
 PrimalWrath:AutoAoe(true)
 local SuddenAmbush = Ability:Add(384667, true, true, 391974)
 SuddenAmbush.buff_duration = 15
+local Veinripper = Ability:Add(391978, true, true)
 ------ Procs
 local Clearcasting = Ability:Add(16864, true, true, 135700)
 Clearcasting.buff_duration = 15
@@ -1148,6 +1168,7 @@ Thrash.hasted_ticks = true
 Thrash:AutoAoe(true)
 local Swipe = Ability:Add(213771, false, true)
 Swipe:AutoAoe(true)
+Swipe.learn_spellId = 213764
 ------ Talents
 local Brambles = Ability:Add(203953, false, true, 213709)
 Brambles.tick_interval = 1
@@ -1178,9 +1199,11 @@ local SavageCombatant = Ability:Add(340609, true, true, 340613)
 SavageCombatant.buff_duration = 15
 SavageCombatant.conduit_id = 270
 -- Legendary effects
-local ApexPredatorsCarving = Ability:Add(339139, true, true, 339140)
-ApexPredatorsCarving.buff_duration = 15
-ApexPredatorsCarving.bonus_id = 7091
+local CircleOfLifeAndDeath2 = Ability:Add(338657, true, true)
+CircleOfLifeAndDeath2.bonus_id = 7085
+local ApexPredatorsCraving2 = Ability:Add(339139, true, true, 339140)
+ApexPredatorsCraving2.buff_duration = 15
+ApexPredatorsCraving2.bonus_id = 7091
 -- Racials
 local Shadowmeld = Ability:Add(58984, true, true)
 -- PvP talents
@@ -1412,15 +1435,17 @@ function Player:UpdateAbilities()
 	end
 
 	WildChargeCat.known = WildCharge.known
-	if self.spec == SPEC.FERAL then
-		SwipeCat.known = not BrutalSlash.known
-		self.rip_multiplier_max = Rip:MultiplierMax()
-	end
 	if self.spec == SPEC.GUARDIAN then
 		Swipe.known = true
 	end
 	if IncarnationAvatarOfAshamane.known then
 		Berserk.known = false
+	end
+	if BrutalSlash.known then
+		SwipeCat.known = false
+	end
+	if Rip.known then
+		Rip.multiplier_max = Rip:MultiplierMax()
 	end
 
 	wipe(abilities.bySpellId)
@@ -1678,7 +1703,7 @@ function Bloodtalons:Reset()
 end
 
 function FerociousBite:EnergyCost()
-	if ApexPredatorsCarving.known and ApexPredatorsCarving:Up() then
+	if (ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) or (ApexPredatorsCraving2.known and ApexPredatorsCraving2:Up()) then
 		return 0
 	end
 	return Ability.EnergyCost(self)
@@ -1695,33 +1720,21 @@ function TigersFury:Multiplier()
 	return 1.21
 end
 
-function Rake:ApplyAura(guid)
-	local aura = {
-		expires = Player.time + self.buff_duration,
-		multiplier = self.next_multiplier
-	}
-	self.aura_targets[guid] = aura
-end
-
-function Rake:RefreshAura(guid)
-	local aura = self.aura_targets[guid]
-	if not aura then
-		self:ApplyAura(guid)
-		return
+function Rake:Duration()
+	local duration = self.buff_duration
+	if CircleOfLifeAndDeath.known or CircleOfLifeAndDeath2.known then
+		duration = duration * 0.75
 	end
-	aura.expires = Player.time + min(1.3 * self.buff_duration, (aura.expires - Player.time) + self.buff_duration)
-	aura.multiplier = self.next_multiplier
-end
-
-function Rake:Multiplier()
-	local aura = self.aura_targets[Target.guid]
-	return aura and aura.multiplier or 0
+	if Veinripper.known then
+		duration = duration * 1.25
+	end
+	return duration
 end
 
 function Rake:NextMultiplier()
 	local multiplier = 1.00
 	local stealthed = false
-	local _, i, id
+	local _, id
 	for i = 1, 40 do
 		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL|PLAYER')
 		if not id then
@@ -1738,44 +1751,6 @@ function Rake:NextMultiplier()
 	return multiplier
 end
 
-function Rip:ApplyAura(guid)
-	local duration
-	if self.next_applied_by == Rip then
-		duration = 4 + (4 * self.next_combo_points)
-	elseif self.next_applied_by == PrimalWrath then
-		duration = 2 + (2 * self.next_combo_points)
-	else -- Ferocious Bite
-		return
-	end
-	local aura = {
-		expires = Player.time + duration,
-		multiplier = self.next_multiplier
-	}
-	self.aura_targets[guid] = aura
-end
-
-function Rip:RefreshAura(guid)
-	local aura = self.aura_targets[guid]
-	if not aura then
-		self:ApplyAura(guid)
-		return
-	end
-	local duration, max_duration
-	if self.next_applied_by == Rip then
-		duration = 4 + (4 * self.next_combo_points)
-		max_duration = 1.3 * duration
-		aura.multiplier = self.next_multiplier
-	elseif self.next_applied_by == PrimalWrath then
-		duration = 2 + (2 * self.next_combo_points)
-		max_duration = 1.3 * duration
-		aura.multiplier = self.next_multiplier
-	else -- Ferocious Bite
-		duration = self.next_combo_points
-		max_duration = 1.3 * (4 + (4 * Player.combo_points.max))
-	end
-	aura.expires = Player.time + min(max_duration, (aura.expires - Player.time) + duration)
-end
-
 -- this will return the lowest remaining duration Rip on an enemy that isn't main target
 function Rip:LowestRemainsOthers()
 	local guid, aura, lowest
@@ -1790,9 +1765,18 @@ function Rip:LowestRemainsOthers()
 	return 0
 end
 
-function Rip:Multiplier()
-	local aura = self.aura_targets[Target.guid]
-	return aura and aura.multiplier or 0
+function Rip:Duration(comboPoints, appliedBy)
+	local duration = self.buff_duration + (self.buff_duration * (comboPoints or Player.combo_points.current))
+	if appliedBy == PrimalWrath then
+		duration = duration * 0.50
+	end
+	if CircleOfLifeAndDeath.known or CircleOfLifeAndDeath2.known then
+		duration = duration * 0.75
+	end
+	if Veinripper.known then
+		duration = duration * 1.25
+	end
+	return duration
 end
 
 function Rip:MultiplierSum()
@@ -1818,7 +1802,7 @@ end
 
 function Rip:NextMultiplier()
 	local multiplier = 1.00
-	local _, i, id
+	local _, id
 	for i = 1, 40 do
 		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL|PLAYER')
 		if not id then
@@ -1841,6 +1825,20 @@ function PrimalWrath:NextMultiplier()
 	return Rip:NextMultiplier()
 end
 
+function MoonfireCat:NextMultiplier()
+	local multiplier = 1.00
+	local _, id
+	for i = 1, 40 do
+		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL|PLAYER')
+		if not id then
+			break
+		elseif TigersFury:Match(id) then
+			multiplier = multiplier * TigersFury:Multiplier()
+		end
+	end
+	return multiplier
+end
+
 function Shred:CastSuccess(...)
 	Ability.CastSuccess(self, ...)
 	if Opt.auto_aoe and not Bloodtalons.known and Player.berserk_remains == 0 then
@@ -1848,32 +1846,20 @@ function Shred:CastSuccess(...)
 	end
 end
 
-function ThrashCat:ApplyAura(guid)
-	local aura = {
-		expires = Player.time + self.buff_duration,
-		multiplier = self.next_multiplier
-	}
-	self.aura_targets[guid] = aura
-end
-
-function ThrashCat:RefreshAura(guid)
-	local aura = self.aura_targets[guid]
-	if not aura then
-		self:ApplyAura(guid)
-		return
+function ThrashCat:Duration()
+	local duration = self.buff_duration
+	if CircleOfLifeAndDeath.known or CircleOfLifeAndDeath2.known then
+		duration = duration * 0.75
 	end
-	aura.expires = Player.time + min(1.3 * self.buff_duration, (aura.expires - Player.time) + self.buff_duration)
-	aura.multiplier = self.next_multiplier
-end
-
-function ThrashCat:Multiplier()
-	local aura = self.aura_targets[Target.guid]
-	return aura and aura.multiplier or 0
+	if Veinripper.known then
+		duration = duration * 1.25
+	end
+	return duration
 end
 
 function ThrashCat:NextMultiplier()
 	local multiplier = 1.00
-	local _, i, id
+	local _, id
 	for i = 1, 40 do
 		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL|PLAYER')
 		if not id then
@@ -2046,7 +2032,7 @@ actions+=/run_action_list,name=generators
 	if Bloodtalons.known and Bloodtalons:Down() then
 		return self:bloodtalons()
 	end
-	if ApexPredatorsCarving.known and FerociousBite:Usable() and ApexPredatorsCarving:Up() and (not Bloodtalons.known or Bloodtalons:Up() or Rip:Ticking() > 4) then
+	if FerociousBite:Usable() and ((ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) or ((ApexPredatorsCraving2.known and ApexPredatorsCraving2:Up()))) and (not Bloodtalons.known or Bloodtalons:Up() or Rip:Ticking() > 4) then
 		return FerociousBite
 	end
 	return self:generators()
@@ -2160,7 +2146,7 @@ actions.finishers+=/pool_resource,for_next=1
 actions.finishers+=/pool_resource,for_next=1
 actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_gained_on_refresh
 ]]
-	if Target.timeToDie > max(8, Rip:Remains() + 4) and Rip:Multiplier() < Player.rip_multiplier_max and Rip:NextMultiplier() >= Player.rip_multiplier_max then
+	if Target.timeToDie > max(8, Rip:Remains() + 4) and Rip:Multiplier() < Rip.multiplier_max and Rip:NextMultiplier() >= Rip.multiplier_max then
 		if PrimalWrath:Usable(0, true) and Player.enemies >= 3 then
 			return Pool(PrimalWrath)
 		elseif Rip:Usable(0, true) then
@@ -2174,7 +2160,7 @@ actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_ga
 		return Pool(Rip)
 	end
 	if FerociousBite:Usable(0, true) then
-		return Pool(FerociousBite, (ApexPredatorsCarving.known and ApexPredatorsCarving:Up()) and 0 or 25)
+		return Pool(FerociousBite, ((ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) or (ApexPredatorsCraving2.known and ApexPredatorsCraving2:Up())) and 0 or 25)
 	end
 end
 
@@ -2247,7 +2233,7 @@ actions.owlweave+=/moonkin_form,if=energy<40&(dot.rip.remains>4.5|combo_points<5
 		if SunfireBA:Usable() and SunfireBA:Refreshable() then
 			return SunfireBA
 		end
-	elseif SunfireBA:Refreshable() and Player.energy.current < 40 and (Rip:Remains() > 4.5 or Player.combo_points.current < 5) and not TigersFury:Ready(6.5) and Clearcasting:Down() and (not ApexPredatorsCarving.known or ApexPredatorsCarving:Down()) and not Player:BloodlustActive() and (Berserk:Remains() > 5 or Berserk:Down()) and (not ConvokeTheSpirits.known or not ConvokeTheSpirits:Ready()) then
+	elseif SunfireBA:Refreshable() and Player.energy.current < 40 and (Rip:Remains() > 4.5 or Player.combo_points.current < 5) and not TigersFury:Ready(6.5) and Clearcasting:Down() and ((not ApexPredatorsCraving.known or ApexPredatorsCraving:Down()) and (not ApexPredatorsCraving2.known or ApexPredatorsCraving2:Down())) and not Player:BloodlustActive() and (Berserk:Remains() > 5 or Berserk:Down()) and (not ConvokeTheSpirits.known or not ConvokeTheSpirits:Ready()) then
 		if HeartOfTheWild:Usable() then
 			UseCooldown(HeartOfTheWild)
 		elseif MoonkinForm:Usable() then
@@ -2745,13 +2731,13 @@ end
 
 function UI:UpdateCombat()
 	timer.combat = 0
-	
+
 	Player:Update()
 
 	Player.main = APL[Player.spec]:Main()
 	if Player.main then
 		clawPanel.icon:SetTexture(Player.main.icon)
-		if Opt.multipliers and Player.main.Multiplier then
+		if Opt.multipliers and Player.main.NextMultiplier then
 			clawPanel.text.multiplier_diff = Player.main:NextMultiplier() - Player.main:Multiplier()
 		else
 			clawPanel.text.multiplier_diff = nil
@@ -2992,11 +2978,10 @@ function events:UNIT_SPELLCAST_SENT(unitId, destName, castGUID, spellId)
 	if ability == Rip or ability == PrimalWrath then
 		Rip.next_applied_by = ability
 		Rip.next_combo_points = UnitPower('player', 4)
-		Rip.next_multiplier = Rip:NextMultiplier()
-	elseif ability == Rake then
-		Rake.next_multiplier = Rake:NextMultiplier()
-	elseif ability == ThrashCat then
-		ThrashCat.next_multiplier = ThrashCat:NextMultiplier()
+		ability = Rip
+	end
+	if ability.NextMultiplier then
+		ability.next_multiplier = ability:NextMultiplier()
 	end
 end
 
