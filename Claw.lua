@@ -2093,10 +2093,10 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 		return UseCooldown(FeralFrenzy)
 	end
 	if Player.use_cds then
-		if Shadowmeld:Usable() and Player.combo_points.current < 5 and Player.energy.current >= Rake:EnergyCost() and Rake:Multiplier() < 1.7 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and ((not Berserk.known and not IncarnationAvatarOfAshamane.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationAvatarOfAshamane.known and not IncarnationAvatarOfAshamane:Ready(18))) then
+		if Shadowmeld:Usable() and Player.combo_points.current < 5 and Player.energy.current >= Rake:EnergyCost() and Rake:Multiplier() < 1.5 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and ((not Berserk.known and not IncarnationAvatarOfAshamane.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationAvatarOfAshamane.known and not IncarnationAvatarOfAshamane:Ready(18))) then
 			return UseCooldown(Shadowmeld)
 		end
-		if ConvokeTheSpirits:Usable() and ((Rip:Remains() > 4 and Player.combo_points.current < 5 and (Rake:Up() or Player.enemies > 1) and Player.energy.deficit >= 20 and not Berserk:Ready(10)) or (Target.boss and Target.timeToDie < 5) or Player.berserk_remains > 12) then
+		if ConvokeTheSpirits:Usable() and ((Rip:Remains() > 4 and Player.combo_points.current < 5 and (Rake:Up() or Player.enemies > 1) and Player.energy.deficit >= 20 and (TigersFury:Remains() > 3 or not TigersFury:Ready(10)) and not Berserk:Ready(10)) or (Target.boss and Target.timeToDie < 5) or Player.berserk_remains > 12) then
 			return UseCooldown(ConvokeTheSpirits)
 		end
 	end
