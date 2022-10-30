@@ -2021,14 +2021,14 @@ actions+=/run_action_list,name=generators
 	if Player.health.pct < (Player.combo_points.current >= 5 and 85 or 65) and Regrowth:Usable() and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() and not Player:Stealthed() then
 		UseExtra(Regrowth)
 	end
-	if FerociousBite:Usable() and ((ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) or ((ApexPredatorsCraving2.known and ApexPredatorsCraving2:Up()))) and (not Bloodtalons.known or Bloodtalons:Up() or (Rip:Up() and Player.combo_points.current >= 5) or (Bloodtalons:ActiveTriggers() < 2 and Rip:Ticking() >= 3)) then
-		return FerociousBite
-	end
 	if Player.combo_points.current >= 5 then
 		return self:finishers()
 	end
 	if Bloodtalons.known and Bloodtalons:Down() then
 		return self:bloodtalons()
+	end
+	if FerociousBite:Usable() and ((ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) or ((ApexPredatorsCraving2.known and ApexPredatorsCraving2:Up()))) and (not Bloodtalons.known or Bloodtalons:Up() or Rip:Ticking() > 4) then
+		return FerociousBite
 	end
 	return self:generators()
 end
