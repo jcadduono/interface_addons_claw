@@ -2429,7 +2429,7 @@ end
 
 function UI:DisableOverlayGlows()
 	if LibStub and LibStub.GetLibrary and not Opt.glow.blizzard then
-		local lib = LibStub:GetLibrary('LibButtonGlow-1.0')
+		local lib = LibStub:GetLibrary('LibButtonGlow-1.0', true)
 		if lib then
 			lib.ShowOverlayGlow = function(self)
 				return
