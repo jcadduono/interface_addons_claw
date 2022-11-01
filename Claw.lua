@@ -1697,6 +1697,13 @@ function Bloodtalons:Reset()
 	end
 end
 
+function FerociousBite:CPCost()
+	if (ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) or (ApexPredatorsCraving2.known and ApexPredatorsCraving2:Up()) then
+		return 0
+	end
+	return Ability.CPCost(self)
+end
+
 function FerociousBite:EnergyCost()
 	if (ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) or (ApexPredatorsCraving2.known and ApexPredatorsCraving2:Up()) then
 		return 0
@@ -2027,7 +2034,7 @@ actions+=/run_action_list,name=generators
 	if Bloodtalons.known and Bloodtalons:Down() then
 		return self:bloodtalons()
 	end
-	if FerociousBite:Usable() and ((ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) or ((ApexPredatorsCraving2.known and ApexPredatorsCraving2:Up()))) and (not Bloodtalons.known or Bloodtalons:Up() or Rip:Ticking() > 4) then
+	if FerociousBite:Usable() and ((ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) or ((ApexPredatorsCraving2.known and ApexPredatorsCraving2:Up()))) and (Rip:Up() or (Player.enemies == 1 and Target.timeToDie < 8)) and (not Bloodtalons.known or Bloodtalons:Up() or Rip:Ticking() > 4) then
 		return FerociousBite
 	end
 	return self:generators()
