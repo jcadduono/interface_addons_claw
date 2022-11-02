@@ -2028,14 +2028,14 @@ actions+=/run_action_list,name=generators
 	if Player.health.pct < (Player.combo_points.current >= 5 and 85 or 65) and Regrowth:Usable() and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() and not Player:Stealthed() then
 		UseExtra(Regrowth)
 	end
+	if FerociousBite:Usable() and ((ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) or ((ApexPredatorsCraving2.known and ApexPredatorsCraving2:Up()))) and (Rip:Up() or (Player.enemies == 1 and Target.timeToDie < 8)) and (not Bloodtalons.known or Bloodtalons:Up() or (Rip:Ticking() > 4 and (Player.combo_points.current == 5 or Bloodtalons:ActiveTriggers() < 2))) then
+		return FerociousBite
+	end
 	if Player.combo_points.current >= 5 then
 		return self:finishers()
 	end
 	if Bloodtalons.known and Bloodtalons:Down() then
 		return self:bloodtalons()
-	end
-	if FerociousBite:Usable() and ((ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) or ((ApexPredatorsCraving2.known and ApexPredatorsCraving2:Up()))) and (Rip:Up() or (Player.enemies == 1 and Target.timeToDie < 8)) and (not Bloodtalons.known or Bloodtalons:Up() or Rip:Ticking() > 4) then
-		return FerociousBite
 	end
 	return self:generators()
 end
@@ -2053,15 +2053,10 @@ actions.cooldowns+=/shadowmeld,if=combo_points<5&energy>=action.rake.cost&dot.ra
 actions.cooldowns+=/convoke_the_spirits,if=(dot.rip.remains>4&combo_points<5&(dot.rake.ticking|spell_targets.thrash_cat>1)&energy.deficit>=20&cooldown.bs_inc.remains>10)|fight_remains<5|(buff.bs_inc.up&buff.bs_inc.remains>12)
 actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 ]]
-	if Player.use_cds then
-		if Berserk:Usable() and Rip:Up() and (not ConvokeTheSpirits.known or ConvokeTheSpirits:Ready() or not ConvokeTheSpirits:Ready(32) or (Target.boss and Target.timeToDie < 25)) then
-			return UseCooldown(Berserk)
-		end
+	if Player.use_cds and Berserk:Usable() then
+		return UseCooldown(Berserk)
 	end
-	if TigersFury:Usable() and (
-		(TigersFury:Down() and (Player.energy.deficit > 40 or Player.berserk_remains > 0 or (Bloodtalons.known and Rip:Down() and Bloodtalons:Up()))) or
-		(TigersFury:Refreshable() and Player.energy.deficit > 60)
-	) then
+	if TigersFury:Usable() and (Player.energy.deficit > 60 or (TigersFury:Remains() < 2 and (Player.berserk_remains > 0 or (Bloodtalons.known and Rip:Refreshable() and Bloodtalons:Up())))) then
 		return UseCooldown(TigersFury)
 	end
 	if Thorns:Usable() and Player:UnderAttack() and Thorns:WontCapEnergy() then
@@ -2077,16 +2072,14 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 			UseCooldown(Trinket2)
 		end
 	end
+	if Player.use_cds and ConvokeTheSpirits:Usable() and ((Player.combo_points.current < 3 and Rip:Remains() > 4 and (Rake:Up() or Player.enemies > 1) and TigersFury:Remains() > 3) or (Target.boss and Target.timeToDie < 5)) then
+		return UseCooldown(ConvokeTheSpirits)
+	end
 	if FeralFrenzy:Usable() and Player.combo_points.current <= (Player.berserk_remains > 0 and 2 or 1) then
 		return UseCooldown(FeralFrenzy)
 	end
-	if Player.use_cds then
-		if Shadowmeld:Usable() and Player.combo_points.current < 5 and Player.energy.current >= Rake:EnergyCost() and Rake:Multiplier() < 1.5 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and ((not Berserk.known and not IncarnationAvatarOfAshamane.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationAvatarOfAshamane.known and not IncarnationAvatarOfAshamane:Ready(18))) then
-			return UseCooldown(Shadowmeld)
-		end
-		if ConvokeTheSpirits:Usable() and ((Rip:Remains() > 4 and Player.combo_points.current < 5 and (Rake:Up() or Player.enemies > 1) and Player.energy.deficit >= 20 and (TigersFury:Remains() > 3 or not TigersFury:Ready(10)) and not Berserk:Ready(10)) or (Target.boss and Target.timeToDie < 5) or Player.berserk_remains > 12) then
-			return UseCooldown(ConvokeTheSpirits)
-		end
+	if Player.use_cds and Shadowmeld:Usable() and Player.combo_points.current < 5 and Player.energy.current >= Rake:EnergyCost() and Rake:Multiplier() < 1.5 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and ((not Berserk.known and not IncarnationAvatarOfAshamane.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationAvatarOfAshamane.known and not IncarnationAvatarOfAshamane:Ready(18))) then
+		return UseCooldown(Shadowmeld)
 	end
 end
 
@@ -2109,17 +2102,23 @@ actions.bloodtalons+=/thrash_cat,if=buff.bt_thrash.down
 			Player.pool_energy = Player.energy.current + (energy_need - energy)
 		end
 	end
-	if Rake:Usable() and not Rake:Bloodtalons() and (Rake:Down() or (Rake:Refreshable() and Rake:NextMultiplier() > Rake:Multiplier())) then
+	if Rake:Usable() and not Rake:Bloodtalons() and (Rake:Down() or (Rake:Refreshable() and (Bloodtalons:ActiveTriggers() == 2 or Rake:NextMultiplier() >= Rake:Multiplier()))) then
 		return Rake
 	end
-	if MoonfireCat:Usable() and not MoonfireCat:Bloodtalons() and MoonfireCat:Refreshable() then
+	if MoonfireCat:Usable() and not MoonfireCat:Bloodtalons() and MoonfireCat:Down() then
 		return MoonfireCat
 	end
-	if ThrashCat:Usable() and Player.enemies >= 2 and not ThrashCat:Bloodtalons() and ThrashCat:Refreshable() then
+	if ThrashCat:Usable() and not ThrashCat:Bloodtalons() and ThrashCat:Down() then
 		return ThrashCat
 	end
 	if BrutalSlash:Usable() and not BrutalSlash:Bloodtalons() then
 		return BrutalSlash
+	end
+	if MoonfireCat:Usable() and not MoonfireCat:Bloodtalons() and MoonfireCat:Refreshable() then
+		return MoonfireCat
+	end
+	if ThrashCat:Usable() and not ThrashCat:Bloodtalons() and ThrashCat:Refreshable() then
+		return ThrashCat
 	end
 	if SwipeCat:Usable() and Player.enemies > 1 and not SwipeCat:Bloodtalons() then
 		return SwipeCat
