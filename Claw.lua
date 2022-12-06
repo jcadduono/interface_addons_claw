@@ -1021,6 +1021,8 @@ Shred.triggers_bt = true
 ------ Procs
 
 ------ Talents
+local ConvokeTheSpirits = Ability:Add(391528, false, true)
+ConvokeTheSpirits.cooldown_duration = 120
 local FrenziedRegeneration = Ability:Add(22842, true, true)
 FrenziedRegeneration.buff_duration = 3
 FrenziedRegeneration.cooldown_duration = 36
@@ -1190,19 +1192,6 @@ GalacticGuardian.buff_duration = 15
 
 ------ Procs
 
--- Covenant abilities
-local ConvokeTheSpirits = Ability:Add(323764, false, true)
-ConvokeTheSpirits.cooldown_duration = 120
--- Soulbind conduits
-local SavageCombatant = Ability:Add(340609, true, true, 340613)
-SavageCombatant.buff_duration = 15
-SavageCombatant.conduit_id = 270
--- Legendary effects
-local CircleOfLifeAndDeath2 = Ability:Add(338657, true, true)
-CircleOfLifeAndDeath2.bonus_id = 7085
-local ApexPredatorsCraving2 = Ability:Add(339139, true, true, 339140)
-ApexPredatorsCraving2.buff_duration = 15
-ApexPredatorsCraving2.bonus_id = 7091
 -- Racials
 local Shadowmeld = Ability:Add(58984, true, true)
 -- PvP talents
@@ -1395,7 +1384,6 @@ function Player:UpdateTime(timeStamp)
 end
 
 function Player:UpdateAbilities()
-	self.rescan_abilities = false
 	self.mana.max = UnitPowerMax('player', 0)
 	self.rage.max = UnitPowerMax('player', 1)
 	self.energy.max = UnitPowerMax('player', 3)
@@ -1411,25 +1399,11 @@ function Player:UpdateAbilities()
 				break
 			end
 		end
-		if C_LevelLink.IsSpellLocked(ability.spellId) then
-			ability.known = false -- spell is locked, do not mark as known
-		end
-		if ability.bonus_id then -- used for checking enchants and Legendary crafted effects
+		if ability.bonus_id then -- used for checking enchants and crafted effects
 			ability.known = self:BonusIdEquipped(ability.bonus_id)
 		end
-		if ability.conduit_id then
-			node = C_Soulbinds.FindNodeIDActuallyInstalled(C_Soulbinds.GetActiveSoulbindID(), ability.conduit_id)
-			if node then
-				node = C_Soulbinds.GetNode(node)
-				if node then
-					if node.conduitID == 0 then
-						self.rescan_abilities = true -- rescan on next target, conduit data has not finished loading
-					else
-						ability.known = node.state == 3
-						ability.rank = node.conduitRank
-					end
-				end
-			end
+		if C_LevelLink.IsSpellLocked(ability.spellId) or (ability.check_usable and not IsUsableSpell(ability.spellId)) then
+			ability.known = false -- spell is locked, do not mark as known
 		end
 	end
 
@@ -1698,14 +1672,14 @@ function Bloodtalons:Reset()
 end
 
 function FerociousBite:CPCost()
-	if (ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) or (ApexPredatorsCraving2.known and ApexPredatorsCraving2:Up()) then
+	if ApexPredatorsCraving.known and ApexPredatorsCraving:Up() then
 		return 0
 	end
 	return Ability.CPCost(self)
 end
 
 function FerociousBite:EnergyCost()
-	if (ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) or (ApexPredatorsCraving2.known and ApexPredatorsCraving2:Up()) then
+	if ApexPredatorsCraving.known and ApexPredatorsCraving:Up() then
 		return 0
 	end
 	return Ability.EnergyCost(self)
@@ -1724,7 +1698,7 @@ end
 
 function Rake:Duration()
 	local duration = self.buff_duration
-	if CircleOfLifeAndDeath.known or CircleOfLifeAndDeath2.known then
+	if CircleOfLifeAndDeath.known then
 		duration = duration * 0.75
 	end
 	if Veinripper.known then
@@ -1772,7 +1746,7 @@ function Rip:Duration(comboPoints, appliedBy)
 	if appliedBy == PrimalWrath then
 		duration = duration * 0.50
 	end
-	if CircleOfLifeAndDeath.known or CircleOfLifeAndDeath2.known then
+	if CircleOfLifeAndDeath.known then
 		duration = duration * 0.75
 	end
 	if Veinripper.known then
@@ -1850,7 +1824,7 @@ end
 
 function ThrashCat:Duration()
 	local duration = self.buff_duration
-	if CircleOfLifeAndDeath.known or CircleOfLifeAndDeath2.known then
+	if CircleOfLifeAndDeath.known then
 		duration = duration * 0.75
 	end
 	if Veinripper.known then
@@ -2028,7 +2002,7 @@ actions+=/run_action_list,name=generators
 	if Player.health.pct < (Player.combo_points.current >= 5 and 85 or 65) and Regrowth:Usable() and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() and not Player:Stealthed() then
 		UseExtra(Regrowth)
 	end
-	if FerociousBite:Usable() and ((ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) or ((ApexPredatorsCraving2.known and ApexPredatorsCraving2:Up()))) and (Rip:Up() or (Player.enemies == 1 and Target.timeToDie < 8)) and (not Bloodtalons.known or Bloodtalons:Up() or (Rip:Ticking() > 4 and (Player.combo_points.current == 5 or Bloodtalons:ActiveTriggers() < 2))) then
+	if FerociousBite:Usable() and (ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) and (Rip:Up() or (Player.enemies == 1 and Target.timeToDie < 8)) and (not Bloodtalons.known or Bloodtalons:Up() or (Rip:Ticking() > 4 and (Player.combo_points.current == 5 or Bloodtalons:ActiveTriggers() < 2))) then
 		return FerociousBite
 	end
 	if Player.combo_points.current >= 5 then
@@ -2161,7 +2135,7 @@ actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_ga
 		return Pool(Rip)
 	end
 	if FerociousBite:Usable(0, true) then
-		return Pool(FerociousBite, ((ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) or (ApexPredatorsCraving2.known and ApexPredatorsCraving2:Up())) and 0 or 25)
+		return Pool(FerociousBite, (ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) and 0 or 25)
 	end
 end
 
@@ -2234,7 +2208,7 @@ actions.owlweave+=/moonkin_form,if=energy<40&(dot.rip.remains>4.5|combo_points<5
 		if SunfireBA:Usable() and SunfireBA:Refreshable() then
 			return SunfireBA
 		end
-	elseif SunfireBA:Refreshable() and Player.energy.current < 40 and (Rip:Remains() > 4.5 or Player.combo_points.current < 5) and not TigersFury:Ready(6.5) and Clearcasting:Down() and ((not ApexPredatorsCraving.known or ApexPredatorsCraving:Down()) and (not ApexPredatorsCraving2.known or ApexPredatorsCraving2:Down())) and not Player:BloodlustActive() and (Berserk:Remains() > 5 or Berserk:Down()) and (not ConvokeTheSpirits.known or not ConvokeTheSpirits:Ready()) then
+	elseif SunfireBA:Refreshable() and Player.energy.current < 40 and (Rip:Remains() > 4.5 or Player.combo_points.current < 5) and not TigersFury:Ready(6.5) and Clearcasting:Down() and (not ApexPredatorsCraving.known or ApexPredatorsCraving:Down()) and not Player:BloodlustActive() and (Berserk:Remains() > 5 or Berserk:Down()) and (not ConvokeTheSpirits.known or not ConvokeTheSpirits:Ready()) then
 		if HeartOfTheWild:Usable() then
 			UseCooldown(HeartOfTheWild)
 		elseif MoonkinForm:Usable() then
@@ -2311,7 +2285,7 @@ actions+=/swipe
 	if Swipe:Usable() and Player.enemies > 4 and (not IncarnationGuardianOfUrsoc.known or IncarnationGuardianOfUrsoc:Down()) then
 		return Swipe
 	end
-	if Maul:Usable() and Player.enemies < 4 and not Player:UnderAttack() and (Player.rage.deficit < 10 or (SavageCombatant.known and SavageCombatant:Stack() >= 3)) then
+	if Maul:Usable() and Player.enemies < 4 and not Player:UnderAttack() and Player.rage.deficit < 10 then
 		return Maul
 	end
 	if Mangle:Usable() and Thrash:Up() then
@@ -2925,9 +2899,6 @@ end
 
 function events:PLAYER_TARGET_CHANGED()
 	Target:Update()
-	if Player.rescan_abilities then
-		Player:UpdateAbilities()
-	end
 end
 
 function events:UNIT_FACTION(unitId)
@@ -3103,18 +3074,6 @@ function events:SPELL_UPDATE_COOLDOWN()
 end
 
 function events:PLAYER_PVP_TALENT_UPDATE()
-	Player:UpdateAbilities()
-end
-
-function events:SOULBIND_ACTIVATED()
-	Player:UpdateAbilities()
-end
-
-function events:SOULBIND_NODE_UPDATED()
-	Player:UpdateAbilities()
-end
-
-function events:SOULBIND_PATH_CHANGED()
 	Player:UpdateAbilities()
 end
 
