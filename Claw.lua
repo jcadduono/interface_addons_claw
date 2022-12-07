@@ -1976,11 +1976,6 @@ actions.precombat+=/prowl
 actions.precombat+=/potion,dynamic_prepot=1
 actions.precombat+=/berserk
 ]]
-		if Prowl:Usable() then
-			UseCooldown(Prowl)
-		elseif CatForm:Down() then
-			UseCooldown(CatForm)
-		end
 		if not Player:InArenaOrBattleground() then
 			if EternalAugmentRune:Usable() and EternalAugmentRune.buff:Remains() < 300 then
 				UseCooldown(EternalAugmentRune)
@@ -1994,6 +1989,12 @@ actions.precombat+=/berserk
 		end
 		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 300 then
 			return MarkOfTheWild
+		end
+		if Prowl:Usable() then
+			UseCooldown(Prowl)
+		end
+		if CatForm:Down() then
+			return CatForm
 		end
 	else
 		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 10 then
@@ -3060,6 +3061,7 @@ function events:PLAYER_SPECIALIZATION_CHANGED(unitId)
 	events:PLAYER_EQUIPMENT_CHANGED()
 	events:UPDATE_SHAPESHIFT_FORM()
 	events:PLAYER_REGEN_ENABLED()
+	events:UNIT_HEALTH('player')
 	UI.OnResourceFrameShow()
 	Player:Update()
 end
