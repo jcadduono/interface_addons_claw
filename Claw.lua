@@ -1121,6 +1121,20 @@ SolarBeam.cooldown_duration = 60
 
 ---- Feral
 ------ Talents
+local AdaptiveSwarm = Ability:Add(391888, false, true)
+AdaptiveSwarm.cooldown_duration = 25
+AdaptiveSwarm.dot = Ability:Add(391889, false, true)
+AdaptiveSwarm.dot.buff_duration = 12
+AdaptiveSwarm.dot.tick_interval = 2
+AdaptiveSwarm.dot.hasted_ticks = true
+AdaptiveSwarm.dot.learn_spellId = 391888
+AdaptiveSwarm.dot:TrackAuras()
+AdaptiveSwarm.hot = Ability:Add(391891, true, true)
+AdaptiveSwarm.hot.buff_duration = 12
+AdaptiveSwarm.hot.tick_interval = 2
+AdaptiveSwarm.hot.hasted_ticks = true
+AdaptiveSwarm.hot.learn_spellId = 391888
+AdaptiveSwarm.hot:TrackAuras()
 local Berserk = Ability:Add(106951, true, true)
 Berserk.buff_duration = 20
 local BrutalSlash = Ability:Add(202028, false, true)
@@ -1871,6 +1885,15 @@ end
 MightyBash.Usable = Maim.Usable
 Typhoon.Usable = Maim.Usable
 
+function AdaptiveSwarm.dot:Duration()
+	local duration = self.buff_duration
+	if CircleOfLifeAndDeath.known then
+		duration = duration * 0.75
+	end
+	return duration
+end
+AdaptiveSwarm.hot.Duration = AdaptiveSwarm.dot.Duration
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -2020,11 +2043,12 @@ actions.cooldowns+=/berserk,if=dot.rip.ticking&(cooldown.convoke_the_spirits.up|
 actions.cooldowns+=/tigers_fury,if=energy.deficit>40|buff.bs_inc.up|(talent.predator.enabled&variable.shortest_ttd<3)|(!dot.rip.ticking&buff.bloodtalons.up)
 actions.cooldowns+=/berserking
 actions.cooldowns+=/thorns,if=active_enemies>desired_targets|raid_event.adds.in>45
-actions.cooldowns+=/feral_frenzy,if=combo_points=0
 actions.cooldowns+=/incarnation,if=energy>=30&(cooldown.tigers_fury.remains>15|buff.tigers_fury.up)
 actions.cooldowns+=/potion,if=target.time_to_die<65|(time_to_die<180&(buff.berserk.up|buff.incarnation.up))
 actions.cooldowns+=/shadowmeld,if=combo_points<5&energy>=action.rake.cost&dot.rake.pmultiplier<1.7&buff.tigers_fury.up&(!talent.incarnation.enabled|cooldown.incarnation.remains>18)&!buff.incarnation.up
 actions.cooldowns+=/convoke_the_spirits,if=(dot.rip.remains>4&combo_points<5&(dot.rake.ticking|spell_targets.thrash_cat>1)&energy.deficit>=20&cooldown.bs_inc.remains>10)|fight_remains<5|(buff.bs_inc.up&buff.bs_inc.remains>12)
+actions.cooldowns+=/adaptive_swarm,target_if=((!dot.adaptive_swarm_damage.ticking|dot.adaptive_swarm_damage.remains<2)&(dot.adaptive_swarm_damage.stack<3|!dot.adaptive_swarm_heal.stack>1)&!action.adaptive_swarm_heal.in_flight&!action.adaptive_swarm_damage.in_flight&!action.adaptive_swarm.in_flight)&target.time_to_die>5|active_enemies>2&!dot.adaptive_swarm_damage.ticking&energy<35&target.time_to_die>5
+actions.cooldowns+=/feral_frenzy,if=combo_points<2
 actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 ]]
 	if Player.use_cds and Berserk:Usable() then
@@ -2049,7 +2073,10 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if Player.use_cds and ConvokeTheSpirits:Usable() and ((Player.combo_points.current < 3 and Rip:Remains() > 4 and (Rake:Up() or Player.enemies > 1) and TigersFury:Remains() > 3) or (Target.boss and Target.timeToDie < 5)) then
 		return UseCooldown(ConvokeTheSpirits)
 	end
-	if FeralFrenzy:Usable() and Player.combo_points.current <= (Player.berserk_remains > 0 and 2 or 1) then
+	if AdaptiveSwarm:Usable() and Target.timeToDie > 5 and ((not AdaptiveSwarm:Traveling() and (AdaptiveSwarm.dot:Ticking() == 0 or AdaptiveSwarm.dot:Remains() < 2) and (AdaptiveSwarm.dot:Stack() < 3 or AdaptiveSwarm.hot:Stack() <= 1)) or (Player.enemies > 2 and AdaptiveSwarm.dot:Ticking() == 0 and Player.energy.current < 35)) then
+		return UseCooldown(AdaptiveSwarm)
+	end
+	if FeralFrenzy:Usable() and Player.combo_points.current < 2 then
 		return UseCooldown(FeralFrenzy)
 	end
 	if Player.use_cds and Shadowmeld:Usable() and Player.combo_points.current < 5 and Player.energy.current >= Rake:EnergyCost() and Rake:Multiplier() < 1.5 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and ((not Berserk.known and not IncarnationAvatarOfAshamane.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationAvatarOfAshamane.known and not IncarnationAvatarOfAshamane:Ready(18))) then
