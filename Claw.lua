@@ -1048,6 +1048,10 @@ local MightyBash = Ability:Add(5211, false, true)
 MightyBash.buff_duration = 4
 MightyBash.cooldown_duration = 60
 local MoonkinForm = Ability:Add(197625, true, true)
+local NaturesVigil = Ability:Add(124974, true, true)
+NaturesVigil.buff_duration = 30
+NaturesVigil.cooldown_duration = 90
+NaturesVigil.triggers_gcd = false
 local Rake = Ability:Add(1822, false, true, 155722)
 Rake.buff_duration = 15
 Rake.energy_cost = 35
@@ -1080,6 +1084,7 @@ local SurvivalInstincts = Ability:Add(61336, true, true)
 SurvivalInstincts.buff_duration = 6
 SurvivalInstincts.cooldown_duration = 180
 SurvivalInstincts.requires_charge = true
+SurvivalInstincts.triggers_gcd = false
 local Swipe = Ability:Add(213771, false, true)
 Swipe:AutoAoe(true)
 Swipe.learn_spellId = 213764
@@ -1123,17 +1128,21 @@ SolarBeam.cooldown_duration = 60
 ------ Talents
 local AdaptiveSwarm = Ability:Add(391888, false, true)
 AdaptiveSwarm.cooldown_duration = 25
+AdaptiveSwarm.mana_cost = 5
+AdaptiveSwarm:SetVelocity(12)
 AdaptiveSwarm.dot = Ability:Add(391889, false, true)
 AdaptiveSwarm.dot.buff_duration = 12
 AdaptiveSwarm.dot.tick_interval = 2
 AdaptiveSwarm.dot.hasted_ticks = true
 AdaptiveSwarm.dot.learn_spellId = 391888
+AdaptiveSwarm.dot:SetVelocity(12)
 AdaptiveSwarm.dot:TrackAuras()
 AdaptiveSwarm.hot = Ability:Add(391891, true, true)
 AdaptiveSwarm.hot.buff_duration = 12
 AdaptiveSwarm.hot.tick_interval = 2
 AdaptiveSwarm.hot.hasted_ticks = true
 AdaptiveSwarm.hot.learn_spellId = 391888
+AdaptiveSwarm.hot:SetVelocity(12)
 AdaptiveSwarm.hot:TrackAuras()
 local Berserk = Ability:Add(106951, true, true)
 Berserk.buff_duration = 20
@@ -1294,8 +1303,6 @@ SpectralFlaskOfPower.buff = Ability:Add(307185, true, true)
 -- Equipment
 local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
-Trinket.SoleahsSecretTechnique = InventoryItem:Add(190958)
-Trinket.SoleahsSecretTechnique.buff = Ability:Add(368512, true, true)
 -- End Inventory Items
 
 -- Start Player API
@@ -1894,6 +1901,11 @@ function AdaptiveSwarm.dot:Duration()
 end
 AdaptiveSwarm.hot.Duration = AdaptiveSwarm.dot.Duration
 
+function AdaptiveSwarm.dot:CastLanded(...)
+	AdaptiveSwarm:CastLanded(...)
+end
+AdaptiveSwarm.hot.CastLanded = AdaptiveSwarm.dot.CastLanded
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -1927,9 +1939,6 @@ local APL = {
 
 APL[SPEC.BALANCE].Main = function(self)
 	if Player:TimeInCombat() == 0 then
-		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 300 and Player.group_size > 1 then
-			UseCooldown(Trinket.SoleahsSecretTechnique)
-		end
 		if not Player:InArenaOrBattleground() then
 			if EternalAugmentRune:Usable() and EternalAugmentRune.buff:Remains() < 300 then
 				UseCooldown(EternalAugmentRune)
@@ -1947,9 +1956,6 @@ APL[SPEC.BALANCE].Main = function(self)
 	else
 		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 10 then
 			UseExtra(MarkOfTheWild)
-		end
-		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 10 and Player.group_size > 1 then
-			UseExtra(Trinket.SoleahsSecretTechnique)
 		end
 	end
 end
@@ -1970,9 +1976,6 @@ actions.precombat+=/prowl
 actions.precombat+=/potion,dynamic_prepot=1
 actions.precombat+=/berserk
 ]]
-		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 300 and Player.group_size > 1 then
-			UseCooldown(Trinket.SoleahsSecretTechnique)
-		end
 		if Prowl:Usable() then
 			UseCooldown(Prowl)
 		elseif CatForm:Down() then
@@ -1995,9 +1998,6 @@ actions.precombat+=/berserk
 	else
 		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 10 then
 			UseExtra(MarkOfTheWild)
-		end
-		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 10 and Player.group_size > 1 then
-			UseExtra(Trinket.SoleahsSecretTechnique)
 		end
 	end
 --[[
@@ -2022,8 +2022,12 @@ actions+=/run_action_list,name=generators
 		return Rake
 	end
 	self:cooldowns()
-	if Player.health.pct < (Player.combo_points.current >= 5 and 85 or 65) and Regrowth:Usable() and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() and not Player:Stealthed() then
-		UseExtra(Regrowth)
+	if Player.health.pct < 85 and not Player:Stealthed() then
+		if Regrowth:Usable() and (Player.health.pct < 65 or Player.combo_points.current >= 5) and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() then
+			UseExtra(Regrowth)
+		elseif NaturesVigil:Usable() then
+			UseExtra(NaturesVigil)
+		end
 	end
 	if FerociousBite:Usable() and (ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) and (Rip:Up() or (Player.enemies == 1 and Target.timeToDie < 8)) and (not Bloodtalons.known or Bloodtalons:Up() or (Rip:Ticking() > 4 and (Player.combo_points.current == 5 or Bloodtalons:ActiveTriggers() < 2))) then
 		return FerociousBite
@@ -2039,11 +2043,11 @@ end
 
 APL[SPEC.FERAL].cooldowns = function(self)
 --[[
-actions.cooldowns+=/berserk,if=dot.rip.ticking&(cooldown.convoke_the_spirits.up|cooldown.convoke_the_spirits.remains>32|fight_remains<20)
+actions.cooldowns=berserk
+actions.cooldowns+=/incarnation
 actions.cooldowns+=/tigers_fury,if=energy.deficit>40|buff.bs_inc.up|(talent.predator.enabled&variable.shortest_ttd<3)|(!dot.rip.ticking&buff.bloodtalons.up)
 actions.cooldowns+=/berserking
 actions.cooldowns+=/thorns,if=active_enemies>desired_targets|raid_event.adds.in>45
-actions.cooldowns+=/incarnation,if=energy>=30&(cooldown.tigers_fury.remains>15|buff.tigers_fury.up)
 actions.cooldowns+=/potion,if=target.time_to_die<65|(time_to_die<180&(buff.berserk.up|buff.incarnation.up))
 actions.cooldowns+=/shadowmeld,if=combo_points<5&energy>=action.rake.cost&dot.rake.pmultiplier<1.7&buff.tigers_fury.up&(!talent.incarnation.enabled|cooldown.incarnation.remains>18)&!buff.incarnation.up
 actions.cooldowns+=/convoke_the_spirits,if=(dot.rip.remains>4&combo_points<5&(dot.rake.ticking|spell_targets.thrash_cat>1)&energy.deficit>=20&cooldown.bs_inc.remains>10)|fight_remains<5|(buff.bs_inc.up&buff.bs_inc.remains>12)
@@ -2053,6 +2057,9 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 ]]
 	if Player.use_cds and Berserk:Usable() then
 		return UseCooldown(Berserk)
+	end
+	if Player.use_cds and IncarnationAvatarOfAshamane:Usable() then
+		return UseCooldown(IncarnationAvatarOfAshamane)
 	end
 	if TigersFury:Usable() and (Player.energy.deficit > 60 or (TigersFury:Remains() < 2 and (Player.berserk_remains > 0 or (Bloodtalons.known and Rip:Refreshable() and Bloodtalons:Up())))) then
 		return UseCooldown(TigersFury)
@@ -2073,7 +2080,7 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if Player.use_cds and ConvokeTheSpirits:Usable() and ((Player.combo_points.current < 3 and Rip:Remains() > 4 and (Rake:Up() or Player.enemies > 1) and TigersFury:Remains() > 3) or (Target.boss and Target.timeToDie < 5)) then
 		return UseCooldown(ConvokeTheSpirits)
 	end
-	if AdaptiveSwarm:Usable() and Target.timeToDie > 5 and ((not AdaptiveSwarm:Traveling() and (AdaptiveSwarm.dot:Ticking() == 0 or AdaptiveSwarm.dot:Remains() < 2) and (AdaptiveSwarm.dot:Stack() < 3 or AdaptiveSwarm.hot:Stack() <= 1)) or (Player.enemies > 2 and AdaptiveSwarm.dot:Ticking() == 0 and Player.energy.current < 35)) then
+	if AdaptiveSwarm:Usable() and Target.timeToDie > 5 and (Rip:Up() or Player.energy.current < 35) and ((AdaptiveSwarm:Traveling() == 0 and (AdaptiveSwarm.dot:Ticking() == 0 or AdaptiveSwarm.dot:Remains() < 2) and (AdaptiveSwarm.dot:Stack() < 3 or AdaptiveSwarm.hot:Stack() <= 1)) or (Player.enemies > 2 and AdaptiveSwarm.dot:Ticking() == 0 and Player.energy.current < 35)) then
 		return UseCooldown(AdaptiveSwarm)
 	end
 	if FeralFrenzy:Usable() and Player.combo_points.current < 2 then
@@ -2246,9 +2253,6 @@ end
 
 APL[SPEC.GUARDIAN].Main = function(self)
 	if Player:TimeInCombat() == 0 then
-		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 300 and Player.group_size > 1 then
-			UseCooldown(Trinket.SoleahsSecretTechnique)
-		end
 		if not Player:InArenaOrBattleground() then
 			if EternalAugmentRune:Usable() and EternalAugmentRune.buff:Remains() < 300 then
 				UseCooldown(EternalAugmentRune)
@@ -2266,9 +2270,6 @@ APL[SPEC.GUARDIAN].Main = function(self)
 	else
 		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 10 then
 			UseExtra(MarkOfTheWild)
-		end
-		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 10 and Player.group_size > 1 then
-			UseExtra(Trinket.SoleahsSecretTechnique)
 		end
 	end
 --[[
@@ -2358,9 +2359,6 @@ end
 
 APL[SPEC.RESTORATION].Main = function(self)
 	if Player:TimeInCombat() == 0 then
-		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 300 and Player.group_size > 1 then
-			UseCooldown(Trinket.SoleahsSecretTechnique)
-		end
 		if not Player:InArenaOrBattleground() then
 			if EternalAugmentRune:Usable() and EternalAugmentRune.buff:Remains() < 300 then
 				UseCooldown(EternalAugmentRune)
@@ -2378,9 +2376,6 @@ APL[SPEC.RESTORATION].Main = function(self)
 	else
 		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 10 then
 			UseExtra(MarkOfTheWild)
-		end
-		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 10 and Player.group_size > 1 then
-			UseExtra(Trinket.SoleahsSecretTechnique)
 		end
 	end
 end
