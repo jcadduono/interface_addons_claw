@@ -1005,7 +1005,7 @@ local Moonfire = Ability:Add(8921, false, true, 164812)
 Moonfire.buff_duration = 18
 Moonfire.tick_interval = 2
 Moonfire.hasted_ticks = true
-local Prowl = Ability:Add(5215, true, true)
+local Prowl = Ability:Add(5215, true, true, 102547)
 Prowl.cooldown_duration = 6
 local Rebirth = Ability:Add(20484, true, true)
 Rebirth.cooldown_duration = 600
@@ -1164,6 +1164,7 @@ FeralFrenzy.triggers_bt = true
 local IncarnationAvatarOfAshamane = Ability:Add(102543, true, true)
 IncarnationAvatarOfAshamane.buff_duration = 30
 IncarnationAvatarOfAshamane.cooldown_duration = 180
+IncarnationAvatarOfAshamane.prowl = Ability:Add(252071, true, true)
 local MoonfireCat = Ability:Add(155625, false, true)
 MoonfireCat.buff_duration = 16
 MoonfireCat.energy_cost = 30
@@ -1429,6 +1430,7 @@ function Player:UpdateAbilities()
 	end
 
 	if IncarnationAvatarOfAshamane.known then
+		IncarnationAvatarOfAshamane.prowl.known = true
 		Berserk.known = false
 	end
 	if BrutalSlash.known then
@@ -1870,7 +1872,7 @@ function ThrashCat:NextMultiplier()
 end
 
 function Prowl:Usable()
-	if Prowl:Up() or Shadowmeld:Up() or (InCombatLockdown() and not IncarnationAvatarOfAshamane:Up()) then
+	if Prowl:Up() or Shadowmeld:Up() or (InCombatLockdown() and not IncarnationAvatarOfAshamane.prowl:Up()) then
 		return false
 	end
 	return Ability.Usable(self)
@@ -2404,7 +2406,7 @@ end
 -- Start UI API
 
 function UI.DenyOverlayGlow(actionButton)
-	if not Opt.glow.blizzard then
+	if not Opt.glow.blizzard and actionButton.overlay then
 		actionButton.overlay:Hide()
 	end
 end
