@@ -238,6 +238,10 @@ clawPanel:SetPoint('CENTER', 0, -169)
 clawPanel:SetFrameStrata('BACKGROUND')
 clawPanel:SetSize(64, 64)
 clawPanel:SetMovable(true)
+clawPanel:SetUserPlaced(true)
+clawPanel:RegisterForDrag('LeftButton')
+clawPanel:SetScript('OnDragStart', clawPanel.StartMoving)
+clawPanel:SetScript('OnDragStop', clawPanel.StopMovingOrSizing)
 clawPanel:Hide()
 clawPanel.icon = clawPanel:CreateTexture(nil, 'BACKGROUND')
 clawPanel.icon:SetAllPoints(clawPanel)
@@ -283,11 +287,12 @@ clawPanel.button:RegisterForClicks('LeftButtonDown', 'RightButtonDown', 'MiddleB
 local clawPreviousPanel = CreateFrame('Frame', 'clawPreviousPanel', UIParent)
 clawPreviousPanel:SetFrameStrata('BACKGROUND')
 clawPreviousPanel:SetSize(64, 64)
-clawPreviousPanel:Hide()
+clawPreviousPanel:SetMovable(true)
+clawPreviousPanel:SetUserPlaced(true)
 clawPreviousPanel:RegisterForDrag('LeftButton')
 clawPreviousPanel:SetScript('OnDragStart', clawPreviousPanel.StartMoving)
 clawPreviousPanel:SetScript('OnDragStop', clawPreviousPanel.StopMovingOrSizing)
-clawPreviousPanel:SetMovable(true)
+clawPreviousPanel:Hide()
 clawPreviousPanel.icon = clawPreviousPanel:CreateTexture(nil, 'BACKGROUND')
 clawPreviousPanel.icon:SetAllPoints(clawPreviousPanel)
 clawPreviousPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
@@ -295,13 +300,14 @@ clawPreviousPanel.border = clawPreviousPanel:CreateTexture(nil, 'ARTWORK')
 clawPreviousPanel.border:SetAllPoints(clawPreviousPanel)
 clawPreviousPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
 local clawCooldownPanel = CreateFrame('Frame', 'clawCooldownPanel', UIParent)
-clawCooldownPanel:SetSize(64, 64)
 clawCooldownPanel:SetFrameStrata('BACKGROUND')
-clawCooldownPanel:Hide()
+clawCooldownPanel:SetSize(64, 64)
+clawCooldownPanel:SetMovable(true)
+clawCooldownPanel:SetUserPlaced(true)
 clawCooldownPanel:RegisterForDrag('LeftButton')
 clawCooldownPanel:SetScript('OnDragStart', clawCooldownPanel.StartMoving)
 clawCooldownPanel:SetScript('OnDragStop', clawCooldownPanel.StopMovingOrSizing)
-clawCooldownPanel:SetMovable(true)
+clawCooldownPanel:Hide()
 clawCooldownPanel.icon = clawCooldownPanel:CreateTexture(nil, 'BACKGROUND')
 clawCooldownPanel.icon:SetAllPoints(clawCooldownPanel)
 clawCooldownPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
@@ -324,11 +330,12 @@ clawCooldownPanel.text:SetJustifyV('CENTER')
 local clawInterruptPanel = CreateFrame('Frame', 'clawInterruptPanel', UIParent)
 clawInterruptPanel:SetFrameStrata('BACKGROUND')
 clawInterruptPanel:SetSize(64, 64)
-clawInterruptPanel:Hide()
+clawInterruptPanel:SetMovable(true)
+clawInterruptPanel:SetUserPlaced(true)
 clawInterruptPanel:RegisterForDrag('LeftButton')
 clawInterruptPanel:SetScript('OnDragStart', clawInterruptPanel.StartMoving)
 clawInterruptPanel:SetScript('OnDragStop', clawInterruptPanel.StopMovingOrSizing)
-clawInterruptPanel:SetMovable(true)
+clawInterruptPanel:Hide()
 clawInterruptPanel.icon = clawInterruptPanel:CreateTexture(nil, 'BACKGROUND')
 clawInterruptPanel.icon:SetAllPoints(clawInterruptPanel)
 clawInterruptPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
@@ -342,11 +349,12 @@ clawInterruptPanel.swipe:SetDrawEdge(false)
 local clawExtraPanel = CreateFrame('Frame', 'clawExtraPanel', UIParent)
 clawExtraPanel:SetFrameStrata('BACKGROUND')
 clawExtraPanel:SetSize(64, 64)
-clawExtraPanel:Hide()
+clawExtraPanel:SetMovable(true)
+clawExtraPanel:SetUserPlaced(true)
 clawExtraPanel:RegisterForDrag('LeftButton')
 clawExtraPanel:SetScript('OnDragStart', clawExtraPanel.StartMoving)
 clawExtraPanel:SetScript('OnDragStop', clawExtraPanel.StopMovingOrSizing)
-clawExtraPanel:SetMovable(true)
+clawExtraPanel:Hide()
 clawExtraPanel.icon = clawExtraPanel:CreateTexture(nil, 'BACKGROUND')
 clawExtraPanel.icon:SetAllPoints(clawExtraPanel)
 clawExtraPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
@@ -2513,27 +2521,13 @@ function UI:UpdateGlows()
 end
 
 function UI:UpdateDraggable()
-	clawPanel:EnableMouse(Opt.aoe or not Opt.locked)
+	local draggable = not (Opt.locked or Opt.snap or Opt.aoe)
+	clawPanel:EnableMouse(draggable or Opt.aoe)
 	clawPanel.button:SetShown(Opt.aoe)
-	if Opt.locked then
-		clawPanel:SetScript('OnDragStart', nil)
-		clawPanel:SetScript('OnDragStop', nil)
-		clawPanel:RegisterForDrag(nil)
-		clawPreviousPanel:EnableMouse(false)
-		clawCooldownPanel:EnableMouse(false)
-		clawInterruptPanel:EnableMouse(false)
-		clawExtraPanel:EnableMouse(false)
-	else
-		if not Opt.aoe then
-			clawPanel:SetScript('OnDragStart', clawPanel.StartMoving)
-			clawPanel:SetScript('OnDragStop', clawPanel.StopMovingOrSizing)
-			clawPanel:RegisterForDrag('LeftButton')
-		end
-		clawPreviousPanel:EnableMouse(true)
-		clawCooldownPanel:EnableMouse(true)
-		clawInterruptPanel:EnableMouse(true)
-		clawExtraPanel:EnableMouse(true)
-	end
+	clawPreviousPanel:EnableMouse(draggable)
+	clawCooldownPanel:EnableMouse(draggable)
+	clawInterruptPanel:EnableMouse(draggable)
+	clawExtraPanel:EnableMouse(draggable)
 end
 
 function UI:UpdateAlpha()
@@ -2795,18 +2789,19 @@ end
 function events:ADDON_LOADED(name)
 	if name == ADDON then
 		Opt = Claw
-		if not Opt.frequency then
-			print('It looks like this is your first time running ' .. ADDON .. ', why don\'t you take some time to familiarize yourself with the commands?')
-			print('Type |cFFFFD000' .. SLASH_Claw1 .. '|r for a list of commands.')
-		end
-		if UnitLevel('player') < 10 then
-			print('[|cFFFFD000Warning|r] ' .. ADDON .. ' is not designed for players under level 10, and almost certainly will not operate properly!')
-		end
+		local firstRun = not Opt.frequency
 		InitOpts()
 		UI:UpdateDraggable()
 		UI:UpdateAlpha()
 		UI:UpdateScale()
-		UI:SnapAllPanels()
+		if firstRun then
+			print('It looks like this is your first time running ' .. ADDON .. ', why don\'t you take some time to familiarize yourself with the commands?')
+			print('Type |cFFFFD000' .. SLASH_Claw1 .. '|r for a list of commands.')
+			UI:SnapAllPanels()
+		end
+		if UnitLevel('player') < 10 then
+			print('[|cFFFFD000Warning|r] ' .. ADDON .. ' is not designed for players under level 10, and almost certainly will not operate properly!')
+		end
 	end
 end
 
@@ -3187,18 +3182,25 @@ SlashCmdList[ADDON] = function(msg, editbox)
 			Opt.locked = msg[2] == 'on'
 			UI:UpdateDraggable()
 		end
+		if Opt.aoe or Opt.snap then
+			Status('Warning', 'Panels cannot be moved when aoe or snap are enabled!')
+		end
 		return Status('Locked', Opt.locked)
 	end
 	if startsWith(msg[1], 'snap') then
 		if msg[2] then
 			if msg[2] == 'above' or msg[2] == 'over' then
 				Opt.snap = 'above'
+				Opt.locked = true
 			elseif msg[2] == 'below' or msg[2] == 'under' then
 				Opt.snap = 'below'
+				Opt.locked = true
 			else
 				Opt.snap = false
+				Opt.locked = false
 				clawPanel:ClearAllPoints()
 			end
+			UI:UpdateDraggable()
 			UI.OnResourceFrameShow()
 		end
 		return Status('Snap to the Personal Resource Display frame', Opt.snap)
