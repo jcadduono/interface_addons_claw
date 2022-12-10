@@ -1154,6 +1154,7 @@ AdaptiveSwarm.hot:SetVelocity(12)
 AdaptiveSwarm.hot:TrackAuras()
 local Berserk = Ability:Add(106951, true, true)
 Berserk.buff_duration = 20
+local BerserkFrenzy = Ability:Add(384668, false, true)
 local BrutalSlash = Ability:Add(202028, false, true)
 BrutalSlash.cooldown_duration = 8
 BrutalSlash.energy_cost = 25
@@ -2180,7 +2181,7 @@ actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_ga
 		return Pool(Rip)
 	end
 	if FerociousBite:Usable(0, true) then
-		return Pool(FerociousBite, (ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) and 0 or 25)
+		return Pool(FerociousBite, ((ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) or (BerserkFrenzy.known and Player.berserk_remains > 0)) and 0 or 25)
 	end
 end
 
