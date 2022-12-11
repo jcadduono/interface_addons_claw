@@ -1162,6 +1162,8 @@ BrutalSlash.hasted_cooldown = true
 BrutalSlash.requires_charge = true
 BrutalSlash.triggers_bt = true
 BrutalSlash:AutoAoe(true)
+local CarnivorousInstinct = Ability:Add(390902, true, true)
+CarnivorousInstinct.talent_node = 82110
 local CircleOfLifeAndDeath = Ability:Add(391969, true, true)
 local FeralFrenzy = Ability:Add(274837, false, true, 274838)
 FeralFrenzy.buff_duration = 6
@@ -1420,8 +1422,10 @@ function Player:UpdateAbilities()
 	self.combo_points.max = UnitPowerMax('player', 4)
 
 	local node
+	local configId = C_ClassTalents.GetActiveConfigID()
 	for _, ability in next, abilities.all do
 		ability.known = false
+		ability.rank = 0
 		for _, spellId in next, ability.spellIds do
 			ability.spellId, ability.name, _, ability.icon = spellId, GetSpellInfo(spellId)
 			if IsPlayerSpell(spellId) or (ability.learn_spellId and IsPlayerSpell(ability.learn_spellId)) then
@@ -1431,6 +1435,13 @@ function Player:UpdateAbilities()
 		end
 		if ability.bonus_id then -- used for checking enchants and crafted effects
 			ability.known = self:BonusIdEquipped(ability.bonus_id)
+		end
+		if ability.talent_node and configId then
+			node = C_Traits.GetNodeInfo(configId, ability.talent_node)
+			if node then
+				ability.rank = node.activeRank
+				ability.known = ability.rank > 0
+			end
 		end
 		if C_LevelLink.IsSpellLocked(ability.spellId) or (ability.check_usable and not IsUsableSpell(ability.spellId)) then
 			ability.known = false -- spell is locked, do not mark as known
@@ -1724,7 +1735,11 @@ function Regrowth:ManaCost()
 end
 
 function TigersFury:Multiplier()
-	return 1.21
+	local multiplier = 1.15
+	if CarnivorousInstinct.known then
+		mulitplier = multiplier + CarnivorousInstinct.rank * 0.06
+	end
+	return multiplier
 end
 
 function Rake:Duration()
@@ -3061,6 +3076,10 @@ function events:PLAYER_SPECIALIZATION_CHANGED(unitId)
 	events:UNIT_HEALTH('player')
 	UI.OnResourceFrameShow()
 	Player:Update()
+end
+
+function events:TRAIT_CONFIG_UPDATED()
+	events:PLAYER_SPECIALIZATION_CHANGED('player')
 end
 
 function events:UPDATE_SHAPESHIFT_FORM()
