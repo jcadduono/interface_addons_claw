@@ -209,7 +209,7 @@ local Player = {
 		last_taken = 0,
 	},
 	set_bonus = {
-		t28 = 0,
+		t29 = 0,
 	},
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
@@ -1302,8 +1302,6 @@ local EternalAugmentRune = InventoryItem:Add(190384)
 EternalAugmentRune.buff = Ability:Add(367405, true, true)
 local EternalFlask = InventoryItem:Add(171280)
 EternalFlask.buff = Ability:Add(307166, true, true)
-local PhialOfSerenity = InventoryItem:Add(177278) -- Provided by Summon Steward
-PhialOfSerenity.max_charges = 3
 local PotionOfPhantomFire = InventoryItem:Add(171349)
 PotionOfPhantomFire.buff = Ability:Add(307495, true, true)
 local PotionOfSpectralAgility = InventoryItem:Add(171270)
@@ -1341,6 +1339,9 @@ function Player:TimeInCombat()
 	if self.combat_start > 0 then
 		return self.time - self.combat_start
 	end
+	if self.ability_casting and self.ability_casting.triggers_combat then
+		return 0.1
+	end
 	return 0
 end
 
@@ -1365,10 +1366,8 @@ function Player:BloodlustActive()
 			id == 90355 or  -- Ancient Hysteria (Hunter Pet - Core Hound)
 			id == 160452 or -- Netherwinds (Hunter Pet - Nether Ray)
 			id == 264667 or -- Primal Rage (Hunter Pet - Ferocity)
-			id == 178207 or -- Drums of Fury (Leatherworking)
-			id == 146555 or -- Drums of Rage (Leatherworking)
-			id == 230935 or -- Drums of the Mountain (Leatherworking)
-			id == 256740    -- Drums of the Maelstrom (Leatherworking)
+			id == 381301 or -- Feral Hide Drums (Leatherworking)
+			id == 390386    -- Fury of the Aspects (Evoker)
 		) then
 			return true
 		end
