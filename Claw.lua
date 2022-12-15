@@ -2109,7 +2109,7 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if AdaptiveSwarm:Usable() and Target.timeToDie > 5 and (Rip:Up() or Player.energy.current < 35) and ((AdaptiveSwarm:Traveling() == 0 and (AdaptiveSwarm.dot:Ticking() == 0 or AdaptiveSwarm.dot:Remains() < 2) and (AdaptiveSwarm.dot:Stack() < 3 or AdaptiveSwarm.hot:Stack() <= 1)) or (Player.enemies > 2 and AdaptiveSwarm.dot:Ticking() == 0 and Player.energy.current < 35)) then
 		return UseCooldown(AdaptiveSwarm)
 	end
-	if FeralFrenzy:Usable() and Player.combo_points.current < 2 then
+	if FeralFrenzy:Usable() and Player.combo_points.current < (Player.berserk_remains > 0 and 3 or 2) then
 		return UseCooldown(FeralFrenzy)
 	end
 	if Player.use_cds and Shadowmeld:Usable() and Player.combo_points.current < 5 and Player.energy.current >= Rake:EnergyCost() and Rake:Multiplier() < 1.5 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and ((not Berserk.known and not IncarnationAvatarOfAshamane.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationAvatarOfAshamane.known and not IncarnationAvatarOfAshamane:Ready(18))) then
