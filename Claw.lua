@@ -2081,6 +2081,9 @@ actions.cooldowns+=/adaptive_swarm,target_if=((!dot.adaptive_swarm_damage.tickin
 actions.cooldowns+=/feral_frenzy,if=combo_points<2
 actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 ]]
+	if AdaptiveSwarm:Usable() and Target.timeToDie > 5 and AdaptiveSwarm.dot:Up() and AdaptiveSwarm.dot:Remains() < 2 then
+		return UseCooldown(AdaptiveSwarm)
+	end
 	if Player.use_cds and Berserk:Usable() then
 		return UseCooldown(Berserk)
 	end
