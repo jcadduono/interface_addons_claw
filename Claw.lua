@@ -2172,7 +2172,7 @@ actions.bloodtalons+=/rake,if=buff.bt_rake.down&combo_points>4
 	if BrutalSlash:Usable() and not BrutalSlash:Bloodtalons() then
 		return BrutalSlash
 	end
-	if ThrashCat:Usable() and not ThrashCat:Bloodtalons() and ThrashCat:Refreshable() then
+	if ThrashCat:Usable() and not ThrashCat:Bloodtalons() and ThrashCat:Refreshable() and (Player.enemies > 1 or Target.timeToDie > (ThrashCat:Remains() + ThrashCat:TickTime() * 4)) then
 		return ThrashCat
 	end
 	if SwipeCat:Usable() and Player.enemies > 1 and not SwipeCat:Bloodtalons() then
@@ -2207,11 +2207,11 @@ actions.finisher+=/ferocious_bite,if=(buff.bs_inc.up&talent.soul_of_the_forest.e
 	if PrimalWrath:Usable(0, true) and (Player.enemies > 2 or (Player.enemies > 1 and Rip:Refreshable(nil, PrimalWrath))) then
 		return Pool(PrimalWrath)
 	end
-	if Rip:Usable(0, true) and Rip:Refreshable() then
+	if Rip:Usable(0, true) and Rip:Refreshable() and Target.timeToDie > (Rip:Remains() + Rip:TickTime() * 4) then
 		return Pool(Rip)
 	end
 	if FerociousBite:Usable(0, true) then
-		return Pool(FerociousBite, (Player.berserk_remains == 0 or not SoulOfTheForest.known) and 25 or 0)
+		return Pool(FerociousBite, (Player.berserk_remains == 0 or not SoulOfTheForest.known) and Target.timeToDie > 2 and 25 or 0)
 	end
 end
 
@@ -2281,7 +2281,7 @@ actions.builder+=/shred
 	if MoonfireCat:Usable() and MoonfireCat:Refreshable() then
 		return MoonfireCat
 	end
-	if ThrashCat:Usable(0, true) and ThrashCat:Refreshable() then
+	if ThrashCat:Usable(0, true) and ThrashCat:Refreshable() and (Player.enemies > 1 or Target.timeToDie > (ThrashCat:Remains() + ThrashCat:TickTime() * 4)) then
 		return Pool(ThrashCat)
 	end
 	if BrutalSlash:Usable() then
