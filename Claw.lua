@@ -2007,10 +2007,10 @@ actions+=/call_action_list,name=cooldown
 actions+=/feral_frenzy,if=combo_points<2|combo_points=2&buff.bs_inc.up
 actions+=/run_action_list,name=aoe,if=spell_targets.swipe_cat>1&talent.primal_wrath.enabled
 actions+=/ferocious_bite,if=buff.apex_predators_craving.up&(buff.apex_predators_craving.remains<2|dot.rip.ticking)
-actions+=/call_action_list,name=bloodtalons,if=variable.need_bt&!buff.bs_inc.up&(combo_points<5|active_bt_triggers>1)
-actions+=/call_action_list,name=finisher,if=combo_points=5
-actions+=/call_action_list,name=berserk_builders,if=combo_points<5&buff.bs_inc.up
-actions+=/call_action_list,name=builder,if=combo_points<5
+actions+=/run_action_list,name=bloodtalons,if=variable.need_bt&!buff.bs_inc.up&(combo_points<5|active_bt_triggers>1)
+actions+=/run_action_list,name=finisher,if=combo_points=5
+actions+=/run_action_list,name=berserk_builders,if=combo_points<5&buff.bs_inc.up
+actions+=/run_action_list,name=builder,if=combo_points<5
 ]]
 	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or Player.berserk_remains > 0
 	self.need_bt = Bloodtalons.known and Bloodtalons:Down()
@@ -2040,21 +2040,16 @@ actions+=/call_action_list,name=builder,if=combo_points<5
 	if ApexPredatorsCraving.known and FerociousBite:Usable() and ApexPredatorsCraving:Up() and (ApexPredatorsCraving:Remains() < 2 or Rip:Ticking() > 0) then
 		return FerociousBite
 	end
-	local apl
 	if self.need_bt and Player.berserk_remains == 0 and (Player.combo_points.current < 5 or Bloodtalons:ActiveTriggers() > 1) then
-		apl = self:bloodtalons()
-		if apl then return apl end
+		return self:bloodtalons()
 	end
 	if Player.combo_points.current >= 5 then
-		apl = self:finisher()
-		if apl then return apl end
-	else
-		if Player.berserk_remains > 0 then
-			apl = self:berserk_builders()
-			if apl then return apl end
-		end
-		return self:builder()
+		return self:finisher()
 	end
+	if Player.berserk_remains > 0 then
+		return self:berserk_builders()
+	end
+	return self:builder()
 end
 
 APL[SPEC.FERAL].cooldown = function(self)
