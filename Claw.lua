@@ -2007,7 +2007,7 @@ actions+=/call_action_list,name=cooldown
 actions+=/feral_frenzy,if=combo_points<2|combo_points=2&buff.bs_inc.up
 actions+=/run_action_list,name=aoe,if=spell_targets.swipe_cat>1&talent.primal_wrath.enabled
 actions+=/ferocious_bite,if=buff.apex_predators_craving.up&(buff.apex_predators_craving.remains<2|dot.rip.ticking)
-actions+=/call_action_list,name=bloodtalons,if=variable.need_bt&!buff.bs_inc.up
+actions+=/call_action_list,name=bloodtalons,if=variable.need_bt&!buff.bs_inc.up&(combo_points<5|active_bt_triggers>1)
 actions+=/call_action_list,name=finisher,if=combo_points=5
 actions+=/call_action_list,name=berserk_builders,if=combo_points<5&buff.bs_inc.up
 actions+=/call_action_list,name=builder,if=combo_points<5
@@ -2041,7 +2041,7 @@ actions+=/call_action_list,name=builder,if=combo_points<5
 		return FerociousBite
 	end
 	local apl
-	if self.need_bt and Player.berserk_remains == 0 then
+	if self.need_bt and Player.berserk_remains == 0 and (Player.combo_points.current < 5 or Bloodtalons:ActiveTriggers() > 1) then
 		apl = self:bloodtalons()
 		if apl then return apl end
 	end
