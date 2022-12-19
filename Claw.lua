@@ -106,7 +106,6 @@ local function InitOpts()
 		trinket = true,
 		frenzied_threshold = 60,
 		multipliers = true,
-		owlweave = false,
 	})
 end
 
@@ -614,9 +613,9 @@ function Ability:Remains()
 	return 0
 end
 
-function Ability:Refreshable()
+function Ability:Refreshable(...)
 	if self.buff_duration > 0 then
-		return self:Remains() < self:Duration() * 0.3
+		return self:Remains() < self:Duration(...) * 0.3
 	end
 	return self:Down()
 end
@@ -1176,6 +1175,7 @@ local IncarnationAvatarOfAshamane = Ability:Add(102543, true, true)
 IncarnationAvatarOfAshamane.buff_duration = 30
 IncarnationAvatarOfAshamane.cooldown_duration = 180
 IncarnationAvatarOfAshamane.prowl = Ability:Add(252071, true, true)
+local MomentOfClarity = Ability:Add(236068, true, true)
 local MoonfireCat = Ability:Add(155625, false, true)
 MoonfireCat.buff_duration = 16
 MoonfireCat.energy_cost = 30
@@ -1188,6 +1188,7 @@ local PrimalWrath = Ability:Add(285381, false, true)
 PrimalWrath.energy_cost = 1
 PrimalWrath.cp_cost = 1
 PrimalWrath:AutoAoe(true)
+local SoulOfTheForest = Ability:Add(158476, true, true)
 local TigersFury = Ability:Add(5217, true, true)
 TigersFury.buff_duration = 10
 TigersFury.cooldown_duration = 30
@@ -1203,6 +1204,8 @@ local Clearcasting = Ability:Add(16864, true, true, 135700)
 Clearcasting.buff_duration = 15
 local PredatorySwiftness = Ability:Add(16974, true, true, 69369)
 PredatorySwiftness.buff_duration = 12
+local Sabertooth = Ability:Add(202031, true, true, 391722)
+Sabertooth.buff_duration = 4
 local SuddenAmbush = Ability:Add(384667, true, true, 391974)
 SuddenAmbush.buff_duration = 15
 ---- Guardian
@@ -1300,16 +1303,7 @@ function InventoryItem:Usable(seconds)
 end
 
 -- Inventory Items
-local EternalAugmentRune = InventoryItem:Add(190384)
-EternalAugmentRune.buff = Ability:Add(367405, true, true)
-local EternalFlask = InventoryItem:Add(171280)
-EternalFlask.buff = Ability:Add(307166, true, true)
-local PotionOfPhantomFire = InventoryItem:Add(171349)
-PotionOfPhantomFire.buff = Ability:Add(307495, true, true)
-local PotionOfSpectralAgility = InventoryItem:Add(171270)
-PotionOfSpectralAgility.buff = Ability:Add(307159, true, true)
-local SpectralFlaskOfPower = InventoryItem:Add(171276)
-SpectralFlaskOfPower.buff = Ability:Add(307185, true, true)
+
 -- Equipment
 local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
@@ -1448,9 +1442,11 @@ function Player:UpdateAbilities()
 		end
 	end
 
+	self.bs_inc = Berserk
 	if IncarnationAvatarOfAshamane.known then
 		IncarnationAvatarOfAshamane.prowl.known = true
 		Berserk.known = false
+		self.bs_inc = IncarnationAvatarOfAshamane
 	end
 	if BrutalSlash.known then
 		SwipeCat.known = false
@@ -1543,7 +1539,7 @@ function Player:Update()
 		self.rage.current = UnitPower('player', 1)
 		self.rage.deficit = self.rage.max - self.rage.current
 	end
-	self.berserk_remains = (Berserk.known and Berserk:Remains()) or (IncarnationAvatarOfAshamane.known and IncarnationAvatarOfAshamane:Remains()) or 0
+	self.berserk_remains = self.bs_inc:Remains()
 
 	trackAuras:Purge()
 	if Opt.auto_aoe then
@@ -1964,17 +1960,6 @@ local APL = {
 
 APL[SPEC.BALANCE].Main = function(self)
 	if Player:TimeInCombat() == 0 then
-		if not Player:InArenaOrBattleground() then
-			if EternalAugmentRune:Usable() and EternalAugmentRune.buff:Remains() < 300 then
-				UseCooldown(EternalAugmentRune)
-			end
-			if EternalFlask:Usable() and EternalFlask.buff:Remains() < 300 and SpectralFlaskOfPower.buff:Remains() < 300 then
-				UseCooldown(EternalFlask)
-			end
-			if Opt.pot and SpectralFlaskOfPower:Usable() and SpectralFlaskOfPower.buff:Remains() < 300 and EternalFlask.buff:Remains() < 300 then
-				UseCooldown(SpectralFlaskOfPower)
-			end
-		end
 		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 300 then
 			return MarkOfTheWild
 		end
@@ -1993,25 +1978,9 @@ actions.precombat+=/food
 actions.precombat+=/augmentation
 # Snapshot raid buffed stats before combat begins and pre-potting is done.
 actions.precombat+=/snapshot_stats
-# It is worth it for almost everyone to maintain thrash
-actions.precombat+=/variable,name=use_thrash,value=0
-actions.precombat+=/use_item,name=azsharas_font_of_power
 actions.precombat+=/cat_form
 actions.precombat+=/prowl
-actions.precombat+=/potion,dynamic_prepot=1
-actions.precombat+=/berserk
 ]]
-		if not Player:InArenaOrBattleground() then
-			if EternalAugmentRune:Usable() and EternalAugmentRune.buff:Remains() < 300 then
-				UseCooldown(EternalAugmentRune)
-			end
-			if EternalFlask:Usable() and EternalFlask.buff:Remains() < 300 and SpectralFlaskOfPower.buff:Remains() < 300 then
-				UseCooldown(EternalFlask)
-			end
-			if Opt.pot and SpectralFlaskOfPower:Usable() and SpectralFlaskOfPower.buff:Remains() < 300 and EternalFlask.buff:Remains() < 300 then
-				UseCooldown(SpectralFlaskOfPower)
-			end
-		end
 		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 300 then
 			return MarkOfTheWild
 		end
@@ -2027,19 +1996,26 @@ actions.precombat+=/berserk
 		end
 	end
 --[[
-actions=auto_attack,if=!buff.prowl.up&!buff.shadowmeld.up
-actions+=/run_action_list,name=opener,if=variable.opener_done=0
-actions+=/cat_form,if=!buff.cat_form.up
+actions=prowl
+actions+=/invoke_external_buff,name=power_infusion,if=buff.bs_inc.up|fight_remains<cooldown.bs_inc.remains
+actions+=/variable,name=need_bt,value=talent.bloodtalons.enabled&buff.bloodtalons.down
+actions+=/tigers_fury
 actions+=/rake,if=buff.prowl.up|buff.shadowmeld.up
-actions+=/call_action_list,name=cooldowns
-actions+=/ferocious_bite,target_if=dot.rip.ticking&dot.rip.remains<3&target.time_to_die>10&(talent.sabertooth.enabled)
-actions+=/run_action_list,name=finishers,if=combo_points>4
-actions+=/run_action_list,name=generators
+actions+=/cat_form,if=!buff.cat_form.up
+actions+=/auto_attack,if=!buff.prowl.up&!buff.shadowmeld.up
+actions+=/call_action_list,name=cooldown
+actions+=/feral_frenzy,if=combo_points<2|combo_points=2&buff.bs_inc.up
+actions+=/run_action_list,name=aoe,if=spell_targets.swipe_cat>1&talent.primal_wrath.enabled
+actions+=/ferocious_bite,if=buff.apex_predators_craving.up&(buff.apex_predators_craving.remains<2|dot.rip.ticking)
+actions+=/call_action_list,name=bloodtalons,if=variable.need_bt&!buff.bs_inc.up
+actions+=/call_action_list,name=finisher,if=combo_points=5
+actions+=/call_action_list,name=berserk_builders,if=combo_points<5&buff.bs_inc.up
+actions+=/call_action_list,name=builder,if=combo_points<5
 ]]
-	Player.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or Player.berserk_remains > 0
-	if Opt.owlweave then
-		local apl = self:owlweave()
-		if apl then return apl end
+	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or Player.berserk_remains > 0
+	self.need_bt = Bloodtalons.known and Bloodtalons:Down()
+	if TigersFury:Usable() and TigersFury:Down() then
+		UseCooldown(TigersFury)
 	end
 	if CatForm:Down() then
 		return CatForm
@@ -2047,7 +2023,7 @@ actions+=/run_action_list,name=generators
 	if Prowl:Up() or Shadowmeld:Up() then
 		return Rake
 	end
-	self:cooldowns()
+	self:cooldown()
 	if Player.health.pct < 85 and not Player:Stealthed() then
 		if Regrowth:Usable() and (Player.health.pct < 65 or Player.combo_points.current >= 5) and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() then
 			UseExtra(Regrowth)
@@ -2055,40 +2031,52 @@ actions+=/run_action_list,name=generators
 			UseExtra(NaturesVigil)
 		end
 	end
-	if FerociousBite:Usable() and (ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) and (Rip:Up() or (Player.enemies == 1 and Target.timeToDie < 8)) and (not Bloodtalons.known or Bloodtalons:Up() or (Rip:Ticking() > 4 and (Player.combo_points.current == 5 or Bloodtalons:ActiveTriggers() < 2))) then
+	if FeralFrenzy:Usable() and Player.combo_points.current < (Player.berserk_remains > 0 and 3 or 2) then
+		return FeralFrenzy
+	end
+	if Player.enemies > 1 and PrimalWrath.known then
+		return self:aoe()
+	end
+	if ApexPredatorsCraving.known and FerociousBite:Usable() and ApexPredatorsCraving:Up() and (ApexPredatorsCraving:Remains() < 2 or Rip:Ticking() > 0) then
 		return FerociousBite
 	end
+	local apl
+	if self.need_bt and Player.berserk_remains == 0 then
+		apl = self:bloodtalons()
+		if apl then return apl end
+	end
 	if Player.combo_points.current >= 5 then
-		return self:finishers()
+		apl = self:finisher()
+		if apl then return apl end
+	else
+		if Player.berserk_remains > 0 then
+			apl = self:berserk_builders()
+			if apl then return apl end
+		end
+		return self:builder()
 	end
-	if Bloodtalons.known and Bloodtalons:Down() then
-		return self:bloodtalons()
-	end
-	return self:generators()
 end
 
-APL[SPEC.FERAL].cooldowns = function(self)
+APL[SPEC.FERAL].cooldown = function(self)
 --[[
-actions.cooldowns=berserk
-actions.cooldowns+=/incarnation
-actions.cooldowns+=/tigers_fury,if=energy.deficit>40|buff.bs_inc.up|(talent.predator.enabled&variable.shortest_ttd<3)|(!dot.rip.ticking&buff.bloodtalons.up)
-actions.cooldowns+=/berserking
-actions.cooldowns+=/thorns,if=active_enemies>desired_targets|raid_event.adds.in>45
-actions.cooldowns+=/potion,if=target.time_to_die<65|(time_to_die<180&(buff.berserk.up|buff.incarnation.up))
-actions.cooldowns+=/shadowmeld,if=combo_points<5&energy>=action.rake.cost&dot.rake.pmultiplier<1.7&buff.tigers_fury.up&(!talent.incarnation.enabled|cooldown.incarnation.remains>18)&!buff.incarnation.up
-actions.cooldowns+=/convoke_the_spirits,if=(dot.rip.remains>4&combo_points<5&(dot.rake.ticking|spell_targets.thrash_cat>1)&energy.deficit>=20&cooldown.bs_inc.remains>10)|fight_remains<5|(buff.bs_inc.up&buff.bs_inc.remains>12)
-actions.cooldowns+=/adaptive_swarm,target_if=((!dot.adaptive_swarm_damage.ticking|dot.adaptive_swarm_damage.remains<2)&(dot.adaptive_swarm_damage.stack<3|!dot.adaptive_swarm_heal.stack>1)&!action.adaptive_swarm_heal.in_flight&!action.adaptive_swarm_damage.in_flight&!action.adaptive_swarm.in_flight)&target.time_to_die>5|active_enemies>2&!dot.adaptive_swarm_damage.ticking&energy<35&target.time_to_die>5
-actions.cooldowns+=/feral_frenzy,if=combo_points<2
-actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
+actions.cooldown=berserk
+actions.cooldown+=/incarnation
+actions.cooldown+=/convoke_the_spirits,if=buff.tigers_fury.up&combo_points<3|fight_remains<5
+actions.cooldown+=/berserking
+actions.cooldown+=/adaptive_swarm,target_if=((!dot.adaptive_swarm_damage.ticking|dot.adaptive_swarm_damage.remains<2)&(dot.adaptive_swarm_damage.stack<3|!dot.adaptive_swarm_heal.stack>1)&!action.adaptive_swarm_heal.in_flight&!action.adaptive_swarm_damage.in_flight&!action.adaptive_swarm.in_flight)&target.time_to_die>5|active_enemies>2&!dot.adaptive_swarm_damage.ticking&energy<35&target.time_to_die>5
+actions.cooldown+=/shadowmeld,if=buff.tigers_fury.up&buff.bs_inc.down&combo_points<4&buff.sudden_ambush.down&dot.rake.pmultiplier<1.6&energy>40&druid.rake.ticks_gained_on_refresh>spell_targets.swipe_cat*2-2&target.time_to_die>5
+actions.cooldown+=/potion,if=buff.bs_inc.up|fight_remains<cooldown.bs_inc.remains|fight_remains<35
+actions.cooldown+=/use_item,name=manic_grieftorch,if=energy.deficit>40
+actions.cooldown+=/use_items
 ]]
-	if AdaptiveSwarm:Usable() and Target.timeToDie > 5 and AdaptiveSwarm.dot:Up() and AdaptiveSwarm.dot:Remains() < 2 then
+	if AdaptiveSwarm:Usable() and Target.timeToDie > 5 and AdaptiveSwarm.dot:Up() and AdaptiveSwarm.dot:Remains() < (3 + AdaptiveSwarm:TravelTime()) then
 		return UseCooldown(AdaptiveSwarm)
 	end
-	if Player.use_cds and Berserk:Usable() then
-		return UseCooldown(Berserk)
+	if self.use_cds and Player.bs_inc:Usable() then
+		return UseCooldown(Player.bs_inc)
 	end
-	if Player.use_cds and IncarnationAvatarOfAshamane:Usable() then
-		return UseCooldown(IncarnationAvatarOfAshamane)
+	if self.use_cds and ConvokeTheSpirits:Usable() and ((Player.combo_points.current < 3 and TigersFury:Remains() > 3) or (Target.boss and Target.timeToDie < 5)) then
+		return UseCooldown(ConvokeTheSpirits)
 	end
 	if TigersFury:Usable() and (Player.energy.deficit > 60 or (TigersFury:Remains() < 2 and (Player.berserk_remains > 0 or (Bloodtalons.known and Rip:Refreshable() and Bloodtalons:Up())))) then
 		return UseCooldown(TigersFury)
@@ -2096,63 +2084,98 @@ actions.cooldowns+=/use_items,if=buff.tigers_fury.up|target.time_to_die<20
 	if Thorns:Usable() and Player:UnderAttack() and Thorns:WontCapEnergy() then
 		return UseCooldown(Thorns)
 	end
-	if Opt.pot and Target.boss and PotionOfUnbridledFury:Usable() and (Target.timeToDie < 65 or (Target.timeToDie < 180 and Player.berserk_remains > 0)) then
-		return UseCooldown(PotionOfUnbridledFury)
+	if AdaptiveSwarm:Usable() and Target.timeToDie > 5 and (Rip:Up() or Player.energy.current < 35) and ((AdaptiveSwarm:Traveling() == 0 and (AdaptiveSwarm.dot:Ticking() == 0 or AdaptiveSwarm.dot:Remains() < 2) and (AdaptiveSwarm.dot:Stack() < 3 or AdaptiveSwarm.hot:Stack() <= 1)) or (Player.enemies > 2 and AdaptiveSwarm.dot:Ticking() == 0 and Player.energy.current < 35)) then
+		return UseCooldown(AdaptiveSwarm)
 	end
-	if Opt.trinket and ((Target.boss and Target.timeToDie < 20) or Player.berserk_remains > 4 or (TigersFury:Up() and ((not Berserk.known and not IncarnationAvatarOfAshamane.known) or (Berserk.known and not Berserk:Ready(TigersFury:Cooldown()) or (IncarnationAvatarOfAshamane.known and not IncarnationAvatarOfAshamane:Ready(TigersFury:Cooldown())))))) then
+	if self.use_cds and Shadowmeld:Usable() and Player.combo_points.current < 4 and Rake:Usable() and Rake:Multiplier() < 1.6 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and SuddenAmbush:Down() and not Player.bs_inc:Ready(Rake:Duration()) then
+		return UseCooldown(Shadowmeld)
+	end
+--[[
+	if Opt.pot and Target.boss and ElementalPotionOfPower:Usable() and (Player.berserk_remains > 0 or Target.timeToDie < 35 or not Player.bs_inc:Ready(Target.timeToDie)) then
+		return UseCooldown(ElementalPotionOfPower)
+	end
+--]]
+	if Opt.trinket then
 		if Trinket1:Usable() then
 			UseCooldown(Trinket1)
 		elseif Trinket2:Usable() then
 			UseCooldown(Trinket2)
 		end
 	end
-	if Player.use_cds and ConvokeTheSpirits:Usable() and ((Player.combo_points.current < 3 and Rip:Remains() > 4 and (Rake:Up() or Player.enemies > 1) and TigersFury:Remains() > 3) or (Target.boss and Target.timeToDie < 5)) then
-		return UseCooldown(ConvokeTheSpirits)
+end
+
+APL[SPEC.FERAL].aoe = function(self)
+--[[
+actions.aoe=pool_resource,for_next=1
+actions.aoe+=/primal_wrath,if=combo_points=5
+actions.aoe+=/ferocious_bite,if=buff.apex_predators_craving.up&buff.sabertooth.down
+actions.aoe+=/run_action_list,name=bloodtalons,if=variable.need_bt&active_bt_triggers>=1
+actions.aoe+=/pool_resource,for_next=1
+actions.aoe+=/thrash_cat,target_if=refreshable
+# At this target count BRS also crushes everything except full thrashes
+actions.aoe+=/brutal_slash
+# This means that a full rake (5.5+ ticks) is stronger up to 10ish targets
+actions.aoe+=/pool_resource,for_next=1
+actions.aoe+=/rake,target_if=max:dot.rake.ticks_gained_on_refresh.pmult,if=((dot.rake.ticks_gained_on_refresh.pmult*(1+talent.doubleclawed_rake.enabled))>(spell_targets.swipe_cat*0.216+3.32))
+# Full Lis beat Swipe up til around 3-ish targets depending on haste
+actions.aoe+=/lunar_inspiration,target_if=max:((ticks_gained_on_refresh+1)-(spell_targets.swipe_cat*2.492))
+actions.aoe+=/swipe_cat
+# If we have BrS and nothing better to cast, check if Thrash DD beats Shred
+actions.aoe+=/shred,if=action.shred.damage>action.thrash_cat.damage
+actions.aoe+=/thrash_cat
+]]
+	if PrimalWrath:Usable(0, true) and Player.combo_points.current >= 5 then
+		return Pool(PrimalWrath)
 	end
-	if AdaptiveSwarm:Usable() and Target.timeToDie > 5 and (Rip:Up() or Player.energy.current < 35) and ((AdaptiveSwarm:Traveling() == 0 and (AdaptiveSwarm.dot:Ticking() == 0 or AdaptiveSwarm.dot:Remains() < 2) and (AdaptiveSwarm.dot:Stack() < 3 or AdaptiveSwarm.hot:Stack() <= 1)) or (Player.enemies > 2 and AdaptiveSwarm.dot:Ticking() == 0 and Player.energy.current < 35)) then
-		return UseCooldown(AdaptiveSwarm)
+	if ApexPredatorsCraving.known and FerociousBite:Usable() and ApexPredatorsCraving:Up() and (ApexPredatorsCraving:Remains() < 2 or (Rip:Ticking() > 0 and Sabertooth:Down())) then
+		return FerociousBite
 	end
-	if FeralFrenzy:Usable() and Player.combo_points.current < (Player.berserk_remains > 0 and 3 or 2) then
-		return UseCooldown(FeralFrenzy)
+	if self.need_bt and Bloodtalons:ActiveTriggers() >= 1 then
+		return self:bloodtalons()
 	end
-	if Player.use_cds and Shadowmeld:Usable() and Player.combo_points.current < 5 and Player.energy.current >= Rake:EnergyCost() and Rake:Multiplier() < 1.5 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and ((not Berserk.known and not IncarnationAvatarOfAshamane.known) or (Berserk.known and not Berserk:Ready(18)) or (IncarnationAvatarOfAshamane.known and not IncarnationAvatarOfAshamane:Ready(18))) then
-		return UseCooldown(Shadowmeld)
+	if ThrashCat:Usable(0, true) and ThrashCat:Refreshable() then
+		return Pool(ThrashCat)
+	end
+	if BrutalSlash:Usable() then
+		return BrutalSlash
+	end
+	if Rake:Usable(0, true) and (Rake:Refreshable() or (SuddenAmbush:Up() and Rake:NextMultiplier() > Rake:Multiplier())) then -- this one will take some work...
+		return Pool(Rake)
+	end
+	if MoonfireCat:Usable() and MoonfireCat:Refreshable() and Player.enemies < 5 then
+		return MoonfireCat
+	end
+	if SwipeCat:Usable(0, true) then
+		return Pool(SwipeCat)
+	end
+	if Shred:Usable() and Player.enemies < 5 then
+		return Shred
+	end
+	if ThrashCat:Usable() then
+		return ThrashCat
 	end
 end
 
 APL[SPEC.FERAL].bloodtalons = function(self)
 --[[
-actions.bloodtalons=pool_resource,if=active_bt_triggers=0&(energy+3.5*energy.regen+(40*buff.clearcasting.up))<(115-23*buff.incarnation_king_of_the_jungle.up)
-actions.bloodtalons+=/rake,target_if=(!ticking|(refreshable&persistent_multiplier>dot.rake.pmultiplier))&buff.bt_rake.down&druid.rake.ticks_gained_on_refresh>=2
-actions.bloodtalons+=/lunar_inspiration,target_if=refreshable&buff.bt_moonfire.down
-actions.bloodtalons+=/thrash_cat,target_if=refreshable&buff.bt_thrash.down&druid.thrash_cat.ticks_gained_on_refresh>8
+actions.bloodtalons=rake,target_if=max:druid.rake.ticks_gained_on_refresh,if=(refreshable|1.4*persistent_multiplier>dot.rake.pmultiplier)&buff.bt_rake.down
+actions.bloodtalons+=/lunar_inspiration,if=refreshable&buff.bt_moonfire.down
 actions.bloodtalons+=/brutal_slash,if=buff.bt_brutal_slash.down
-actions.bloodtalons+=/swipe_cat,if=buff.bt_swipe.down&spell_targets.swipe_cat>1
+actions.bloodtalons+=/thrash_cat,target_if=refreshable&buff.bt_thrash.down
+actions.bloodtalons+=/swipe_cat,if=spell_targets.swipe_cat>1&buff.bt_swipe.down
 actions.bloodtalons+=/shred,if=buff.bt_shred.down
 actions.bloodtalons+=/swipe_cat,if=buff.bt_swipe.down
 actions.bloodtalons+=/thrash_cat,if=buff.bt_thrash.down
+actions.bloodtalons+=/rake,if=buff.bt_rake.down&combo_points>4
 ]]
-	if Bloodtalons:ActiveTriggers() == 0 or Bloodtalons:SecondsSinceLastTrigger() > 3 then
-		local energy = Player.energy.current + (3.5 * Player.energy.regen) + (Clearcasting:Up() and 40 or 0)
-		local energy_need = 115 - (IncarnationAvatarOfAshamane.known and Player.berserk_remains > 0 and 23 or 0)
-		if energy < energy_need then
-			Player.pool_energy = Player.energy.current + (energy_need - energy)
-		end
-	end
-	if Rake:Usable() and not Rake:Bloodtalons() and (Rake:Down() or (Rake:Refreshable() and (Bloodtalons:ActiveTriggers() == 2 or Rake:NextMultiplier() >= Rake:Multiplier()))) then
+	if Rake:Usable() and not Rake:Bloodtalons() and (Rake:Refreshable() or (1.4 * Rake:NextMultiplier()) > Rake:Multiplier()) then
 		return Rake
-	end
-	if MoonfireCat:Usable() and not MoonfireCat:Bloodtalons() and MoonfireCat:Down() then
-		return MoonfireCat
-	end
-	if ThrashCat:Usable() and not ThrashCat:Bloodtalons() and ThrashCat:Down() then
-		return ThrashCat
-	end
-	if BrutalSlash:Usable() and not BrutalSlash:Bloodtalons() then
-		return BrutalSlash
 	end
 	if MoonfireCat:Usable() and not MoonfireCat:Bloodtalons() and MoonfireCat:Refreshable() then
 		return MoonfireCat
+	end
+	if BrutalSlash:Usable() and not BrutalSlash:Bloodtalons() then
+		return BrutalSlash
 	end
 	if ThrashCat:Usable() and not ThrashCat:Bloodtalons() and ThrashCat:Refreshable() then
 		return ThrashCat
@@ -2169,130 +2192,116 @@ actions.bloodtalons+=/thrash_cat,if=buff.bt_thrash.down
 	if ThrashCat:Usable() and not ThrashCat:Bloodtalons() then
 		return ThrashCat
 	end
+	if MoonfireCat:Usable() and not MoonfireCat:Bloodtalons() then
+		return MoonfireCat
+	end
+	if Rake:Usable() and not Rake:Bloodtalons() and Player.combo_points.current > 4 then
+		return ThrashCat
+	end
 end
 
-APL[SPEC.FERAL].finishers = function(self)
+APL[SPEC.FERAL].finisher = function(self)
 --[[
-actions.finishers=pool_resource,for_next=1
-actions.finishers+=/pool_resource,for_next=1
-actions.finishers+=/primal_wrath,target_if=spell_targets.primal_wrath>1&dot.rip.remains<4
-actions.finishers+=/pool_resource,for_next=1
-actions.finishers+=/primal_wrath,target_if=spell_targets.primal_wrath>=2
-actions.finishers+=/pool_resource,for_next=1
-actions.finishers+=/rip,target_if=!ticking|(remains<=duration*0.3)&(!talent.sabertooth.enabled)|(remains<=duration*0.8&persistent_multiplier>dot.rip.pmultiplier)&target.time_to_die>8
-actions.finishers+=/pool_resource,for_next=1
-actions.finishers+=/pool_resource,for_next=1
-actions.finishers+=/ferocious_bite,max_energy=1,target_if=max:druid.rip.ticks_gained_on_refresh
+actions.finisher=primal_wrath,if=spell_targets.primal_wrath>2
+actions.finisher+=/primal_wrath,target_if=refreshable,if=spell_targets.primal_wrath>1
+actions.finisher+=/rip,target_if=refreshable
+actions.finisher+=/pool_resource,for_next=1
+actions.finisher+=/ferocious_bite,max_energy=1,if=!buff.bs_inc.up|(buff.bs_inc.up&!talent.soul_of_the_forest.enabled)
+actions.finisher+=/ferocious_bite,if=(buff.bs_inc.up&talent.soul_of_the_forest.enabled)
 ]]
-	if Target.timeToDie > max(8, Rip:Remains() + 4) and Rip:Multiplier() < Rip.multiplier_max and Rip:NextMultiplier() >= Rip.multiplier_max then
-		if PrimalWrath:Usable(0, true) and Player.enemies >= 3 then
-			return Pool(PrimalWrath)
-		elseif Rip:Usable(0, true) then
-			return Pool(Rip)
-		end
-	end
-	if PrimalWrath:Usable(0, true) and Player.enemies > 1 and (Player.enemies >= 5 or Rip:NextMultiplier() > (Rip:MultiplierSum() / Player.enemies) or Rip:LowestRemainsOthers() < (Player.berserk_remains > 0 and 3.6 or 7.2)) then
+	if PrimalWrath:Usable(0, true) and (Player.enemies > 2 or (Player.enemies > 1 and Rip:Refreshable(nil, PrimalWrath))) then
 		return Pool(PrimalWrath)
 	end
-	if Rip:Usable(0, true) and Target.timeToDie > (8 + Rip:Remains()) and (Player.enemies == 1 or not PrimalWrath.known) and (Rip:Remains() < 7.2 or (Rip:Remains() < 19.2 and Rip:NextMultiplier() > Rip:Multiplier())) then
+	if Rip:Usable(0, true) and Rip:Refreshable() then
 		return Pool(Rip)
 	end
 	if FerociousBite:Usable(0, true) then
-		return Pool(FerociousBite, ((ApexPredatorsCraving.known and ApexPredatorsCraving:Up()) or (BerserkFrenzy.known and Player.berserk_remains > 0)) and 0 or 25)
+		return Pool(FerociousBite, (Player.berserk_remains == 0 or not SoulOfTheForest.known) and 25 or 0)
 	end
 end
 
-APL[SPEC.FERAL].generators = function(self)
+APL[SPEC.FERAL].clearcasting = function(self)
 --[[
-actions.generators+=/brutal_slash,if=spell_targets.brutal_slash>desired_targets
-actions.generators+=/pool_resource,for_next=1
-actions.generators+=/thrash_cat,if=(refreshable)&(spell_targets.thrash_cat>2)
-actions.generators+=/pool_resource,for_next=1
-actions.generators+=/thrash_cat,if=(talent.scent_of_blood.enabled&buff.scent_of_blood.down)&spell_targets.thrash_cat>3
-actions.generators+=/pool_resource,for_next=1
-actions.generators+=/swipe_cat,if=buff.scent_of_blood.up|(action.swipe_cat.damage*spell_targets.swipe_cat>(action.rake.damage+(action.rake_bleed.tick_damage*5)))
-actions.generators+=/pool_resource,for_next=1
-actions.generators+=/rake,target_if=!ticking|refreshable&target.time_to_die>4
-actions.generators+=/brutal_slash,if=(buff.tigers_fury.up&(raid_event.adds.in>(1+max_charges-charges_fractional)*recharge_time))
-actions.generators+=/moonfire_cat,target_if=refreshable
-actions.generators+=/pool_resource,for_next=1
-actions.generators+=/thrash_cat,if=refreshable&variable.use_thrash=1&buff.clearcasting.react&!buff.incarnation.up
-actions.generators+=/pool_resource,for_next=1
-actions.generators+=/swipe_cat,if=spell_targets.swipe_cat>1
-actions.generators+=/shred,if=dot.rake.remains>(action.shred.cost+action.rake.cost-energy)%energy.regen|buff.clearcasting.react
+actions.clearcasting=thrash_cat,if=refreshable
+actions.clearcasting+=/swipe_cat,if=spell_targets.swipe_cat>1
+actions.clearcasting+=/brutal_slash,if=spell_targets.brutal_slash>5&talent.moment_of_clarity.enabled
+actions.clearcasting+=/shred
 ]]
-	if ThrashCat:Usable(0, true) and Player.enemies > 2 then
-		if ThrashCat:Refreshable() and (Player.berserk_remains == 0 or Player.enemies > 3) then
-			return Pool(ThrashCat)
-		end
-	end
-	if BrutalSlash:Usable() and Player.enemies > 2 and (Player.energy.current < 50 or Player.combo_points.current < 4) then
-		return BrutalSlash
-	end
-	if Player.enemies < 6 or not PrimalWrath.known then
-		if Rake:Usable(0, true) and (Rake:Down() or (Target.timeToDie > 4 and Rake:Refreshable() and (Rake:NextMultiplier() * 1.2) >= Rake:Multiplier())) then
-			return Pool(Rake)
-		end
-		if MoonfireCat:Usable() and MoonfireCat:Refreshable() then
-			return Pool(MoonfireCat)
-		end
-	end
-	if BrutalSlash:Usable() and Clearcasting:Down() then
-		if Player.berserk_remains > 0 then
-			if Player.combo_points.current == 4 and (not Bloodtalons.known or (Bloodtalons:Down() and BrutalSlash:Bloodtalons())) then
-				return BrutalSlash
-			end
-		elseif Player:EnergyTimeToMax() > 1.5 and ((TigersFury:Up() and (not Bloodtalons.known or BrutalSlash:Bloodtalons())) or BrutalSlash:ChargesFractional() > 2.5) then
-			return BrutalSlash
-		end
-	end
-	if ThrashCat:Usable(0, true) and Player.enemies >= 2 and ThrashCat:Refreshable() and Clearcasting:Up() and Target.timeToDie > (ThrashCat:Remains() + 9) and Player.berserk_remains == 0 then
+	if ThrashCat:Usable() and ThrashCat:Refreshable() then
 		return ThrashCat
 	end
-	if SwipeCat:Usable(0, true) and Player.enemies > 1 and Player.berserk_remains == 0 then
-		return Pool(SwipeCat)
+	if SwipeCat:Usable() and Player.enemies > 1 then
+		return SwipeCat
 	end
-	if Shred:Usable() and (Clearcasting:Up() or Rake:Remains() > ((Shred:EnergyCost() + Rake:EnergyCost() - Player.energy.current) / Player.energy.regen)) then
+	if BrutalSlash:Usable() and Player.enemies > 5 and MomentOfClarity.known then
+		return BrutalSlash
+	end
+	if Shred:Usable() then
 		return Shred
 	end
 end
 
-APL[SPEC.FERAL].owlweave = function(self)
+APL[SPEC.FERAL].berserk_builders = function(self)
 --[[
-actions.owlweave=starsurge,if=buff.heart_of_the_wild.up
-actions.owlweave+=/sunfire,if=!prev_gcd.1.sunfire&!prev_gcd.2.sunfire
-actions.owlweave+=/heart_of_the_wild,if=energy<40&(dot.rip.remains>4.5|combo_points<5)&cooldown.tigers_fury.remains>=6.5&buff.clearcasting.stack<1&!buff.apex_predators_craving.up&!buff.bloodlust.up&(buff.bs_inc.remains>5|!buff.bs_inc.up)&(!cooldown.convoke_the_spirits.up|!covenant.night_fae)
-actions.owlweave+=/moonkin_form,if=energy<40&(dot.rip.remains>4.5|combo_points<5)&cooldown.tigers_fury.remains>=6.5&buff.clearcasting.stack<1&!buff.apex_predators_craving.up&!buff.bloodlust.up&(buff.bs_inc.remains>5|!buff.bs_inc.up)&(!cooldown.convoke_the_spirits.up|!covenant.night_fae)
+actions.berserk_builders=rake,target_if=refreshable
+actions.berserk_builders+=/swipe_cat,if=spell_targets.swipe_cat>1
+actions.berserk_builders+=/brutal_slash,if=active_bt_triggers=2&buff.bt_brutal_slash.down|charges>=2&spell_targets.brutal_slash>2
+actions.berserk_builders+=/moonfire_cat,target_if=refreshable
+actions.berserk_builders+=/shred
 ]]
-	if MoonkinForm:Up() then
-		if HeartOfTheWild.known and StarsurgeBA:Usable() and HeartOfTheWild:Up() then
-			return StarsurgeBA
-		end
-		if SunfireBA:Usable() and SunfireBA:Refreshable() then
-			return SunfireBA
-		end
-	elseif SunfireBA:Refreshable() and Player.energy.current < 40 and (Rip:Remains() > 4.5 or Player.combo_points.current < 5) and not TigersFury:Ready(6.5) and Clearcasting:Down() and (not ApexPredatorsCraving.known or ApexPredatorsCraving:Down()) and not Player:BloodlustActive() and (Berserk:Remains() > 5 or Berserk:Down()) and (not ConvokeTheSpirits.known or not ConvokeTheSpirits:Ready()) then
-		if HeartOfTheWild:Usable() then
-			UseCooldown(HeartOfTheWild)
-		elseif MoonkinForm:Usable() then
-			UseCooldown(MoonkinForm)
-		end
+	if Rake:Usable() and Rake:Refreshable() then
+		return Rake
+	end
+	if SwipeCat:Usable() and Player.enemies > 1 then
+		return SwipeCat
+	end
+	if BrutalSlash:Usable() and ((Bloodtalons:ActiveTriggers() == 2 and BrutalSlash:Bloodtalons()) or (BrutalSlash:Charges() >= 2 and Player.enemies > 2)) then
+		return BrutalSlash
+	end
+	if MoonfireCat:Usable() and MoonfireCat:Refreshable() then
+		return MoonfireCat
+	end
+	if Shred:Usable() then
+		return Shred
+	end
+end
+
+APL[SPEC.FERAL].builder = function(self)
+--[[
+actions.builder=run_action_list,name=clearcasting,if=buff.clearcasting.react
+actions.builder+=/rake,target_if=max:ticks_gained_on_refresh,if=refreshable|(buff.sudden_ambush.up&persistent_multiplier>dot.rake.pmultiplier&dot.rake.duration>6)
+actions.builder+=/moonfire_cat,target_if=refreshable
+actions.builder+=/pool_resource,for_next=1
+actions.builder+=/thrash_cat,target_if=refreshable
+actions.builder+=/brutal_slash
+actions.builder+=/swipe_cat,if=spell_targets.swipe_cat>1
+actions.builder+=/shred
+]]
+	if Clearcasting:Up() then
+		return self:clearcasting()
+	end
+	if Rake:Usable(0, true) and (Rake:Refreshable() or (SuddenAmbush:Up() and Rake:NextMultiplier() > Rake:Multiplier())) then
+		return Pool(Rake)
+	end
+	if MoonfireCat:Usable() and MoonfireCat:Refreshable() then
+		return MoonfireCat
+	end
+	if ThrashCat:Usable(0, true) and ThrashCat:Refreshable() then
+		return Pool(ThrashCat)
+	end
+	if BrutalSlash:Usable() then
+		return BrutalSlash
+	end
+	if SwipeCat:Usable(0, true) and Player.enemies > 1 then
+		return Pool(SwipeCat)
+	end
+	if Shred:Usable() then
+		return Shred
 	end
 end
 
 APL[SPEC.GUARDIAN].Main = function(self)
 	if Player:TimeInCombat() == 0 then
-		if not Player:InArenaOrBattleground() then
-			if EternalAugmentRune:Usable() and EternalAugmentRune.buff:Remains() < 300 then
-				UseCooldown(EternalAugmentRune)
-			end
-			if EternalFlask:Usable() and EternalFlask.buff:Remains() < 300 and SpectralFlaskOfPower.buff:Remains() < 300 then
-				UseCooldown(EternalFlask)
-			end
-			if Opt.pot and SpectralFlaskOfPower:Usable() and SpectralFlaskOfPower.buff:Remains() < 300 and EternalFlask.buff:Remains() < 300 then
-				UseCooldown(SpectralFlaskOfPower)
-			end
-		end
 		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 300 then
 			return MarkOfTheWild
 		end
@@ -2388,17 +2397,6 @@ end
 
 APL[SPEC.RESTORATION].Main = function(self)
 	if Player:TimeInCombat() == 0 then
-		if not Player:InArenaOrBattleground() then
-			if EternalAugmentRune:Usable() and EternalAugmentRune.buff:Remains() < 300 then
-				UseCooldown(EternalAugmentRune)
-			end
-			if EternalFlask:Usable() and EternalFlask.buff:Remains() < 300 and SpectralFlaskOfPower.buff:Remains() < 300 then
-				UseCooldown(EternalFlask)
-			end
-			if Opt.pot and SpectralFlaskOfPower:Usable() and SpectralFlaskOfPower.buff:Remains() < 300 and EternalFlask.buff:Remains() < 300 then
-				UseCooldown(SpectralFlaskOfPower)
-			end
-		end
 		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 300 then
 			return MarkOfTheWild
 		end
@@ -3457,12 +3455,6 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		return Status('Show DoT multiplier differences in top right corner', Opt.multipliers)
 	end
-	if startsWith(msg[1], 'ow') then
-		if msg[2] then
-			Opt.owlweave = msg[2] == 'on'
-		end
-		return Status('Enable owlweaving in Feral specialization', Opt.owlweave)
-	end
 	if msg[1] == 'reset' then
 		clawPanel:ClearAllPoints()
 		clawPanel:SetPoint('CENTER', 0, -169)
@@ -3495,7 +3487,6 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'trinket |cFF00C000on|r/|cFFC00000off|r - show on-use trinkets in cooldown UI',
 		'frenzied |cFFFFD000[health]|r  - health threshold to recommend Frenzied Regeneration at in Bear Form (default is 60%)',
 		'multipliers |cFF00C000on|r/|cFFC00000off|r - show DoT multiplier differences in top right corner',
-		'owlweave |cFF00C000on|r/|cFFC00000off|r - enable owlweaving in Feral specialization',
 		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
 		print('  ' .. SLASH_Claw1 .. ' ' .. cmd)
