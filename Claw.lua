@@ -2250,7 +2250,7 @@ actions.berserk_builders+=/shred
 	if SwipeCat:Usable() and Player.enemies > 1 then
 		return SwipeCat
 	end
-	if BrutalSlash:Usable() and ((Bloodtalons:ActiveTriggers() == 2 and BrutalSlash:Bloodtalons()) or (BrutalSlash:Charges() >= 2 and Player.enemies > 2)) then
+	if BrutalSlash:Usable() and ((Bloodtalons:ActiveTriggers() == 2 and not BrutalSlash:Bloodtalons()) or (BrutalSlash:Charges() >= 2 and Player.enemies > 2)) then
 		return BrutalSlash
 	end
 	if MoonfireCat:Usable() and MoonfireCat:Refreshable() then
