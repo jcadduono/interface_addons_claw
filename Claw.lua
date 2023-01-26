@@ -1741,7 +1741,7 @@ end
 function Rake:Duration()
 	local duration = self.buff_duration
 	if CircleOfLifeAndDeath.known then
-		duration = duration * 0.75
+		duration = duration * 0.80
 	end
 	if Veinripper.known then
 		duration = duration * 1.25
@@ -1789,7 +1789,7 @@ function Rip:Duration(comboPoints, appliedBy)
 		duration = duration * 0.50
 	end
 	if CircleOfLifeAndDeath.known then
-		duration = duration * 0.75
+		duration = duration * 0.80
 	end
 	if Veinripper.known then
 		duration = duration * 1.25
@@ -1867,7 +1867,7 @@ end
 function ThrashCat:Duration()
 	local duration = self.buff_duration
 	if CircleOfLifeAndDeath.known then
-		duration = duration * 0.75
+		duration = duration * 0.80
 	end
 	if Veinripper.known then
 		duration = duration * 1.25
@@ -1916,7 +1916,7 @@ Typhoon.Usable = Maim.Usable
 function AdaptiveSwarm.dot:Duration()
 	local duration = self.buff_duration
 	if CircleOfLifeAndDeath.known then
-		duration = duration * 0.75
+		duration = duration * 0.80
 	end
 	return duration
 end
