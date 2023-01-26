@@ -1163,7 +1163,7 @@ BrutalSlash.triggers_bt = true
 BrutalSlash:AutoAoe(true)
 local CarnivorousInstinct = Ability:Add(390902, true, true)
 CarnivorousInstinct.talent_node = 82110
-local CircleOfLifeAndDeath = Ability:Add(391969, true, true)
+local CircleOfLifeAndDeathFeral = Ability:Add(400320, true, true)
 local FeralFrenzy = Ability:Add(274837, false, true, 274838)
 FeralFrenzy.buff_duration = 6
 FeralFrenzy.cooldown_duration = 45
@@ -1227,7 +1227,7 @@ GalacticGuardian.buff_duration = 15
 ---- Restoration
 
 ------ Talents
-
+local CircleOfLifeAndDeathRestoration = Ability:Add(391969, true, true)
 ------ Procs
 
 -- Racials
@@ -1740,8 +1740,11 @@ end
 
 function Rake:Duration()
 	local duration = self.buff_duration
-	if CircleOfLifeAndDeath.known then
+	if CircleOfLifeAndDeathFeral.known then
 		duration = duration * 0.80
+	end
+	if CircleOfLifeAndDeathRestoration.known then
+		duration = duration * 0.75
 	end
 	if Veinripper.known then
 		duration = duration * 1.25
@@ -1788,8 +1791,11 @@ function Rip:Duration(comboPoints, appliedBy)
 	if appliedBy == PrimalWrath then
 		duration = duration * 0.50
 	end
-	if CircleOfLifeAndDeath.known then
+	if CircleOfLifeAndDeathFeral.known then
 		duration = duration * 0.80
+	end
+	if CircleOfLifeAndDeathRestoration.known then
+		duration = duration * 0.75
 	end
 	if Veinripper.known then
 		duration = duration * 1.25
@@ -1866,8 +1872,11 @@ end
 
 function ThrashCat:Duration()
 	local duration = self.buff_duration
-	if CircleOfLifeAndDeath.known then
+	if CircleOfLifeAndDeathFeral.known then
 		duration = duration * 0.80
+	end
+	if CircleOfLifeAndDeathRestoration.known then
+		duration = duration * 0.75
 	end
 	if Veinripper.known then
 		duration = duration * 1.25
@@ -1915,8 +1924,11 @@ Typhoon.Usable = Maim.Usable
 
 function AdaptiveSwarm.dot:Duration()
 	local duration = self.buff_duration
-	if CircleOfLifeAndDeath.known then
+	if CircleOfLifeAndDeathFeral.known then
 		duration = duration * 0.80
+	end
+	if CircleOfLifeAndDeathRestoration.known then
+		duration = duration * 0.75
 	end
 	return duration
 end
