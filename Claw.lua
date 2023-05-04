@@ -1103,13 +1103,13 @@ SwipeCat.learn_spellId = 213764
 local Thrash = Ability:Add(77758, false, true, 192090)
 Thrash.buff_duration = 15
 Thrash.cooldown_duration = 6
-Thrash.rage_cost = -5
 Thrash.tick_interval = 3
 Thrash.hasted_cooldown = true
 Thrash.hasted_ticks = true
 Thrash:AutoAoe(true)
-local ThrashCat = Ability:Add(106832, false, true, 106830)
-ThrashCat.buff_duration = 15
+local ThrashCat = Ability:Add(106830, false, true, 405233)
+ThrashCat.learn_spellId = 106832
+ThrashCat.buff_duration = 12
 ThrashCat.energy_cost = 40
 ThrashCat.tick_interval = 3
 ThrashCat.hasted_ticks = true
@@ -1772,18 +1772,14 @@ function Rake:NextMultiplier()
 	return multiplier
 end
 
--- this will return the lowest remaining duration Rip on an enemy that isn't main target
-function Rip:LowestRemainsOthers()
+function Rip:LowestRemains()
 	local guid, aura, lowest
 	for guid, aura in next, self.aura_targets do
-		if guid ~= Target.guid and autoAoe.targets[guid] and (not lowest or aura.expires < lowest) then
+		if autoAoe.targets[guid] and (not lowest or aura.expires < lowest) then
 			lowest = aura.expires
 		end
 	end
-	if lowest then
-		return lowest - Player.time
-	end
-	return 0
+	return max(0, (lowest or 0) - Player.time - Player.execute_remains)
 end
 
 function Rip:Duration(comboPoints, appliedBy)
@@ -2131,6 +2127,9 @@ actions.aoe+=/swipe_cat
 actions.aoe+=/shred,if=action.shred.damage>action.thrash_cat.damage
 actions.aoe+=/thrash_cat
 ]]
+	if FerociousBite:Usable() and Player.enemies <= 5 and Player.combo_points.current >= 5 and Rip:LowestRemains() > (Player.berserk_remains > 4 and 7 or 10) then
+		return Pool(FerociousBite)
+	end
 	if PrimalWrath:Usable(0, true) and Player.combo_points.current >= 5 then
 		return Pool(PrimalWrath)
 	end
