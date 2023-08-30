@@ -260,6 +260,7 @@ local Player = {
 	},
 	main_freecast = false,
 	berserk_remains = 0,
+	berserk_up = false,
 }
 
 -- current target information
@@ -1258,6 +1259,10 @@ SuddenAmbush.buff_duration = 15
 local Brambles = Ability:Add(203953, false, true, 213709)
 Brambles.tick_interval = 1
 Brambles:AutoAoe()
+local FlashingClaws = Ability:Add(393427, false, true)
+FlashingClaws.talent_node = 82154
+local FuryOfNature = Ability:Add(370695, false, true)
+local GoryFur = Ability:Add(200854, true, true, 201671)
 local IncarnationGuardianOfUrsoc = Ability:Add(102558, true, true)
 IncarnationGuardianOfUrsoc.buff_duration = 30
 IncarnationGuardianOfUrsoc.cooldown_duration = 180
@@ -1266,6 +1271,19 @@ Maul.rage_cost = 40
 local Pulverize = Ability:Add(80313, false, true)
 Pulverize.buff_duration = 10
 Pulverize.cooldown_duration = 45
+local RageOfTheSleeper = Ability:Add(200851, true, true)
+RageOfTheSleeper.buff_duration = 10
+RageOfTheSleeper.cooldown_duration = 60
+local Raze = Ability:Add(400254, false, true)
+Raze.rage_cost = 40
+Raze:AutoAoe()
+local ReinforcedFur = Ability:Add(393618, false, true)
+local ThornsOfIron = Ability:Add(400222, false, true, 400223)
+ThornsOfIron:AutoAoe()
+local ToothAndClaw = Ability:Add(135288, true, true, 135286)
+ToothAndClaw.buff_duration = 15
+ToothAndClaw.debuff = Ability:Add(135601, false, true)
+ToothAndClaw.debuff.buff_duration = 6
 ------ Procs
 local GalacticGuardian = Ability:Add(203964, false, true, 213708)
 GalacticGuardian.buff_duration = 15
@@ -1393,7 +1411,7 @@ end
 -- Start Player Functions
 
 function Player:Stealthed()
-	return Prowl:Up() or (Shadowmeld.known and Shadowmeld:Up()) or (IncarnationAvatarOfAshamane.known and self.berserk_remains > 0)
+	return Prowl:Up() or (Shadowmeld.known and Shadowmeld:Up()) or (IncarnationAvatarOfAshamane.known and self.berserk_up)
 end
 
 function Player:EnergyTimeToMax(energy)
@@ -1537,6 +1555,10 @@ function Player:UpdateKnown()
 	end
 
 	Abilities:Update()
+
+	if APL[self.spec].precombat_variables then
+		APL[self.spec]:precombat_variables()
+	end
 end
 
 function Player:UpdateThreat()
@@ -1604,6 +1626,7 @@ function Player:Update()
 		self.rage.deficit = self.rage.max - self.rage.current
 	end
 	self.berserk_remains = self.bs_inc:Remains()
+	self.berserk_up = self.berserk_remains > 0
 
 	trackAuras:Purge()
 	if Opt.auto_aoe then
@@ -2000,6 +2023,26 @@ function AdaptiveSwarm.dot:CastLanded(...)
 end
 AdaptiveSwarm.hot.CastLanded = AdaptiveSwarm.dot.CastLanded
 
+function Thrash:MaxStack()
+	return 3 + FlashingClaws.rank
+end
+
+function Ironfur:RageCost()
+	local cost = Ability.RageCost(self)
+	if GoryFur.known and GoryFur:Up() then
+		cost = cost * (1 - 0.25)
+	end
+	return cost
+end
+
+function Maul:RageCost()
+	if ToothAndClaw.known and ToothAndClaw:Up() then
+		return 0
+	end
+	return Ability.RageCost(self)
+end
+Raze.RageCost = Maul.RageCost
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -2089,7 +2132,7 @@ actions+=/run_action_list,name=finisher,if=combo_points=5
 actions+=/run_action_list,name=berserk_builders,if=combo_points<5&buff.bs_inc.up
 actions+=/run_action_list,name=builder,if=combo_points<5
 ]]
-	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or Player.berserk_remains > 0
+	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or Player.berserk_up
 	self.need_bt = Bloodtalons.known and Bloodtalons:Down()
 	if TigersFury:Usable() and TigersFury:Down() then
 		UseCooldown(TigersFury)
@@ -2108,7 +2151,7 @@ actions+=/run_action_list,name=builder,if=combo_points<5
 			UseExtra(NaturesVigil)
 		end
 	end
-	if FeralFrenzy:Usable() and Player.combo_points.current < (Player.berserk_remains > 0 and 3 or 2) then
+	if FeralFrenzy:Usable() and Player.combo_points.current < (Player.berserk_up and 3 or 2) then
 		return FeralFrenzy
 	end
 	if Player.enemies > 1 and PrimalWrath.known then
@@ -2123,7 +2166,7 @@ actions+=/run_action_list,name=builder,if=combo_points<5
 	if Player.combo_points.current >= 5 then
 		return self:finisher()
 	end
-	if Player.berserk_remains > 0 then
+	if Player.berserk_up then
 		return self:berserk_builders()
 	end
 	return self:builder()
@@ -2150,7 +2193,7 @@ actions.cooldown+=/use_items
 	if self.use_cds and ConvokeTheSpirits:Usable() and ((Player.combo_points.current < 3 and TigersFury:Remains() > 3) or (Target.boss and Target.timeToDie < 5)) then
 		return UseCooldown(ConvokeTheSpirits)
 	end
-	if TigersFury:Usable() and (Player.energy.deficit > 60 or (TigersFury:Remains() < 2 and (Player.berserk_remains > 0 or (Bloodtalons.known and Rip:Refreshable() and Bloodtalons:Up())))) then
+	if TigersFury:Usable() and (Player.energy.deficit > 60 or (TigersFury:Remains() < 2 and (Player.berserk_up or (Bloodtalons.known and Rip:Refreshable() and Bloodtalons:Up())))) then
 		return UseCooldown(TigersFury)
 	end
 	if Thorns:Usable() and Player:UnderAttack() and Thorns:WontCapEnergy() then
@@ -2163,7 +2206,7 @@ actions.cooldown+=/use_items
 		return UseCooldown(Shadowmeld)
 	end
 --[[
-	if Opt.pot and Target.boss and ElementalPotionOfPower:Usable() and (Player.berserk_remains > 0 or Target.timeToDie < 35 or not Player.bs_inc:Ready(Target.timeToDie)) then
+	if Opt.pot and Target.boss and ElementalPotionOfPower:Usable() and (Player.berserk_up or Target.timeToDie < 35 or not Player.bs_inc:Ready(Target.timeToDie)) then
 		return UseCooldown(ElementalPotionOfPower)
 	end
 --]]
@@ -2386,87 +2429,159 @@ APL[SPEC.GUARDIAN].Main = function(self)
 		end
 	end
 --[[
-actions=auto_attack
-actions+=/call_action_list,name=cooldowns
-actions+=/maul,if=rage.deficit<10&active_enemies<4
-actions+=/ironfur,if=cost=0
-actions+=/pulverize,target_if=dot.thrash_bear.stack=dot.thrash_bear.max_stacks
-actions+=/moonfire,target_if=dot.moonfire.refreshable&active_enemies<2
-actions+=/incarnation
-actions+=/thrash,if=(buff.incarnation.down&active_enemies>1)|(buff.incarnation.up&active_enemies>4)
-actions+=/swipe,if=buff.incarnation.down&active_enemies>4
-actions+=/mangle,if=dot.thrash_bear.ticking
-actions+=/moonfire,target_if=buff.galactic_guardian.up&active_enemies<2
-actions+=/thrash
-actions+=/maul
-actions+=/swipe
+actions=auto_attack,if=!buff.prowl.up
+actions+=/use_item,slot=trinket1
+actions+=/use_item,slot=trinket2
+actions+=/use_item,name=djaruun_pillar_of_the_elder_flame,if=dot.moonfire.ticking
+actions+=/potion,if=((talent.heart_of_the_wild.enabled&buff.heart_of_the_wild.up)|((buff.berserk_bear.up|buff.incarnation_guardian_of_ursoc.up)&(!druid.catweave_bear&!druid.owlweave_bear)))
+actions+=/run_action_list,name=catweave,if=(target.cooldown.pause_action.remains|time>=30)&druid.catweave_bear=1&buff.tooth_and_claw.remains>1.5&(buff.incarnation_guardian_of_ursoc.down&buff.berserk_bear.down)&(cooldown.thrash_bear.remains>0&cooldown.mangle.remains>0&dot.moonfire.remains>=2)|(buff.cat_form.up&energy>25&druid.catweave_bear=1&buff.tooth_and_claw.remains>1.5)|(buff.heart_of_the_wild.up&energy>90&druid.catweave_bear=1&buff.tooth_and_claw.remains>1.5)
+actions+=/run_action_list,name=bear
 ]]
-	if BearForm:Down() then
+	if Opt.trinket then
+		if Trinket1:Usable() then
+			UseCooldown(Trinket1)
+		elseif Trinket2:Usable() then
+			UseCooldown(Trinket2)
+		end
+	end
+	return self:bear()
+end
+
+APL[SPEC.GUARDIAN].precombat_variables = function(self)
+--[[
+actions.precombat+=/variable,name=If_build,value=1,value_else=0,if=talent.thorns_of_iron.enabled&talent.reinforced_fur.enabled
+actions.precombat+=/cat_form,if=(druid.catweave_bear=1&(cooldown.pause_action.remains|time>30))
+actions.precombat+=/moonkin_form,if=(!druid.catweave_bear=1)&(cooldown.pause_action.remains|time>30)
+actions.precombat+=/heart_of_the_Wild,if=talent.heart_of_the_wild.enabled
+actions.precombat+=/prowl,if=druid.catweave_bear=1&(cooldown.pause_action.remains|time>30)
+actions.precombat+=/bear_form,if=(!buff.prowl.up)
+]]
+	self.If_build = ThornsOfIron.known and ReinforcedFur.known
+end
+
+APL[SPEC.GUARDIAN].bear = function(self)
+--[[
+actions.bear=bear_form,if=!buff.bear_form.up
+actions.bear+=/heart_of_the_Wild,if=talent.heart_of_the_wild.enabled
+actions.bear+=/moonfire,cycle_targets=1,if=(((!ticking&time_to_die>12)|(refreshable&time_to_die>12))&active_enemies<7&talent.fury_of_nature.enabled)|(((!ticking&time_to_die>12)|(refreshable&time_to_die>12))&active_enemies<4&!talent.fury_of_nature.enabled)
+actions.bear+=/thrash_bear,target_if=refreshable|(dot.thrash_bear.stack<5&talent.flashing_claws.rank=2|dot.thrash_bear.stack<4&talent.flashing_claws.rank=1|dot.thrash_bear.stack<3&!talent.flashing_claws.enabled)
+actions.bear+=/bristling_fur,if=!cooldown.pause_action.remains
+actions.bear+=/barkskin,if=buff.bear_form.up
+actions.bear+=/convoke_the_spirits
+actions.bear+=/berserk_bear
+actions.bear+=/incarnation
+actions.bear+=/lunar_beam
+actions.bear+=/rage_of_the_sleeper,if=buff.incarnation_guardian_of_ursoc.down&cooldown.incarnation_guardian_of_ursoc.remains>60|buff.incarnation_guardian_of_ursoc.up|(talent.convoke_the_spirits.enabled)
+actions.bear+=/berserking,if=(buff.berserk_bear.up|buff.incarnation_guardian_of_ursoc.up)
+actions.bear+=/maul,if=(buff.rage_of_the_sleeper.up&buff.tooth_and_claw.stack>0&active_enemies<=6&!talent.raze.enabled&variable.If_build=0)|(buff.rage_of_the_sleeper.up&buff.tooth_and_claw.stack>0&active_enemies=1&talent.raze.enabled&variable.If_build=0)
+actions.bear+=/raze,if=buff.rage_of_the_sleeper.up&buff.tooth_and_claw.stack>0&variable.If_build=0&active_enemies>1
+actions.bear+=/maul,if=(((buff.incarnation.up|buff.berserk_bear.up)&active_enemies<=5&!talent.raze.enabled&(buff.tooth_and_claw.stack>=1))&variable.If_build=0)|(((buff.incarnation.up|buff.berserk_bear.up)&active_enemies=1&talent.raze.enabled&(buff.tooth_and_claw.stack>=1))&variable.If_build=0)
+actions.bear+=/raze,if=(buff.incarnation.up|buff.berserk_bear.up)&(variable.If_build=0)&active_enemies>1
+actions.bear+=/ironfur,target_if=!debuff.tooth_and_claw_debuff.up,if=!buff.ironfur.up&rage>50&!cooldown.pause_action.remains&variable.If_build=0&!buff.rage_of_the_sleeper.up|rage>90&variable.If_build=0&!buff.rage_of_the_sleeper.up
+actions.bear+=/ironfur,if=rage>90&variable.If_build=1|(buff.incarnation.up|buff.berserk_bear.up)&rage>20&variable.If_build=1
+actions.bear+=/raze,if=(buff.tooth_and_claw.up)&active_enemies>1
+actions.bear+=/raze,if=(variable.If_build=0)&active_enemies>1
+actions.bear+=/mangle,if=buff.gore.up&active_enemies<11|buff.vicious_cycle_mangle.stack=3
+actions.bear+=/maul,if=(buff.tooth_and_claw.up&active_enemies<=5&!talent.raze.enabled)|(buff.tooth_and_claw.up&active_enemies=1&talent.raze.enabled)
+actions.bear+=/maul,if=(active_enemies<=5&!talent.raze.enabled&variable.If_build=0)|(active_enemies=1&talent.raze.enabled&variable.If_build=0)
+actions.bear+=/thrash_bear,target_if=active_enemies>=5
+actions.bear+=/swipe,if=buff.incarnation_guardian_of_ursoc.down&buff.berserk_bear.down&active_enemies>=11
+actions.bear+=/mangle,if=(buff.incarnation.up&active_enemies<=4)|(buff.incarnation.up&talent.soul_of_the_forest.enabled&active_enemies<=5)|((rage<90)&active_enemies<11)|((rage<85)&active_enemies<11&talent.soul_of_the_forest.enabled)
+actions.bear+=/thrash_bear,if=active_enemies>1
+actions.bear+=/pulverize,target_if=dot.thrash_bear.stack>2
+actions.bear+=/thrash_bear
+actions.bear+=/moonfire,if=buff.galactic_guardian.up
+actions.bear+=/swipe_bear
+]]
+	if BearForm:Usable() and BearForm:Down() then
 		return BearForm
 	end
-	self:cooldowns()
-	if Ironfur:Usable() and Player:UnderAttack() then
-		UseExtra(Ironfur)
+--[[
+	if HeartOfTheWild:Usable() then
+		UseCooldown(HeartOfTheWild)
 	end
-	if Pulverize:Usable() and Thrash:Stack() == 3 then
-		return Pulverize
-	end
-	if Moonfire:Usable() and Moonfire:Refreshable() and Player.enemies < 2 then
+]]
+	if Moonfire:Usable() and Moonfire:Refreshable() and Target.timeToDie > 12 and Player.enemies < (FuryOfNature.known and 7 or 4) then
 		return Moonfire
+	end
+	if Thrash:Usable() and (Thrash:Refreshable() or Thrash:Stack() < Thrash:MaxStack()) then
+		return Thrash
+	end
+	if BristlingFur:Usable() then
+		UseCooldown(BristlingFur)
+	end
+	if Barkskin:Usable() and BearForm:Up() then
+		UseCooldown(Barkskin)
+	end
+	if ConvokeTheSpirits:Usable() then
+		UseCooldown(ConvokeTheSpirits)
 	end
 	if IncarnationGuardianOfUrsoc:Usable() then
 		UseCooldown(IncarnationGuardianOfUrsoc)
 	end
-	if Thrash:Usable() and ((Player.enemies > 1 and (not IncarnationGuardianOfUrsoc.known or IncarnationGuardianOfUrsoc:Down())) or (Player.enemies > 4 and IncarnationGuardianOfUrsoc.known and IncarnationGuardianOfUrsoc:Up())) then
-		return Thrash
+	if LunarBeam:Usable() then
+		UseCooldown(LunarBeam)
 	end
-	if GalacticGuardian.known and Moonfire:Usable() and GalacticGuardian:Up() and Moonfire:Refreshable() and Target.timeToDie > (Moonfire:Remains() + 12) then
-		return Moonfire
+	if RageOfTheSleeper:Usable() and RageOfTheSleeper:Down() and (not IncarnationGuardianOfUrsoc.known or not IncarnationGuardianOfUrsoc:Ready(60) or IncarnationGuardianOfUrsoc:Up()) then
+		UseCooldown(RageOfTheSleeper)
 	end
-	if Swipe:Usable() and Player.enemies > 4 and (not IncarnationGuardianOfUrsoc.known or IncarnationGuardianOfUrsoc:Down()) then
-		return Swipe
+	if not self.If_build then
+		if RageOfTheSleeper.known and RageOfTheSleeper:Up() and ToothAndClaw:Stack() > 0 then
+			if Maul:Usable() and Player.enemies <= (Raze.known and 1 or 6) then
+				return Maul
+			end
+			if Raze:Usable() and Player.enemies > 1 then
+				return Raze
+			end
+		end
+		if Maul:Usable() and Player.berserk_up and Player.enemies <= (Raze.known and 1 or 5) and ToothAndClaw:Stack() >= 1 then
+			return Maul
+		end
+		if Raze:Usable() and Player.berserk_up and Player.enemies > 1 then
+			return Raze
+		end
 	end
-	if Maul:Usable() and Player.enemies < 4 and not Player:UnderAttack() and Player.rage.deficit < 10 then
-		return Maul
+	if Ironfur:Usable() and (
+		(not self.If_build and (not RageOfTheSleeper.known or RageOfTheSleeper:Down()) and (Player.rage.current > 90 or (Ironfur:Down() and Player.rage.current > 50))) or
+		(self.If_build and (Player.rage.current > 90 or (Player.berserk_up and Player.rage.current > 20)))
+	) then
+		UseExtra(Ironfur)
 	end
-	if Mangle:Usable() and Thrash:Up() then
+	if Raze:Usable() and Player.enemies > 1 and (not self.If_build or ToothAndClaw:Up()) then
+		return Raze
+	end
+	if Mangle:Usable() and ((Gore:Up() and Player.enemies < 11) or ViciousCycle.Mangle:Stack() >= 3) then
 		return Mangle
 	end
-	if GalacticGuardian.known and Moonfire:Usable() and Player.enemies < 2 and GalacticGuardian:Up() then
-		return Moonfire
+	if Maul:Usable() and (not self.If_build or ToothAndClaw:Up()) and Player.enemies <= (Raze.known and 1 or 5)) then
+		return Maul
+	end
+	if Thrash:Usable() and Player.enemies >= 5 then
+		return Thrash
+	end
+	if Swipe:Usable() and not Player.berserk_up and Player.enemies >= 11 then
+		return Swipe
+	end
+	if Mangle:Usable() and (
+		(IncarnationGuardianOfUrsoc.known and Player.berserk_up and Player.enemies <= (SoulOfTheForest.known and 5 or 4)) or
+		(Player.enemies < 11 and Player.rage.current < (SoulOfTheForest.known and 85 or 90))
+	) then
+		return Mangle
+	end
+	if Thrash:Usable() and Player.enemies > 1 then
+		return Thrash
+	end
+	if Pulverize:Usable() and Thrash:Stack() > 2 then
+		return Pulverize
 	end
 	if Thrash:Usable() then
 		return Thrash
 	end
+	if GalacticGuardian.known and Moonfire:Usable() and GalacticGuardian:Up() then
+		return Moonfire
+	end
 	if Swipe:Usable() then
 		return Swipe
-	end
-end
-
-APL[SPEC.GUARDIAN].cooldowns = function(self)
---[[
-actions.cooldowns=potion
-actions.cooldowns+=/blood_fury
-actions.cooldowns+=/berserking
-actions.cooldowns+=/arcane_torrent
-actions.cooldowns+=/lights_judgment
-actions.cooldowns+=/fireblood
-actions.cooldowns+=/ancestral_call
-actions.cooldowns+=/barkskin,if=buff.bear_form.up
-actions.cooldowns+=/lunar_beam,if=buff.bear_form.up
-actions.cooldowns+=/use_items
-]]
-	if BearForm:Down() then
-		return
-	end
-	if FrenziedRegeneration:Usable() and Player.health.pct <= Opt.frenzied_threshold then
-		UseExtra(FrenziedRegeneration)
-	end
-	if Thorns:Usable() and Player:UnderAttack() and Player.health.pct > 60 then
-		return UseCooldown(Thorns)
-	end
-	if Barkskin:Usable() then
-		return UseCooldown(Barkskin)
 	end
 end
 
@@ -2797,7 +2912,7 @@ function UI:UpdateDisplay()
 			dim = Opt.dimmer
 		end
 	end
-	if Player.berserk_remains > 0 then
+	if Player.berserk_up then
 		text_bl = format('%.1fs', Player.berserk_remains)
 	end
 	if clawPanel.text.multiplier_diff then
