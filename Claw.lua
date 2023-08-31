@@ -629,7 +629,7 @@ function Ability:Usable(seconds, pool)
 	return self:Ready(seconds)
 end
 
-function Ability:Remains()
+function Ability:Remains(offGCD)
 	if self:Casting() or self:Traveling() > 0 then
 		return self:Duration()
 	end
@@ -642,7 +642,7 @@ function Ability:Remains()
 			if expires == 0 then
 				return 600 -- infinite duration
 			end
-			return max(0, expires - Player.ctime - Player.execute_remains)
+			return max(0, expires - Player.ctime - (offGCD and 0 or Player.execute_remains))
 		end
 	end
 	return 0
@@ -680,7 +680,7 @@ function Ability:Traveling(all)
 	local count = 0
 	for _, cast in next, self.traveling do
 		if all or cast.dstGUID == Target.guid then
-			if Player.time - cast.start < self.max_range / self.velocity then
+			if Player.time - cast.start < self.max_range / self.velocity + (self.travel_delay or 0) then
 				count = count + 1
 			end
 		end
@@ -696,14 +696,14 @@ function Ability:Ticking()
 	local count, ticking = 0, {}
 	if self.aura_targets then
 		for guid, aura in next, self.aura_targets do
-			if aura.expires - Player.time > Player.execute_remains then
+			if aura.expires - Player.time > (self.off_gcd and 0 or Player.execute_remains) then
 				ticking[guid] = true
 			end
 		end
 	end
 	if self.traveling then
 		for _, cast in next, self.traveling do
-			if Player.time - cast.start < self.max_range / self.velocity then
+			if Player.time - cast.start < self.max_range / self.velocity + (self.travel_delay or 0) then
 				ticking[cast.dstGUID] = true
 			end
 		end
@@ -730,7 +730,23 @@ function Ability:Cooldown()
 	if start == 0 then
 		return 0
 	end
-	return max(0, duration - (Player.ctime - start) - Player.execute_remains)
+	return max(0, duration - (Player.ctime - start) - (self.off_gcd and 0 or Player.execute_remains))
+end
+
+function Ability:CooldownExpected()
+	if self.last_used == 0 then
+		return self:Cooldown()
+	end
+	if self.cooldown_duration > 0 and self:Casting() then
+		return self:CooldownDuration()
+	end
+	local start, duration = GetSpellCooldown(self.spellId)
+	if start == 0 then
+		return 0
+	end
+	local remains = duration - (Player.ctime - start)
+	local reduction = (Player.time - self.last_used) / (self:CooldownDuration() - remains)
+	return max(0, (remains * reduction) - (self.off_gcd and 0 or Player.execute_remains))
 end
 
 function Ability:Stack()
@@ -740,7 +756,7 @@ function Ability:Stack()
 		if not id then
 			return 0
 		elseif self:Match(id) then
-			return (expires == 0 or expires - Player.ctime > Player.execute_remains) and count or 0
+			return (expires == 0 or expires - Player.ctime > (self.off_gcd and 0 or Player.execute_remains)) and count or 0
 		end
 	end
 	return 0
@@ -777,7 +793,7 @@ function Ability:ChargesFractional()
 	if charges >= max_charges then
 		return charges
 	end
-	return charges + ((max(0, Player.ctime - recharge_start + Player.execute_remains)) / recharge_time)
+	return charges + ((max(0, Player.ctime - recharge_start + (self.off_gcd and 0 or Player.execute_remains))) / recharge_time)
 end
 
 function Ability:Charges()
@@ -800,7 +816,7 @@ function Ability:FullRechargeTime()
 	if charges >= max_charges then
 		return 0
 	end
-	return (max_charges - charges - 1) * recharge_time + (recharge_time - (Player.ctime - recharge_start) - Player.execute_remains)
+	return (max_charges - charges - 1) * recharge_time + (recharge_time - (Player.ctime - recharge_start) - (self.off_gcd and 0 or Player.execute_remains))
 end
 
 function Ability:Duration()
@@ -930,19 +946,19 @@ function Ability:CastLanded(dstGUID, event, missType)
 	if self.traveling then
 		local oldest
 		for guid, cast in next, self.traveling do
-			if Player.time - cast.start >= self.max_range / self.velocity + 0.2 then
+			if Player.time - cast.start >= self.max_range / self.velocity + (self.travel_delay or 0) + 0.2 then
 				self.traveling[guid] = nil -- spell traveled 0.2s past max range, delete it, this should never happen
 			elseif cast.dstGUID == dstGUID and (not oldest or cast.start < oldest.start) then
 				oldest = cast
 			end
 		end
 		if oldest then
-			Target.estimated_range = floor(clamp(self.velocity * max(0, Player.time - oldest.start), 0, self.max_range))
+			Target.estimated_range = floor(clamp(self.velocity * max(0, Player.time - oldest.start - (self.travel_delay or 0)), 0, self.max_range))
 			self.traveling[oldest.guid] = nil
 		end
 	end
 	if self.range_est_start then
-		Target.estimated_range = floor(clamp(self.velocity * (Player.time - self.range_est_start), 5, self.max_range))
+		Target.estimated_range = floor(clamp(self.velocity * (Player.time - self.range_est_start - (self.travel_delay or 0)), 5, self.max_range))
 		self.range_est_start = nil
 	elseif self.max_range < Target.estimated_range then
 		Target.estimated_range = self.max_range
@@ -1039,7 +1055,8 @@ Note: To get talent_node value for a talent, hover over talent and use macro:
 local Barkskin = Ability:Add(22812, true, true)
 Barkskin.buff_duration = 12
 Barkskin.cooldown_duration = 90
-Barkskin.tiggers_gcd = false
+Barkskin.off_gcd = true
+Barkskin.triggers_gcd = false
 local BearForm = Ability:Add(5487, true, true)
 local CatForm = Ability:Add(768, true, true)
 local FerociousBite = Ability:Add(22568, false, true)
@@ -1093,6 +1110,8 @@ local Ironfur = Ability:Add(192081, true, true)
 Ironfur.buff_duration = 8
 Ironfur.cooldown_duration = 0.5
 Ironfur.rage_cost = 40
+Ironfur.off_gcd = true
+Ironfur.triggers_gcd = false
 local Maim = Ability:Add(22570, false, true, 203123)
 Maim.cooldown_duration = 20
 Maim.energy_cost = 30
@@ -1104,6 +1123,7 @@ local MoonkinForm = Ability:Add(197625, true, true)
 local NaturesVigil = Ability:Add(124974, true, true)
 NaturesVigil.buff_duration = 30
 NaturesVigil.cooldown_duration = 90
+NaturesVigil.off_gcd = true
 NaturesVigil.triggers_gcd = false
 local Rake = Ability:Add(1822, false, true, 155722)
 Rake.buff_duration = 15
@@ -1137,6 +1157,7 @@ local SurvivalInstincts = Ability:Add(61336, true, true)
 SurvivalInstincts.buff_duration = 6
 SurvivalInstincts.cooldown_duration = 180
 SurvivalInstincts.requires_charge = true
+SurvivalInstincts.off_gcd = true
 SurvivalInstincts.triggers_gcd = false
 local Swipe = Ability:Add(213771, false, true)
 Swipe:AutoAoe(true)
@@ -1199,6 +1220,8 @@ AdaptiveSwarm.hot:SetVelocity(12)
 AdaptiveSwarm.hot:TrackAuras()
 local Berserk = Ability:Add(106951, true, true)
 Berserk.buff_duration = 20
+Berserk.off_gcd = true
+Berserk.triggers_gcd = false
 local BerserkFrenzy = Ability:Add(384668, false, true)
 local BrutalSlash = Ability:Add(202028, false, true)
 BrutalSlash.cooldown_duration = 8
@@ -1220,6 +1243,8 @@ FeralFrenzy.triggers_bt = true
 local IncarnationAvatarOfAshamane = Ability:Add(102543, true, true)
 IncarnationAvatarOfAshamane.buff_duration = 30
 IncarnationAvatarOfAshamane.cooldown_duration = 180
+IncarnationAvatarOfAshamane.off_gcd = true
+IncarnationAvatarOfAshamane.triggers_gcd = false
 IncarnationAvatarOfAshamane.prowl = Ability:Add(252071, true, true)
 local MomentOfClarity = Ability:Add(236068, true, true)
 local MoonfireCat = Ability:Add(155625, false, true)
@@ -1259,13 +1284,24 @@ SuddenAmbush.buff_duration = 15
 local Brambles = Ability:Add(203953, false, true, 213709)
 Brambles.tick_interval = 1
 Brambles:AutoAoe()
+local BristlingFur = Ability:Add(155835, true, true)
+BristlingFur.buff_duration = 8
+BristlingFur.cooldown_duration = 40
 local FlashingClaws = Ability:Add(393427, false, true)
 FlashingClaws.talent_node = 82154
 local FuryOfNature = Ability:Add(370695, false, true)
+local Gore = Ability:Add(210706, true, true, 93622)
+Gore.buff_duration = 10
 local GoryFur = Ability:Add(200854, true, true, 201671)
 local IncarnationGuardianOfUrsoc = Ability:Add(102558, true, true)
 IncarnationGuardianOfUrsoc.buff_duration = 30
 IncarnationGuardianOfUrsoc.cooldown_duration = 180
+IncarnationGuardianOfUrsoc.off_gcd = true
+IncarnationGuardianOfUrsoc.triggers_gcd = false
+local LunarBeam = Ability:Add(204066, true, true, 204069)
+LunarBeam.buff_duration = 8.5
+LunarBeam.cooldown_duration = 60
+LunarBeam.damage = Ability:Add(414613, false, true)
 local Maul = Ability:Add(6807, false, true)
 Maul.rage_cost = 40
 local Pulverize = Ability:Add(80313, false, true)
@@ -1274,6 +1310,8 @@ Pulverize.cooldown_duration = 45
 local RageOfTheSleeper = Ability:Add(200851, true, true)
 RageOfTheSleeper.buff_duration = 10
 RageOfTheSleeper.cooldown_duration = 60
+RageOfTheSleeper.off_gcd = true
+RageOfTheSleeper.triggers_gcd = false
 local Raze = Ability:Add(400254, false, true)
 Raze.rage_cost = 40
 Raze:AutoAoe()
@@ -1284,6 +1322,11 @@ local ToothAndClaw = Ability:Add(135288, true, true, 135286)
 ToothAndClaw.buff_duration = 15
 ToothAndClaw.debuff = Ability:Add(135601, false, true)
 ToothAndClaw.debuff.buff_duration = 6
+local ViciousCycle = Ability:Add(371999, true, true)
+ViciousCycle.Mangle = Ability:Add(372019, true, true)
+ViciousCycle.Mangle.buff_duration = 15
+ViciousCycle.Maul = Ability:Add(372015, true, true)
+ViciousCycle.Maul.buff_duration = 15
 ------ Procs
 local GalacticGuardian = Ability:Add(203964, false, true, 213708)
 GalacticGuardian.buff_duration = 15
@@ -2437,6 +2480,9 @@ actions+=/potion,if=((talent.heart_of_the_wild.enabled&buff.heart_of_the_wild.up
 actions+=/run_action_list,name=catweave,if=(target.cooldown.pause_action.remains|time>=30)&druid.catweave_bear=1&buff.tooth_and_claw.remains>1.5&(buff.incarnation_guardian_of_ursoc.down&buff.berserk_bear.down)&(cooldown.thrash_bear.remains>0&cooldown.mangle.remains>0&dot.moonfire.remains>=2)|(buff.cat_form.up&energy>25&druid.catweave_bear=1&buff.tooth_and_claw.remains>1.5)|(buff.heart_of_the_wild.up&energy>90&druid.catweave_bear=1&buff.tooth_and_claw.remains>1.5)
 actions+=/run_action_list,name=bear
 ]]
+	if FrenziedRegeneration:Usable() and Player.health.pct < 65 and FrenziedRegeneration:Down() then
+		UseExtra(FrenziedRegeneration)
+	end
 	if Opt.trinket then
 		if Trinket1:Usable() then
 			UseCooldown(Trinket1)
@@ -2507,10 +2553,10 @@ actions.bear+=/swipe_bear
 	if Thrash:Usable() and (Thrash:Refreshable() or Thrash:Stack() < Thrash:MaxStack()) then
 		return Thrash
 	end
-	if BristlingFur:Usable() then
+	if BristlingFur:Usable() and Player:UnderAttack() then
 		UseCooldown(BristlingFur)
 	end
-	if Barkskin:Usable() and BearForm:Up() then
+	if Barkskin:Usable() and Player:UnderAttack() then
 		UseCooldown(Barkskin)
 	end
 	if ConvokeTheSpirits:Usable() then
@@ -2522,7 +2568,7 @@ actions.bear+=/swipe_bear
 	if LunarBeam:Usable() then
 		UseCooldown(LunarBeam)
 	end
-	if RageOfTheSleeper:Usable() and RageOfTheSleeper:Down() and (not IncarnationGuardianOfUrsoc.known or not IncarnationGuardianOfUrsoc:Ready(60) or IncarnationGuardianOfUrsoc:Up()) then
+	if RageOfTheSleeper:Usable() and RageOfTheSleeper:Down() and (not IncarnationGuardianOfUrsoc.known or IncarnationGuardianOfUrsoc:CooldownExpected() > 45 or IncarnationGuardianOfUrsoc:Up()) then
 		UseCooldown(RageOfTheSleeper)
 	end
 	if not self.If_build then
@@ -2542,18 +2588,18 @@ actions.bear+=/swipe_bear
 		end
 	end
 	if Ironfur:Usable() and (
-		(not self.If_build and (not RageOfTheSleeper.known or RageOfTheSleeper:Down()) and (Player.rage.current > 90 or (Ironfur:Down() and Player.rage.current > 50))) or
-		(self.If_build and (Player.rage.current > 90 or (Player.berserk_up and Player.rage.current > 20)))
+		(not self.If_build and (not RageOfTheSleeper.known or RageOfTheSleeper:Down()) and (Player.rage.current > 90 or (Ironfur:Remains() < 0.5 and Player.rage.current > 50 and Player:UnderMeleeAttack()))) or
+		(self.If_build and (Player.rage.current > 90 or (Player.berserk_up and Player.rage.current > 20 and Player:UnderMeleeAttack())))
 	) then
 		UseExtra(Ironfur)
 	end
 	if Raze:Usable() and Player.enemies > 1 and (not self.If_build or ToothAndClaw:Up()) then
 		return Raze
 	end
-	if Mangle:Usable() and ((Gore:Up() and Player.enemies < 11) or ViciousCycle.Mangle:Stack() >= 3) then
+	if Mangle:Usable() and ((Gore.known and Gore:Up() and Player.enemies < 11) or (ViciousCycle.known and ViciousCycle.Mangle:Stack() >= 3)) then
 		return Mangle
 	end
-	if Maul:Usable() and (not self.If_build or ToothAndClaw:Up()) and Player.enemies <= (Raze.known and 1 or 5)) then
+	if Maul:Usable() and (not self.If_build or ToothAndClaw:Up()) and Player.enemies <= (Raze.known and 1 or 5) then
 		return Maul
 	end
 	if Thrash:Usable() and Player.enemies >= 5 then
@@ -2908,7 +2954,7 @@ function UI:UpdateDisplay()
 	if Player.pool_energy then
 		local deficit = Player.pool_energy - UnitPower('player', 3)
 		if deficit > 0 then
-			text_center = format('POOL %d', deficit)
+			text_center = format('POOL\n%d', deficit)
 			dim = Opt.dimmer
 		end
 	end
