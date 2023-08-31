@@ -2996,7 +2996,7 @@ function UI:UpdateCombat()
 		else
 			clawPanel.text.multiplier_diff = nil
 		end
-				Player.main_freecast = (Player.main.energy_cost > 0 and Player.main:EnergyCost() == 0) or (Player.main.cp_cost > 0 and Player.main:CPCost() == 0)
+		Player.main_freecast = (Player.main.energy_cost > 0 and Player.main:EnergyCost() == 0) or (Player.main.cp_cost > 0 and Player.main:CPCost() == 0) or (Player.main.rage_cost > 0 and Player.main:RageCost() == 0) or (Player.main.Free and Player.main:Free())
 	end
 	if Player.cd then
 		clawCooldownPanel.icon:SetTexture(Player.cd.icon)
