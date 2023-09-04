@@ -109,7 +109,7 @@ local function InitOpts()
 		cd_ttd = 8,
 		pot = false,
 		trinket = true,
-		frenzied_threshold = 60,
+		heal_threshold = 65,
 		multipliers = true,
 	})
 end
@@ -609,6 +609,12 @@ function Ability:Usable(seconds, pool)
 	if not self.known then
 		return false
 	end
+	if self.requires_form and Player.form ~= self.requires_form then
+		return false
+	end
+	if self.requires_charge and self:Charges() == 0 then
+		return false
+	end
 	if not pool then
 		if self:ManaCost() > Player.mana.current then
 			return false
@@ -621,9 +627,6 @@ function Ability:Usable(seconds, pool)
 		end
 	end
 	if self:CPCost() > Player.combo_points.current then
-		return false
-	end
-	if self.requires_charge and self:Charges() == 0 then
 		return false
 	end
 	return self:Ready(seconds)
@@ -1062,12 +1065,15 @@ local CatForm = Ability:Add(768, true, true)
 local FerociousBite = Ability:Add(22568, false, true)
 FerociousBite.cp_cost = 1
 FerociousBite.energy_cost = 25
+FerociousBite.requires_form = FORM.CAT
 local Growl = Ability:Add(6795, false, true)
 Growl.buff_duration = 3
 Growl.cooldown_duration = 8
+Growl.requires_form = FORM.BEAR
 local Mangle = Ability:Add(33917, false, true)
 Mangle.cooldown_duration = 6
 Mangle.hasted_cooldown = true
+Mangle.requires_form = FORM.BEAR
 local MarkOfTheWild = Ability:Add(1126, true)
 MarkOfTheWild.buff_duration = 3600
 MarkOfTheWild.mana_cost = 20
@@ -1088,6 +1094,7 @@ Regrowth.hasted_ticks = true
 local Shred = Ability:Add(5221, false, true)
 Shred.energy_cost = 40
 Shred.triggers_bt = true
+Shred.requires_form = FORM.CAT
 ------ Procs
 
 ------ Talents
@@ -1100,6 +1107,7 @@ FrenziedRegeneration.rage_cost = 10
 FrenziedRegeneration.tick_interval = 1
 FrenziedRegeneration.hasted_cooldown = true
 FrenziedRegeneration.requires_charge = true
+FrenziedRegeneration.requires_form = FORM.BEAR
 local HeartOfTheWild = Ability:Add(319454, true, true, 108291)
 HeartOfTheWild.buff_duration = 45
 HeartOfTheWild.cooldown_duration = 300
@@ -1112,10 +1120,12 @@ Ironfur.cooldown_duration = 0.5
 Ironfur.rage_cost = 40
 Ironfur.off_gcd = true
 Ironfur.triggers_gcd = false
+Ironfur.requires_form = FORM.BEAR
 local Maim = Ability:Add(22570, false, true, 203123)
 Maim.cooldown_duration = 20
 Maim.energy_cost = 30
 Maim.cp_cost = 1
+Maim.requires_form = FORM.CAT
 local MightyBash = Ability:Add(5211, false, true)
 MightyBash.buff_duration = 4
 MightyBash.cooldown_duration = 60
@@ -1131,6 +1141,7 @@ Rake.energy_cost = 35
 Rake.tick_interval = 3
 Rake.hasted_ticks = true
 Rake.triggers_bt = true
+Rake.requires_form = FORM.CAT
 Rake:TrackAuras()
 Rake:AutoAoe(false, 'apply')
 local Rip = Ability:Add(1079, false, true)
@@ -1139,6 +1150,7 @@ Rip.energy_cost = 20
 Rip.cp_cost = 1
 Rip.tick_interval = 2
 Rip.hasted_ticks = true
+Rip.requires_form = FORM.CAT
 Rip:TrackAuras()
 local SkullBash = Ability:Add(106839, false, true)
 SkullBash.cooldown_duration = 15
@@ -1162,17 +1174,20 @@ SurvivalInstincts.triggers_gcd = false
 local Swipe = Ability:Add(213771, false, true)
 Swipe:AutoAoe(true)
 Swipe.learn_spellId = 213764
+Swipe.requires_form = FORM.CAT
 local SwipeCat = Ability:Add(106785, false, true)
 SwipeCat.energy_cost = 35
 SwipeCat.triggers_bt = true
 SwipeCat:AutoAoe(true)
 SwipeCat.learn_spellId = 213764
+SwipeCat.requires_form = FORM.CAT
 local Thrash = Ability:Add(77758, false, true, 192090)
 Thrash.buff_duration = 15
 Thrash.cooldown_duration = 6
 Thrash.tick_interval = 3
 Thrash.hasted_cooldown = true
 Thrash.hasted_ticks = true
+Thrash.requires_form = FORM.BEAR
 Thrash:AutoAoe(true)
 local ThrashCat = Ability:Add(106830, false, true, 405233)
 ThrashCat.learn_spellId = 106832
@@ -1181,6 +1196,7 @@ ThrashCat.energy_cost = 40
 ThrashCat.tick_interval = 3
 ThrashCat.hasted_ticks = true
 ThrashCat.triggers_bt = true
+ThrashCat.requires_form = FORM.CAT
 ThrashCat:AutoAoe(true)
 ThrashCat:TrackAuras()
 local Typhoon = Ability:Add(132469, false, true)
@@ -1229,6 +1245,7 @@ BrutalSlash.energy_cost = 25
 BrutalSlash.hasted_cooldown = true
 BrutalSlash.requires_charge = true
 BrutalSlash.triggers_bt = true
+BrutalSlash.requires_form = FORM.CAT
 BrutalSlash:AutoAoe(true)
 local CarnivorousInstinct = Ability:Add(390902, true, true)
 CarnivorousInstinct.talent_node = 82110
@@ -1240,6 +1257,7 @@ FeralFrenzy.energy_cost = 25
 FeralFrenzy.tick_interval = 2
 FeralFrenzy.hasted_ticks = true
 FeralFrenzy.triggers_bt = true
+FeralFrenzy.requires_form = FORM.CAT
 local IncarnationAvatarOfAshamane = Ability:Add(102543, true, true)
 IncarnationAvatarOfAshamane.buff_duration = 30
 IncarnationAvatarOfAshamane.cooldown_duration = 180
@@ -1258,12 +1276,14 @@ MoonfireCat:TrackAuras()
 local PrimalWrath = Ability:Add(285381, false, true)
 PrimalWrath.energy_cost = 1
 PrimalWrath.cp_cost = 1
+PrimalWrath.requires_form = FORM.CAT
 PrimalWrath:AutoAoe(true)
 local SoulOfTheForest = Ability:Add(158476, true, true)
 local TigersFury = Ability:Add(5217, true, true)
 TigersFury.buff_duration = 10
 TigersFury.cooldown_duration = 30
 TigersFury.triggers_gcd = false
+TigersFury.requires_form = FORM.CAT
 local Veinripper = Ability:Add(391978, true, true)
 ------ Procs
 local ApexPredatorsCraving = Ability:Add(391881, true, true, 391882)
@@ -1287,6 +1307,9 @@ Brambles:AutoAoe()
 local BristlingFur = Ability:Add(155835, true, true)
 BristlingFur.buff_duration = 8
 BristlingFur.cooldown_duration = 40
+BristlingFur.requires_form = FORM.BEAR
+local DreamOfCenarius = Ability:Add(372119, true, true, 372152)
+DreamOfCenarius.buff_duration = 30
 local FlashingClaws = Ability:Add(393427, false, true)
 FlashingClaws.talent_node = 82154
 local FuryOfNature = Ability:Add(370695, false, true)
@@ -1304,16 +1327,20 @@ LunarBeam.cooldown_duration = 60
 LunarBeam.damage = Ability:Add(414613, false, true)
 local Maul = Ability:Add(6807, false, true)
 Maul.rage_cost = 40
+Maul.requires_form = FORM.BEAR
 local Pulverize = Ability:Add(80313, false, true)
 Pulverize.buff_duration = 10
 Pulverize.cooldown_duration = 45
+Pulverize.requires_form = FORM.BEAR
 local RageOfTheSleeper = Ability:Add(200851, true, true)
 RageOfTheSleeper.buff_duration = 10
 RageOfTheSleeper.cooldown_duration = 60
 RageOfTheSleeper.off_gcd = true
 RageOfTheSleeper.triggers_gcd = false
+RageOfTheSleeper.requires_form = FORM.BEAR
 local Raze = Ability:Add(400254, false, true)
 Raze.rage_cost = 40
+Raze.requires_form = FORM.BEAR
 Raze:AutoAoe()
 local ReinforcedFur = Ability:Add(393618, false, true)
 local ThornsOfIron = Ability:Add(400222, false, true, 400223)
@@ -2107,8 +2134,6 @@ end
 
 -- Begin Action Priority Lists
 
-
-
 APL[SPEC.NONE].Main = function(self)
 	if Player:TimeInCombat() == 0 then
 		if MarkOfTheWild:Usable() and MarkOfTheWild:Remains() < 300 then
@@ -2188,7 +2213,7 @@ actions+=/run_action_list,name=builder,if=combo_points<5
 	end
 	self:cooldown()
 	if Player.health.pct < 85 and not Player:Stealthed() then
-		if Regrowth:Usable() and (Player.health.pct < 65 or Player.combo_points.current >= 5) and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() then
+		if Regrowth:Usable() and (Player.health.pct <= Opt.heal_threshold or Player.combo_points.current >= 5) and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() then
 			UseExtra(Regrowth)
 		elseif NaturesVigil:Usable() then
 			UseExtra(NaturesVigil)
@@ -2480,8 +2505,16 @@ actions+=/potion,if=((talent.heart_of_the_wild.enabled&buff.heart_of_the_wild.up
 actions+=/run_action_list,name=catweave,if=(target.cooldown.pause_action.remains|time>=30)&druid.catweave_bear=1&buff.tooth_and_claw.remains>1.5&(buff.incarnation_guardian_of_ursoc.down&buff.berserk_bear.down)&(cooldown.thrash_bear.remains>0&cooldown.mangle.remains>0&dot.moonfire.remains>=2)|(buff.cat_form.up&energy>25&druid.catweave_bear=1&buff.tooth_and_claw.remains>1.5)|(buff.heart_of_the_wild.up&energy>90&druid.catweave_bear=1&buff.tooth_and_claw.remains>1.5)
 actions+=/run_action_list,name=bear
 ]]
-	if FrenziedRegeneration:Usable() and Player.health.pct < 65 and FrenziedRegeneration:Down() then
-		UseExtra(FrenziedRegeneration)
+	if Player.health.pct <= Opt.heal_threshold then
+		if FrenziedRegeneration:Usable() and FrenziedRegeneration:Down() and FrenziedRegeneration:ChargesFractional() >= 1.5 then
+			UseExtra(FrenziedRegeneration)
+		end
+		if DreamOfCenarius.known and Regrowth:Usable() and DreamOfCenarius:Up() and FrenziedRegeneration:Remains() < 1 then
+			UseExtra(Regrowth)
+		end
+		if FrenziedRegeneration:Usable() and FrenziedRegeneration:Down() then
+			UseExtra(FrenziedRegeneration)
+		end
 	end
 	if Opt.trinket then
 		if Trinket1:Usable() then
@@ -3701,11 +3734,11 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		return Status('Show on-use trinkets in cooldown UI', Opt.trinket)
 	end
-	if startsWith(msg[1], 'fr') then
+	if startsWith(msg[1], 'he') then
 		if msg[2] then
-			Opt.frenzied_threshold = clamp(tonumber(msg[2]) or 60, 0, 100)
+			Opt.heal_threshold = clamp(tonumber(msg[2]) or 65, 0, 100)
 		end
-		return Status('Health threshold to recommend Frenzied Regeneration at in Bear Form', Opt.frenzied_threshold .. '%')
+		return Status('Health threshold to recommend Frenzied Regeneration and Regrowth at', Opt.heal_threshold .. '%')
 	end
 	if startsWith(msg[1], 'mu') then
 		if msg[2] then
@@ -3743,7 +3776,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'ttd |cFFFFD000[seconds]|r  - minimum enemy lifetime to use cooldowns on (default is 8 seconds, ignored on bosses)',
 		'pot |cFF00C000on|r/|cFFC00000off|r - show flasks and battle potions in cooldown UI',
 		'trinket |cFF00C000on|r/|cFFC00000off|r - show on-use trinkets in cooldown UI',
-		'frenzied |cFFFFD000[health]|r  - health threshold to recommend Frenzied Regeneration at in Bear Form (default is 60%)',
+		'heal |cFFFFD000[health]|r  - health threshold to recommend Frenzied Regeneration and Regrowth at (default is 65%)',
 		'multipliers |cFF00C000on|r/|cFFC00000off|r - show DoT multiplier differences in top right corner',
 		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
