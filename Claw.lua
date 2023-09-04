@@ -1350,6 +1350,7 @@ local ToothAndClaw = Ability:Add(135288, true, true, 135286)
 ToothAndClaw.buff_duration = 15
 ToothAndClaw.debuff = Ability:Add(135601, false, true)
 ToothAndClaw.debuff.buff_duration = 6
+local UncheckedAggression = Ability:Add(377623, true, true)
 local ViciousCycle = Ability:Add(371999, true, true)
 ViciousCycle.Mangle = Ability:Add(372019, true, true)
 ViciousCycle.Mangle.buff_duration = 15
@@ -1617,6 +1618,9 @@ function Player:UpdateKnown()
 		IncarnationAvatarOfAshamane.prowl.known = true
 		Berserk.known = false
 		self.bs_inc = IncarnationAvatarOfAshamane
+	elseif IncarnationGuardianOfUrsoc.known then
+		Berserk.known = false
+		self.bs_inc = IncarnationGuardianOfUrsoc
 	end
 	if BrutalSlash.known then
 		SwipeCat.known = false
@@ -2098,7 +2102,11 @@ function Maul:RageCost()
 	if ToothAndClaw.known and ToothAndClaw:Up() then
 		return 0
 	end
-	return Ability.RageCost(self)
+	local cost = Ability.RageCost(self)
+	if UncheckedAggression.known and Player.berserk_up then
+		cost = cost * 0.50
+	end
+	return cost
 end
 Raze.RageCost = Maul.RageCost
 
@@ -2584,8 +2592,8 @@ actions.bear+=/swipe_bear
 	if ConvokeTheSpirits:Usable() then
 		UseCooldown(ConvokeTheSpirits)
 	end
-	if IncarnationGuardianOfUrsoc:Usable() then
-		UseCooldown(IncarnationGuardianOfUrsoc)
+	if Player.bs_inc:Usable() then
+		UseCooldown(Player.bs_inc)
 	end
 	if LunarBeam:Usable() then
 		UseCooldown(LunarBeam)
