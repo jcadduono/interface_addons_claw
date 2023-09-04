@@ -1098,6 +1098,7 @@ Shred.requires_form = FORM.CAT
 ------ Procs
 
 ------ Talents
+local CircleOfLifeAndDeath = Ability:Add(391969, true, true) -- Guardian and Restoration
 local ConvokeTheSpirits = Ability:Add(391528, false, true)
 ConvokeTheSpirits.cooldown_duration = 120
 local FrenziedRegeneration = Ability:Add(22842, true, true)
@@ -1360,7 +1361,7 @@ GalacticGuardian.buff_duration = 15
 ---- Restoration
 
 ------ Talents
-local CircleOfLifeAndDeathRestoration = Ability:Add(391969, true, true)
+
 ------ Procs
 
 -- Racials
@@ -1898,17 +1899,18 @@ end
 
 function Rake:Duration()
 	local duration = self.buff_duration
-	if CircleOfLifeAndDeathFeral.known then
-		duration = duration * 0.80
-	end
-	if CircleOfLifeAndDeathRestoration.known then
+	if CircleOfLifeAndDeath.known then
 		duration = duration * 0.75
+	elseif CircleOfLifeAndDeathFeral.known then
+		duration = duration * 0.80
 	end
 	if Veinripper.known then
 		duration = duration * 1.25
 	end
 	return duration
 end
+Thrash.Duration = Rake.Duration
+ThrashCat.Duration = Rake.Duration
 
 function Rake:NextMultiplier()
 	local multiplier = 1.00
@@ -1945,11 +1947,10 @@ function Rip:Duration(comboPoints, appliedBy)
 	if appliedBy == PrimalWrath then
 		duration = duration * 0.50
 	end
-	if CircleOfLifeAndDeathFeral.known then
-		duration = duration * 0.80
-	end
-	if CircleOfLifeAndDeathRestoration.known then
+	if CircleOfLifeAndDeath.known then
 		duration = duration * 0.75
+	elseif CircleOfLifeAndDeathFeral.known then
+		duration = duration * 0.80
 	end
 	if Veinripper.known then
 		duration = duration * 1.25
@@ -2003,6 +2004,20 @@ function PrimalWrath:NextMultiplier()
 	return Rip:NextMultiplier()
 end
 
+function Moonfire:Duration()
+	local duration = self.buff_duration
+	if CircleOfLifeAndDeathFeral.known then
+		duration = duration * 0.80
+	end
+	if CircleOfLifeAndDeath.known then
+		duration = duration * 0.75
+	end
+	return duration
+end
+MoonfireCat.Duration = Moonfire.Duration
+AdaptiveSwarm.dot.Duration = Moonfire.Duration
+AdaptiveSwarm.hot.Duration = Moonfire.Duration
+
 function MoonfireCat:NextMultiplier()
 	local multiplier = 1.00
 	local _, id
@@ -2022,20 +2037,6 @@ function Shred:CastSuccess(...)
 	if Opt.auto_aoe and not Bloodtalons.known and Player.berserk_remains == 0 then
 		Player:SetTargetMode(1)
 	end
-end
-
-function ThrashCat:Duration()
-	local duration = self.buff_duration
-	if CircleOfLifeAndDeathFeral.known then
-		duration = duration * 0.80
-	end
-	if CircleOfLifeAndDeathRestoration.known then
-		duration = duration * 0.75
-	end
-	if Veinripper.known then
-		duration = duration * 1.25
-	end
-	return duration
 end
 
 function ThrashCat:NextMultiplier()
@@ -2075,18 +2076,6 @@ function Maim:Usable()
 end
 MightyBash.Usable = Maim.Usable
 Typhoon.Usable = Maim.Usable
-
-function AdaptiveSwarm.dot:Duration()
-	local duration = self.buff_duration
-	if CircleOfLifeAndDeathFeral.known then
-		duration = duration * 0.80
-	end
-	if CircleOfLifeAndDeathRestoration.known then
-		duration = duration * 0.75
-	end
-	return duration
-end
-AdaptiveSwarm.hot.Duration = AdaptiveSwarm.dot.Duration
 
 function AdaptiveSwarm.dot:CastLanded(...)
 	AdaptiveSwarm:CastLanded(...)
