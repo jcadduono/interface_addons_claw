@@ -1442,10 +1442,10 @@ end
 -- Equipment
 local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
---Trinket.BeaconToTheBeyond = InventoryItem:Add(203963)
---Trinket.BeaconToTheBeyond.cooldown_duration = 150
---Trinket.DragonfireBombDispenser = InventoryItem:Add(202610)
---Trinket.ElementiumPocketAnvil = InventoryItem:Add(202617)
+Trinket.BeaconToTheBeyond = InventoryItem:Add(203963)
+Trinket.BeaconToTheBeyond.cooldown_duration = 150
+Trinket.DragonfireBombDispenser = InventoryItem:Add(202610)
+Trinket.ElementiumPocketAnvil = InventoryItem:Add(202617)
 -- End Inventory Items
 
 -- Start Abilities Functions
@@ -2276,10 +2276,16 @@ actions.cooldown+=/use_items
 	end
 --]]
 	if Opt.trinket then
-		if Trinket1:Usable() then
-			UseCooldown(Trinket1)
+		if Trinket.BeaconToTheBeyond:Usable() and not Player.berserk_up then
+			return UseCooldown(Trinket.BeaconToTheBeyond)
+		elseif Trinket.DragonfireBombDispenser:Usable() and (Player.enemies > 1 or Target.timeToDie > 8) then
+			return UseCooldown(Trinket.DragonfireBombDispenser)
+		elseif Trinket.ElementiumPocketAnvil:Usable() and Player.energy.deficit >= (15 + Player.energy.regen) then
+			return UseCooldown(Trinket.ElementiumPocketAnvil)
+		elseif Trinket1:Usable() then
+			return UseCooldown(Trinket1)
 		elseif Trinket2:Usable() then
-			UseCooldown(Trinket2)
+			return UseCooldown(Trinket2)
 		end
 	end
 end
@@ -2514,7 +2520,13 @@ actions+=/run_action_list,name=bear
 		end
 	end
 	if Opt.trinket then
-		if Trinket1:Usable() then
+		if Trinket.BeaconToTheBeyond:Usable() and not Player.berserk_up then
+			UseCooldown(Trinket.BeaconToTheBeyond)
+		elseif Trinket.DragonfireBombDispenser:Usable() and (Player.enemies > 1 or Target.timeToDie > 8) then
+			UseCooldown(Trinket.DragonfireBombDispenser)
+		elseif Trinket.ElementiumPocketAnvil:Usable() and Player.rage.deficit >= 40 then
+			UseCooldown(Trinket.ElementiumPocketAnvil)
+		elseif Trinket1:Usable() then
 			UseCooldown(Trinket1)
 		elseif Trinket2:Usable() then
 			UseCooldown(Trinket2)
