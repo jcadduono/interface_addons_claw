@@ -1,20 +1,20 @@
 <Bindings>
-	<Binding name="Toggle Targets +" header="CLAW" category="ADDONS">
+	<Binding name="CLAW_TARGETMORE" category="BINDING_CATEGORY_CLAW">
 		Claw_ToggleTargetMode()
 	</Binding>
-	<Binding name="Toggle Targets -" category="ADDONS">
+	<Binding name="CLAW_TARGETLESS" category="BINDING_CATEGORY_CLAW">
 		Claw_ToggleTargetModeReverse()
 	</Binding>
-	<Binding name="Set Targets to 1" category="ADDONS">
+	<Binding name="CLAW_TARGET1" category="BINDING_CATEGORY_CLAW">
 		Claw_SetTargetMode(1)
 	</Binding>
-	<Binding name="Set Targets to 2" category="ADDONS">
+	<Binding name="CLAW_TARGET2" category="BINDING_CATEGORY_CLAW">
 		Claw_SetTargetMode(2)
 	</Binding>
-	<Binding name="Set Targets to 3" category="ADDONS">
+	<Binding name="CLAW_TARGET3" category="BINDING_CATEGORY_CLAW">
 		Claw_SetTargetMode(3)
 	</Binding>
-	<Binding name="Set Targets to 4+" category="ADDONS">
+	<Binding name="CLAW_TARGET4" category="BINDING_CATEGORY_CLAW">
 		Claw_SetTargetMode(4)
 	</Binding>
 </Bindings>

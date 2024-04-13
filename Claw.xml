@@ -1,0 +1,188 @@
+<?xml version="1.0"?>
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ http://wowprogramming.com/FrameXML/UI.xsd">
+	<Frame name="clawPanel" enableMouse="true" movable="true" parent="UIParent" frameStrata="BACKGROUND" hidden="true">
+		<Size x="64" y="64"/>
+		<Anchors>
+			<Anchor point="CENTER" relativeTo="UIParent" relativePoint="CENTER" x="0" y="-169"/>
+		</Anchors>
+		<Scripts>
+			<OnLoad>
+				self:RegisterForDrag('LeftButton', 'RightButton')
+			</OnLoad>
+			<OnDragStart>
+				self:StartMoving()
+			</OnDragStart>
+			<OnDragStop>
+				self:StopMovingOrSizing()
+			</OnDragStop>
+		</Scripts>
+		<Layers>
+			<Layer level="BACKGROUND">
+				<Texture parentKey="icon" setAllPoints="true">
+					<TexCoords left="0.05" right="0.95" top="0.05" bottom="0.95"/>
+				</Texture>
+			</Layer>
+			<Layer level="ARTWORK">
+				<Texture parentKey="border" file="Interface\AddOns\Claw\border.blp" setAllPoints="true" hidden="true" />
+			</Layer>
+			<Layer level="BORDER">
+				<Texture parentKey="dimmer" setAllPoints="true" hidden="true">
+					<Color r="0.0" g="0.0" b="0.0" a="0.6" />
+				</Texture>
+			</Layer>
+		</Layers>
+		<Frames>
+			<Cooldown parentKey="swipe" inherits="CooldownFrameTemplate" drawEdge="false" drawBling="false" setAllPoints="true" />
+			<Frame parentKey="text" setAllPoints="true">
+				<Layers>
+					<Layer level="OVERLAY">
+						<FontString parentKey="tl" font="Fonts\FRIZQT__.TTF" outline="NORMAL" justifyV="TOP" justifyH="LEFT">
+							<FontHeight val="12" />
+							<Anchors>
+								<Anchor point="TOPLEFT" relativeTo="$parent" relativePoint="TOPLEFT" x="2.5" y="-3" />
+							</Anchors>
+						</FontString>
+						<FontString parentKey="tr" font="Fonts\FRIZQT__.TTF" outline="NORMAL" justifyV="TOP" justifyH="RIGHT">
+							<FontHeight val="12" />
+							<Anchors>
+								<Anchor point="TOPRIGHT" relativeTo="$parent" relativePoint="TOPRIGHT" x="-2.5" y="-3" />
+							</Anchors>
+						</FontString>
+						<FontString parentKey="bl" font="Fonts\FRIZQT__.TTF" outline="NORMAL" justifyV="BOTTOM" justifyH="LEFT">
+							<FontHeight val="12" />
+							<Anchors>
+								<Anchor point="BOTTOMLEFT" relativeTo="$parent" relativePoint="BOTTOMLEFT" x="2.5" y="3" />
+							</Anchors>
+						</FontString>
+						<FontString parentKey="br" font="Fonts\FRIZQT__.TTF" outline="NORMAL" justifyV="BOTTOM" justifyH="RIGHT">
+							<FontHeight val="12" />
+							<Anchors>
+								<Anchor point="BOTTOMRIGHT" relativeTo="$parent" relativePoint="BOTTOMRIGHT" x="-2.5" y="3" />
+							</Anchors>
+						</FontString>
+						<FontString parentKey="center" font="Fonts\FRIZQT__.TTF" outline="NORMAL" justifyV="CENTER" justifyH="CENTER" setAllPoints="true">
+							<FontHeight val="12" />
+						</FontString>
+					</Layer>
+				</Layers>
+			</Frame>
+			<Button parentKey="button" setAllPoints="true" registerForClicks="LeftButtonDown, RightButtonDown, MiddleButtonDown" hidden="true" />
+		</Frames>
+	</Frame>
+
+	<Frame name="clawPreviousPanel" enableMouse="true" movable="true" parent="UIParent" frameStrata="BACKGROUND" hidden="true">
+		<Size x="64" y="64"/>
+		<Scripts>
+			<OnLoad>
+				self:RegisterForDrag('LeftButton', 'RightButton')
+			</OnLoad>
+			<OnDragStart>
+				self:StartMoving()
+			</OnDragStart>
+			<OnDragStop>
+				self:StopMovingOrSizing()
+			</OnDragStop>
+		</Scripts>
+		<Layers>
+			<Layer level="BACKGROUND">
+				<Texture parentKey="icon" setAllPoints="true">
+					<TexCoords left="0.05" right="0.95" top="0.05" bottom="0.95"/>
+				</Texture>
+			</Layer>
+			<Layer level="ARTWORK">
+				<Texture parentKey="border" file="Interface\AddOns\Claw\border.blp" setAllPoints="true" />
+			</Layer>
+		</Layers>
+	</Frame>
+
+	<Frame name="clawCooldownPanel" enableMouse="true" movable="true" parent="UIParent" frameStrata="BACKGROUND" hidden="true">
+		<Size x="64" y="64"/>
+		<Scripts>
+			<OnLoad>
+				self:RegisterForDrag('LeftButton', 'RightButton')
+			</OnLoad>
+			<OnDragStart>
+				self:StartMoving()
+			</OnDragStart>
+			<OnDragStop>
+				self:StopMovingOrSizing()
+			</OnDragStop>
+		</Scripts>
+		<Layers>
+			<Layer level="BACKGROUND">
+				<Texture parentKey="icon" setAllPoints="true">
+					<TexCoords left="0.05" right="0.95" top="0.05" bottom="0.95"/>
+				</Texture>
+			</Layer>
+			<Layer level="ARTWORK">
+				<Texture parentKey="border" file="Interface\AddOns\Claw\border.blp" setAllPoints="true" />
+			</Layer>
+			<Layer level="BORDER">
+				<Texture parentKey="dimmer" setAllPoints="true" hidden="true">
+					<Color r="0.0" g="0.0" b="0.0" a="0.6" />
+				</Texture>
+			</Layer>
+			<Layer level="OVERLAY">
+				<FontString parentKey="text" font="Fonts\FRIZQT__.TTF" outline="NORMAL" justifyV="CENTER" justifyH="CENTER" setAllPoints="true">
+					<FontHeight val="12" />
+				</FontString>
+			</Layer>
+		</Layers>
+		<Frames>
+			<Cooldown parentKey="swipe" inherits="CooldownFrameTemplate" drawEdge="false" drawBling="false" setAllPoints="true" />
+		</Frames>
+	</Frame>
+
+	<Frame name="clawInterruptPanel" enableMouse="true" movable="true" parent="UIParent" frameStrata="BACKGROUND" hidden="true">
+		<Size x="64" y="64"/>
+		<Scripts>
+			<OnLoad>
+				self:RegisterForDrag('LeftButton', 'RightButton')
+			</OnLoad>
+			<OnDragStart>
+				self:StartMoving()
+			</OnDragStart>
+			<OnDragStop>
+				self:StopMovingOrSizing()
+			</OnDragStop>
+		</Scripts>
+		<Layers>
+			<Layer level="BACKGROUND">
+				<Texture parentKey="icon" setAllPoints="true">
+					<TexCoords left="0.05" right="0.95" top="0.05" bottom="0.95"/>
+				</Texture>
+			</Layer>
+			<Layer level="ARTWORK">
+				<Texture parentKey="border" file="Interface\AddOns\Claw\border.blp" setAllPoints="true" />
+			</Layer>
+		</Layers>
+		<Frames>
+			<Cooldown parentKey="swipe" inherits="CooldownFrameTemplate" drawEdge="false" drawBling="false" setAllPoints="true" />
+		</Frames>
+	</Frame>
+
+	<Frame name="clawExtraPanel" enableMouse="true" movable="true" parent="UIParent" frameStrata="BACKGROUND" hidden="true">
+		<Size x="64" y="64"/>
+		<Scripts>
+			<OnLoad>
+				self:RegisterForDrag('LeftButton', 'RightButton')
+			</OnLoad>
+			<OnDragStart>
+				self:StartMoving()
+			</OnDragStart>
+			<OnDragStop>
+				self:StopMovingOrSizing()
+			</OnDragStop>
+		</Scripts>
+		<Layers>
+			<Layer level="BACKGROUND">
+				<Texture parentKey="icon" setAllPoints="true">
+					<TexCoords left="0.05" right="0.95" top="0.05" bottom="0.95"/>
+				</Texture>
+			</Layer>
+			<Layer level="ARTWORK">
+				<Texture parentKey="border" file="Interface\AddOns\Claw\border.blp" setAllPoints="true" />
+			</Layer>
+		</Layers>
+	</Frame>
+</Ui>

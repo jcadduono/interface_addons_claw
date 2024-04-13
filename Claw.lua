@@ -1,9 +1,22 @@
 local ADDON = 'Claw'
+local ADDON_PATH = 'Interface\\AddOns\\' .. ADDON .. '\\'
+
+BINDING_CATEGORY_CLAW = ADDON
+BINDING_NAME_CLAW_TARGETMORE = "Toggle Targets +"
+BINDING_NAME_CLAW_TARGETLESS = "Toggle Targets -"
+BINDING_NAME_CLAW_TARGET1 = "Set Targets to 1"
+BINDING_NAME_CLAW_TARGET2 = "Set Targets to 2"
+BINDING_NAME_CLAW_TARGET3 = "Set Targets to 3"
+BINDING_NAME_CLAW_TARGET4 = "Set Targets to 4+"
+
+local function log(...)
+	print(ADDON, '-', ...)
+end
+
 if select(2, UnitClass('player')) ~= 'DRUID' then
-	DisableAddOn(ADDON)
+	log('[|cFFFF0000Error|r]', 'Not loading because you are not the correct class! Consider disabling', ADDON, 'for this character.')
 	return
 end
-local ADDON_PATH = 'Interface\\AddOns\\' .. ADDON .. '\\'
 
 -- reference heavily accessed global functions from local scope for performance
 local min = math.min
@@ -24,6 +37,7 @@ local UnitHealth = _G.UnitHealth
 local UnitHealthMax = _G.UnitHealthMax
 local UnitPower = _G.UnitPower
 local UnitPowerMax = _G.UnitPowerMax
+local UnitSpellHaste = _G.UnitSpellHaste
 -- end reference global functions
 
 -- useful functions
@@ -47,7 +61,6 @@ Claw = {}
 local Opt -- use this as a local table reference to Claw
 
 SLASH_Claw1, SLASH_Claw2 = '/claw', '/cl'
-BINDING_HEADER_CLAW = ADDON
 
 local function InitOpts()
 	local function SetDefaults(t, ref)
@@ -278,135 +291,6 @@ local Target = {
 	estimated_range = 30,
 }
 
-local clawPanel = CreateFrame('Frame', 'clawPanel', UIParent)
-clawPanel:SetPoint('CENTER', 0, -169)
-clawPanel:SetFrameStrata('BACKGROUND')
-clawPanel:SetSize(64, 64)
-clawPanel:SetMovable(true)
-clawPanel:SetUserPlaced(true)
-clawPanel:RegisterForDrag('LeftButton')
-clawPanel:SetScript('OnDragStart', clawPanel.StartMoving)
-clawPanel:SetScript('OnDragStop', clawPanel.StopMovingOrSizing)
-clawPanel:Hide()
-clawPanel.icon = clawPanel:CreateTexture(nil, 'BACKGROUND')
-clawPanel.icon:SetAllPoints(clawPanel)
-clawPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
-clawPanel.border = clawPanel:CreateTexture(nil, 'ARTWORK')
-clawPanel.border:SetAllPoints(clawPanel)
-clawPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-clawPanel.border:Hide()
-clawPanel.dimmer = clawPanel:CreateTexture(nil, 'BORDER')
-clawPanel.dimmer:SetAllPoints(clawPanel)
-clawPanel.dimmer:SetColorTexture(0, 0, 0, 0.6)
-clawPanel.dimmer:Hide()
-clawPanel.swipe = CreateFrame('Cooldown', nil, clawPanel, 'CooldownFrameTemplate')
-clawPanel.swipe:SetAllPoints(clawPanel)
-clawPanel.swipe:SetDrawBling(false)
-clawPanel.swipe:SetDrawEdge(false)
-clawPanel.text = CreateFrame('Frame', nil, clawPanel)
-clawPanel.text:SetAllPoints(clawPanel)
-clawPanel.text.tl = clawPanel.text:CreateFontString(nil, 'OVERLAY')
-clawPanel.text.tl:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-clawPanel.text.tl:SetPoint('TOPLEFT', clawPanel, 'TOPLEFT', 2.5, -3)
-clawPanel.text.tl:SetJustifyH('LEFT')
-clawPanel.text.tr = clawPanel.text:CreateFontString(nil, 'OVERLAY')
-clawPanel.text.tr:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-clawPanel.text.tr:SetPoint('TOPRIGHT', clawPanel, 'TOPRIGHT', -2.5, -3)
-clawPanel.text.tr:SetJustifyH('RIGHT')
-clawPanel.text.bl = clawPanel.text:CreateFontString(nil, 'OVERLAY')
-clawPanel.text.bl:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-clawPanel.text.bl:SetPoint('BOTTOMLEFT', clawPanel, 'BOTTOMLEFT', 2.5, 3)
-clawPanel.text.bl:SetJustifyH('LEFT')
-clawPanel.text.br = clawPanel.text:CreateFontString(nil, 'OVERLAY')
-clawPanel.text.br:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-clawPanel.text.br:SetPoint('BOTTOMRIGHT', clawPanel, 'BOTTOMRIGHT', -2.5, 3)
-clawPanel.text.br:SetJustifyH('RIGHT')
-clawPanel.text.center = clawPanel.text:CreateFontString(nil, 'OVERLAY')
-clawPanel.text.center:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-clawPanel.text.center:SetAllPoints(clawPanel.text)
-clawPanel.text.center:SetJustifyH('CENTER')
-clawPanel.text.center:SetJustifyV('CENTER')
-clawPanel.button = CreateFrame('Button', nil, clawPanel)
-clawPanel.button:SetAllPoints(clawPanel)
-clawPanel.button:RegisterForClicks('LeftButtonDown', 'RightButtonDown', 'MiddleButtonDown')
-local clawPreviousPanel = CreateFrame('Frame', 'clawPreviousPanel', UIParent)
-clawPreviousPanel:SetFrameStrata('BACKGROUND')
-clawPreviousPanel:SetSize(64, 64)
-clawPreviousPanel:SetMovable(true)
-clawPreviousPanel:SetUserPlaced(true)
-clawPreviousPanel:RegisterForDrag('LeftButton')
-clawPreviousPanel:SetScript('OnDragStart', clawPreviousPanel.StartMoving)
-clawPreviousPanel:SetScript('OnDragStop', clawPreviousPanel.StopMovingOrSizing)
-clawPreviousPanel:Hide()
-clawPreviousPanel.icon = clawPreviousPanel:CreateTexture(nil, 'BACKGROUND')
-clawPreviousPanel.icon:SetAllPoints(clawPreviousPanel)
-clawPreviousPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
-clawPreviousPanel.border = clawPreviousPanel:CreateTexture(nil, 'ARTWORK')
-clawPreviousPanel.border:SetAllPoints(clawPreviousPanel)
-clawPreviousPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-local clawCooldownPanel = CreateFrame('Frame', 'clawCooldownPanel', UIParent)
-clawCooldownPanel:SetFrameStrata('BACKGROUND')
-clawCooldownPanel:SetSize(64, 64)
-clawCooldownPanel:SetMovable(true)
-clawCooldownPanel:SetUserPlaced(true)
-clawCooldownPanel:RegisterForDrag('LeftButton')
-clawCooldownPanel:SetScript('OnDragStart', clawCooldownPanel.StartMoving)
-clawCooldownPanel:SetScript('OnDragStop', clawCooldownPanel.StopMovingOrSizing)
-clawCooldownPanel:Hide()
-clawCooldownPanel.icon = clawCooldownPanel:CreateTexture(nil, 'BACKGROUND')
-clawCooldownPanel.icon:SetAllPoints(clawCooldownPanel)
-clawCooldownPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
-clawCooldownPanel.border = clawCooldownPanel:CreateTexture(nil, 'ARTWORK')
-clawCooldownPanel.border:SetAllPoints(clawCooldownPanel)
-clawCooldownPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-clawCooldownPanel.dimmer = clawCooldownPanel:CreateTexture(nil, 'BORDER')
-clawCooldownPanel.dimmer:SetAllPoints(clawCooldownPanel)
-clawCooldownPanel.dimmer:SetColorTexture(0, 0, 0, 0.6)
-clawCooldownPanel.dimmer:Hide()
-clawCooldownPanel.swipe = CreateFrame('Cooldown', nil, clawCooldownPanel, 'CooldownFrameTemplate')
-clawCooldownPanel.swipe:SetAllPoints(clawCooldownPanel)
-clawCooldownPanel.swipe:SetDrawBling(false)
-clawCooldownPanel.swipe:SetDrawEdge(false)
-clawCooldownPanel.text = clawCooldownPanel:CreateFontString(nil, 'OVERLAY')
-clawCooldownPanel.text:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-clawCooldownPanel.text:SetAllPoints(clawCooldownPanel)
-clawCooldownPanel.text:SetJustifyH('CENTER')
-clawCooldownPanel.text:SetJustifyV('CENTER')
-local clawInterruptPanel = CreateFrame('Frame', 'clawInterruptPanel', UIParent)
-clawInterruptPanel:SetFrameStrata('BACKGROUND')
-clawInterruptPanel:SetSize(64, 64)
-clawInterruptPanel:SetMovable(true)
-clawInterruptPanel:SetUserPlaced(true)
-clawInterruptPanel:RegisterForDrag('LeftButton')
-clawInterruptPanel:SetScript('OnDragStart', clawInterruptPanel.StartMoving)
-clawInterruptPanel:SetScript('OnDragStop', clawInterruptPanel.StopMovingOrSizing)
-clawInterruptPanel:Hide()
-clawInterruptPanel.icon = clawInterruptPanel:CreateTexture(nil, 'BACKGROUND')
-clawInterruptPanel.icon:SetAllPoints(clawInterruptPanel)
-clawInterruptPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
-clawInterruptPanel.border = clawInterruptPanel:CreateTexture(nil, 'ARTWORK')
-clawInterruptPanel.border:SetAllPoints(clawInterruptPanel)
-clawInterruptPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-clawInterruptPanel.swipe = CreateFrame('Cooldown', nil, clawInterruptPanel, 'CooldownFrameTemplate')
-clawInterruptPanel.swipe:SetAllPoints(clawInterruptPanel)
-clawInterruptPanel.swipe:SetDrawBling(false)
-clawInterruptPanel.swipe:SetDrawEdge(false)
-local clawExtraPanel = CreateFrame('Frame', 'clawExtraPanel', UIParent)
-clawExtraPanel:SetFrameStrata('BACKGROUND')
-clawExtraPanel:SetSize(64, 64)
-clawExtraPanel:SetMovable(true)
-clawExtraPanel:SetUserPlaced(true)
-clawExtraPanel:RegisterForDrag('LeftButton')
-clawExtraPanel:SetScript('OnDragStart', clawExtraPanel.StartMoving)
-clawExtraPanel:SetScript('OnDragStop', clawExtraPanel.StopMovingOrSizing)
-clawExtraPanel:Hide()
-clawExtraPanel.icon = clawExtraPanel:CreateTexture(nil, 'BACKGROUND')
-clawExtraPanel.icon:SetAllPoints(clawExtraPanel)
-clawExtraPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
-clawExtraPanel.border = clawExtraPanel:CreateTexture(nil, 'ARTWORK')
-clawExtraPanel.border:SetAllPoints(clawExtraPanel)
-clawExtraPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-
 -- Start AoE
 
 Player.target_modes = {
@@ -632,7 +516,7 @@ function Ability:Usable(seconds, pool)
 	return self:Ready(seconds)
 end
 
-function Ability:Remains(offGCD)
+function Ability:Remains()
 	if self:Casting() or self:Traveling() > 0 then
 		return self:Duration()
 	end
@@ -645,10 +529,15 @@ function Ability:Remains(offGCD)
 			if expires == 0 then
 				return 600 -- infinite duration
 			end
-			return max(0, expires - Player.ctime - (offGCD and 0 or Player.execute_remains))
+			return max(0, expires - Player.ctime - (self.off_gcd and 0 or Player.execute_remains))
 		end
 	end
 	return 0
+end
+
+function Ability:Expiring(seconds)
+	local remains = self:Remains()
+	return remains > 0 and remains < (seconds or Player.gcd)
 end
 
 function Ability:Refreshable(...)
@@ -692,7 +581,7 @@ function Ability:Traveling(all)
 end
 
 function Ability:TravelTime()
-	return Target.estimated_range / self.velocity
+	return Target.estimated_range / self.velocity + (self.travel_delay or 0)
 end
 
 function Ability:Ticking()
@@ -915,6 +804,9 @@ end
 
 function Ability:CastSuccess(dstGUID)
 	self.last_used = Player.time
+	if self.ignore_cast then
+		return
+	end
 	Player.last_ability = self
 	if self.triggers_gcd then
 		Player.previous_gcd[10] = nil
@@ -965,6 +857,13 @@ function Ability:CastLanded(dstGUID, event, missType)
 		self.range_est_start = nil
 	elseif self.max_range < Target.estimated_range then
 		Target.estimated_range = self.max_range
+	end
+	if Opt.auto_aoe and self.auto_aoe then
+		if event == 'SPELL_MISSED' and (missType == 'EVADE' or (missType == 'IMMUNE' and not self.ignore_immune)) then
+			AutoAoe:Remove(dstGUID)
+		elseif event == self.auto_aoe.trigger or (self.auto_aoe.trigger == 'SPELL_AURA_APPLIED' and event == 'SPELL_AURA_REFRESH') then
+			self:RecordTargetHit(dstGUID)
+		end
 	end
 	if Opt.previous and Opt.miss_effect and event == 'SPELL_MISSED' and clawPreviousPanel.ability == self then
 		clawPreviousPanel.border:SetTexture(ADDON_PATH .. 'misseffect.blp')
@@ -1371,7 +1270,7 @@ local Shadowmeld = Ability:Add(58984, true, true)
 local Thorns = Ability:Add(305497, true, true)
 Thorns.buff_duration = 12
 Thorns.cooldown_duration = 45
--- Trinket Effects
+-- Trinket effects
 
 -- End Abilities
 
@@ -1666,12 +1565,14 @@ function Player:Update()
 		self.cast.ability = Abilities.bySpellId[spellId]
 		self.cast.start = start / 1000
 		self.cast.ends = ends / 1000
+		self.cast.remains = self.cast.ends - self.ctime
 	else
 		self.cast.ability = nil
 		self.cast.start = 0
 		self.cast.ends = 0
+		self.cast.remains = 0
 	end
-	self.execute_remains = max(self.cast.ends - self.ctime, self.gcd_remains)
+	self.execute_remains = max(self.cast.remains, self.gcd_remains)
 	speed_mh, speed_oh = UnitAttackSpeed('player')
 	self.swing.mh.speed = speed_mh or 0
 	self.swing.oh.speed = speed_oh or 0
@@ -1788,21 +1689,31 @@ function Target:Update()
 	self.stunnable = true
 	self.classification = UnitClassification('target')
 	self.player = UnitIsPlayer('target')
-	self.level = UnitLevel('target')
 	self.hostile = UnitCanAttack('player', 'target') and not UnitIsDead('target')
+	self.level = UnitLevel('target')
+	if self.level == -1 then
+		self.level = Player.level + 3
+	end
 	if not self.player and self.classification ~= 'minus' and self.classification ~= 'normal' then
-		if self.level == -1 or (Player.instance == 'party' and self.level >= Player.level + 2) then
-			self.boss = true
-			self.stunnable = false
-		elseif Player.instance == 'raid' or (self.health.max > Player.health.max * 10) then
-			self.stunnable = false
-		end
+		self.boss = self.level >= (Player.level + 3)
+		self.stunnable = self.level < (Player.level + 2)
 	end
 	if self.hostile or Opt.always_on then
 		UI:UpdateCombat()
 		clawPanel:Show()
 		return true
 	end
+	UI:Disappear()
+end
+
+function Target:TimeToPct(pct)
+	if self.health.pct <= pct then
+		return 0
+	end
+	if self.health.loss_per_sec <= 0 then
+		return self.timeToDieMax
+	end
+	return min(self.timeToDieMax, (self.health.current - (self.health.max * (pct / 100))) / self.health.loss_per_sec)
 end
 
 function Target:Stunned()
@@ -2793,7 +2704,7 @@ function UI:CreateOverlayGlows()
 			end
 		end
 	end
-	UI:UpdateGlowColorAndScale()
+	self:UpdateGlowColorAndScale()
 end
 
 function UI:UpdateGlows()
@@ -2829,6 +2740,18 @@ end
 
 function UI:UpdateDraggable()
 	local draggable = not (Opt.locked or Opt.snap or Opt.aoe)
+	clawPanel:SetMovable(not Opt.snap)
+	clawPreviousPanel:SetMovable(not Opt.snap)
+	clawCooldownPanel:SetMovable(not Opt.snap)
+	clawInterruptPanel:SetMovable(not Opt.snap)
+	clawExtraPanel:SetMovable(not Opt.snap)
+	if not Opt.snap then
+		clawPanel:SetUserPlaced(true)
+		clawPreviousPanel:SetUserPlaced(true)
+		clawCooldownPanel:SetUserPlaced(true)
+		clawInterruptPanel:SetUserPlaced(true)
+		clawExtraPanel:SetUserPlaced(true)
+	end
 	clawPanel:EnableMouse(draggable or Opt.aoe)
 	clawPanel.button:SetShown(Opt.aoe)
 	clawPreviousPanel:EnableMouse(draggable)
@@ -2961,7 +2884,13 @@ function UI:Disappear()
 	Player.cd = nil
 	Player.interrupt = nil
 	Player.extra = nil
-	UI:UpdateGlows()
+	self:UpdateGlows()
+end
+
+function UI:Reset()
+	clawPanel:ClearAllPoints()
+	clawPanel:SetPoint('CENTER', 0, -169)
+	self:SnapAllPanels()
 end
 
 function UI:UpdateDisplay()
@@ -3101,12 +3030,12 @@ function Events:ADDON_LOADED(name)
 		UI:UpdateAlpha()
 		UI:UpdateScale()
 		if firstRun then
-			print('It looks like this is your first time running ' .. ADDON .. ', why don\'t you take some time to familiarize yourself with the commands?')
-			print('Type |cFFFFD000' .. SLASH_Claw1 .. '|r for a list of commands.')
+			log('It looks like this is your first time running ' .. ADDON .. ', why don\'t you take some time to familiarize yourself with the commands?')
+			log('Type |cFFFFD000' .. SLASH_Claw1 .. '|r for a list of commands.')
 			UI:SnapAllPanels()
 		end
 		if UnitLevel('player') < 10 then
-			print('[|cFFFFD000Warning|r] ' .. ADDON .. ' is not designed for players under level 10, and almost certainly will not operate properly!')
+			log('[|cFFFFD000Warning|r]', ADDON, 'is not designed for players under level 10, and almost certainly will not operate properly!')
 		end
 	end
 end
@@ -3126,6 +3055,7 @@ CombatEvent.TRIGGER = function(timeStamp, event, _, srcGUID, _, _, _, dstGUID, _
 	   e == 'SPELL_CAST_SUCCESS' or
 	   e == 'SPELL_CAST_FAILED' or
 	   e == 'SPELL_DAMAGE' or
+	   e == 'SPELL_ABSORBED' or
 	   e == 'SPELL_ENERGIZE' or
 	   e == 'SPELL_PERIODIC_DAMAGE' or
 	   e == 'SPELL_MISSED' or
@@ -3182,7 +3112,7 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 
 	local ability = spellId and Abilities.bySpellId[spellId]
 	if not ability then
-		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', event, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
+		--log(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', event, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
 		return
 	end
 
@@ -3210,13 +3140,6 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 			ability.last_gained = Player.time
 		end
 		return -- ignore buffs beyond here
-	end
-	if Opt.auto_aoe then
-		if event == 'SPELL_MISSED' and (missType == 'EVADE' or (missType == 'IMMUNE' and not ability.ignore_immune)) then
-			AutoAoe:Remove(dstGUID)
-		elseif ability.auto_aoe and (event == ability.auto_aoe.trigger or ability.auto_aoe.trigger == 'SPELL_AURA_APPLIED' and event == 'SPELL_AURA_REFRESH') then
-			ability:RecordTargetHit(dstGUID)
-		end
 	end
 	if event == 'SPELL_DAMAGE' or event == 'SPELL_ABSORBED' or event == 'SPELL_MISSED' or event == 'SPELL_AURA_APPLIED' or event == 'SPELL_AURA_REFRESH' then
 		ability:CastLanded(dstGUID, event, missType)
@@ -3318,6 +3241,9 @@ function Events:PLAYER_REGEN_ENABLED()
 	end
 	if Opt.auto_aoe then
 		AutoAoe:Clear()
+	end
+	if APL[Player.spec].precombat_variables then
+		APL[Player.spec]:precombat_variables()
 	end
 end
 
@@ -3485,7 +3411,7 @@ local function Status(desc, opt, ...)
 	else
 		opt_view = opt and '|cFF00C000On|r' or '|cFFC00000Off|r'
 	end
-	print(ADDON, '-', desc .. ':', opt_view, ...)
+	log(desc .. ':', opt_view, ...)
 end
 
 SlashCmdList[ADDON] = function(msg, editbox)
@@ -3511,7 +3437,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 			else
 				Opt.snap = false
 				Opt.locked = false
-				clawPanel:ClearAllPoints()
+				UI:Reset()
 			end
 			UI:UpdateDraggable()
 			UI.OnResourceFrameShow()
@@ -3756,9 +3682,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		return Status('Show DoT multiplier differences in top right corner', Opt.multipliers)
 	end
 	if msg[1] == 'reset' then
-		clawPanel:ClearAllPoints()
-		clawPanel:SetPoint('CENTER', 0, -169)
-		UI:SnapAllPanels()
+		UI:Reset()
 		return Status('Position has been reset to', 'default')
 	end
 	print(ADDON, '(version: |cFFFFD000' .. GetAddOnMetadata(ADDON, 'Version') .. '|r) - Commands:')
