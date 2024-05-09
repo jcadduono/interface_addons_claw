@@ -60,7 +60,7 @@
 								<Anchor point="BOTTOMRIGHT" relativeTo="$parent" relativePoint="BOTTOMRIGHT" x="-2.5" y="3" />
 							</Anchors>
 						</FontString>
-						<FontString parentKey="center" font="Fonts\FRIZQT__.TTF" outline="NORMAL" justifyV="CENTER" justifyH="CENTER" setAllPoints="true">
+						<FontString parentKey="center" font="Fonts\FRIZQT__.TTF" outline="NORMAL" justifyV="MIDDLE" justifyH="CENTER" setAllPoints="true">
 							<FontHeight val="12" />
 						</FontString>
 					</Layer>
@@ -123,7 +123,7 @@
 				</Texture>
 			</Layer>
 			<Layer level="OVERLAY">
-				<FontString parentKey="text" font="Fonts\FRIZQT__.TTF" outline="NORMAL" justifyV="CENTER" justifyH="CENTER" setAllPoints="true">
+				<FontString parentKey="text" font="Fonts\FRIZQT__.TTF" outline="NORMAL" justifyV="MIDDLE" justifyH="CENTER" setAllPoints="true">
 					<FontHeight val="12" />
 				</FontString>
 			</Layer>

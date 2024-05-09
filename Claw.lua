@@ -122,7 +122,7 @@ local function InitOpts()
 		cd_ttd = 8,
 		pot = false,
 		trinket = true,
-		heal_threshold = 65,
+		heal = 60,
 		multipliers = true,
 	})
 end
@@ -210,37 +210,51 @@ local Player = {
 	execute_remains = 0,
 	haste_factor = 1,
 	moving = false,
+	movement_speed = 100,
 	health = {
 		current = 0,
 		max = 100,
 		pct = 100,
+	},
+	mana = {
+		base = 0,
+		current = 0,
+		max = 100,
+		regen = 0,
+	},
+	energy = {
+		current = 0,
+		deficit = 100,
+		max = 100,
+		regen = 0,
+	},
+	rage = {
+		current = 0,
+		deficit = 100,
+		max = 100,
+	},
+	combo_points = {
+		current = 0,
+		deficit = 5,
+		max = 5,
 	},
 	cast = {
 		start = 0,
 		ends = 0,
 		remains = 0,
 	},
-	mana = {
-		current = 0,
-		deficit = 0,
-		max = 100,
-		regen = 0,
-	},
-	energy = {
-		current = 0,
-		deficit = 0,
-		max = 100,
-		regen = 0,
-	},
-	rage = {
-		current = 0,
-		deficit = 0,
-		max = 100,
-	},
-	combo_points = {
-		current = 0,
-		deficit = 0,
-		max = 5,
+	channel = {
+		chained = false,
+		start = 0,
+		ends = 0,
+		remains = 0,
+		tick_count = 0,
+		tick_interval = 0,
+		ticks = 0,
+		ticks_remain = 0,
+		ticks_extra = 0,
+		interruptible = false,
+		early_chainable = false,
 	},
 	threat = {
 		status = 0,
@@ -263,6 +277,8 @@ local Player = {
 	set_bonus = {
 		t29 = 0, -- Lost Landcaller's Vesture
 		t30 = 0, -- Strands of the Autumn Blaze
+		t31 = 0, -- Benevolent Embersage's Guidance
+		t32 = 0, -- Strands of the Autumn Blaze (Awakened)
 	},
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
@@ -276,10 +292,27 @@ local Player = {
 	berserk_up = false,
 }
 
+-- base mana pool max for each level
+Player.BaseMana = {
+	260,	270,	285,	300,	310,	--  5
+	330,	345,	360,	380,	400,	-- 10
+	430,	465,	505,	550,	595,	-- 15
+	645,	700,	760,	825,	890,	-- 20
+	965,	1050,	1135,	1230,	1335,	-- 25
+	1445,	1570,	1700,	1845,	2000,	-- 30
+	2165,	2345,	2545,	2755,	2990,	-- 35
+	3240,	3510,	3805,	4125,	4470,	-- 40
+	4845,	5250,	5690,	6170,	6685,	-- 45
+	7245,	7855,	8510,	9225,	10000,	-- 50
+	11745,	13795,	16205,	19035,	22360,	-- 55
+	26265,	30850,	36235,	42565,	50000,	-- 60
+	58730,	68985,	81030,	95180,	111800,	-- 65
+	131325,	154255,	181190,	212830,	250000,	-- 70
+}
+
 -- current target information
 local Target = {
 	boss = false,
-	guid = 0,
 	health = {
 		current = 0,
 		loss_per_sec = 0,
@@ -289,6 +322,16 @@ local Target = {
 	},
 	hostile = false,
 	estimated_range = 30,
+}
+
+-- target dummy unit IDs (count these units as bosses)
+Target.Dummies = {
+	[194643] = true,
+	[194648] = true,
+	[198594] = true,
+	[194644] = true,
+	[194649] = true,
+	[197833] = true,
 }
 
 -- Start AoE
@@ -655,7 +698,7 @@ function Ability:Stack()
 end
 
 function Ability:ManaCost()
-	return self.mana_cost > 0 and (self.mana_cost / 100 * Player.mana.max) or 0
+	return self.mana_cost > 0 and (self.mana_cost / 100 * Player.mana.base) or 0
 end
 
 function Ability:EnergyCost()
@@ -720,7 +763,7 @@ function Ability:Casting()
 end
 
 function Ability:Channeling()
-	return UnitChannelInfo('player') == self.name
+	return Player.channel.ability == self
 end
 
 function Ability:CastTime()
@@ -907,7 +950,7 @@ function Ability:ApplyAura(guid)
 	return aura
 end
 
-function Ability:RefreshAura(guid)
+function Ability:RefreshAura(guid, extend)
 	if AutoAoe.blacklist[guid] then
 		return
 	end
@@ -916,17 +959,17 @@ function Ability:RefreshAura(guid)
 		return self:ApplyAura(guid)
 	end
 	local duration = self:Duration(self.next_combo_points, self.next_applied_by)
-	aura.expires = max(aura.expires, Player.time + min(duration * (self.no_pandemic and 1.0 or 1.3), (aura.expires - Player.time) + duration))
+	aura.expires = max(aura.expires, Player.time + min(duration * (self.no_pandemic and 1.0 or 1.3), (aura.expires - Player.time) + (extend or duration)))
 	if self.next_multiplier then
 		aura.multiplier = self.next_multiplier
 	end
 	return aura
 end
 
-function Ability:RefreshAuraAll()
+function Ability:RefreshAuraAll(extend)
 	local duration = self:Duration(self.next_combo_points, self.next_applied_by)
 	for guid, aura in next, self.aura_targets do
-		aura.expires = max(aura.expires, Player.time + min(duration * (self.no_pandemic and 1.0 or 1.3), (aura.expires - Player.time) + duration))
+		aura.expires = max(aura.expires, Player.time + min(duration * (self.no_pandemic and 1.0 or 1.3), (aura.expires - Player.time) + (extend or duration)))
 		if self.next_multiplier then
 			aura.multiplier = self.next_multiplier
 		end
@@ -999,7 +1042,9 @@ Shred.requires_form = FORM.CAT
 ------ Talents
 local CircleOfLifeAndDeath = Ability:Add(391969, true, true) -- Guardian and Restoration
 local ConvokeTheSpirits = Ability:Add(391528, false, true)
+ConvokeTheSpirits.buff_duration = 4
 ConvokeTheSpirits.cooldown_duration = 120
+ConvokeTheSpirits.tick_interval = 0.25
 local FrenziedRegeneration = Ability:Add(22842, true, true)
 FrenziedRegeneration.buff_duration = 3
 FrenziedRegeneration.cooldown_duration = 36
@@ -1134,6 +1179,7 @@ AdaptiveSwarm.hot.hasted_ticks = true
 AdaptiveSwarm.hot.learn_spellId = 391888
 AdaptiveSwarm.hot:SetVelocity(12)
 AdaptiveSwarm.hot:TrackAuras()
+local AshamanesGuidance = Ability:Add(391548, false, true)
 local Berserk = Ability:Add(106951, true, true)
 Berserk.buff_duration = 20
 Berserk.off_gcd = true
@@ -1271,7 +1317,8 @@ local Thorns = Ability:Add(305497, true, true)
 Thorns.buff_duration = 12
 Thorns.cooldown_duration = 45
 -- Trinket effects
-
+local SolarMaelstrom = Ability:Add(422146, false, true) -- Belor'relos
+SolarMaelstrom:AutoAoe()
 -- End Abilities
 
 -- Start Inventory Items
@@ -1341,14 +1388,28 @@ function InventoryItem:Usable(seconds)
 end
 
 -- Inventory Items
-
+local Healthstone = InventoryItem:Add(5512)
 -- Equipment
+local DreambinderLoomOfTheGreatCycle = InventoryItem:Add(208616)
+DreambinderLoomOfTheGreatCycle.cooldown_duration = 120
+DreambinderLoomOfTheGreatCycle.off_gcd = false
+local IridalTheEarthsMaster = InventoryItem:Add(208321)
+IridalTheEarthsMaster.cooldown_duration = 180
+IridalTheEarthsMaster.off_gcd = false
 local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
 Trinket.BeaconToTheBeyond = InventoryItem:Add(203963)
 Trinket.BeaconToTheBeyond.cooldown_duration = 150
+Trinket.BeaconToTheBeyond.off_gcd = false
+Trinket.BelorrelosTheSuncaller = InventoryItem:Add(207172)
+Trinket.BelorrelosTheSuncaller.cast_spell = SolarMaelstrom
+Trinket.BelorrelosTheSuncaller.cooldown_duration = 120
+Trinket.BelorrelosTheSuncaller.off_gcd = false
 Trinket.DragonfireBombDispenser = InventoryItem:Add(202610)
 Trinket.ElementiumPocketAnvil = InventoryItem:Add(202617)
+Trinket.NymuesUnravelingSpindle = InventoryItem:Add(208615)
+Trinket.NymuesUnravelingSpindle.cooldown_duration = 120
+Trinket.NymuesUnravelingSpindle.off_gcd = false
 -- End Inventory Items
 
 -- Start Abilities Functions
@@ -1387,6 +1448,14 @@ end
 
 function Player:Stealthed()
 	return Prowl:Up() or (Shadowmeld.known and Shadowmeld:Up()) or (IncarnationAvatarOfAshamane.known and self.berserk_up)
+end
+
+function Player:ManaTimeToMax()
+	local deficit = self.mana.max - self.mana.current
+	if deficit <= 0 then
+		return 0
+	end
+	return deficit / self.mana.regen
 end
 
 function Player:EnergyTimeToMax(energy)
@@ -1484,11 +1553,6 @@ function Player:UpdateTime(timeStamp)
 end
 
 function Player:UpdateKnown()
-	self.mana.max = UnitPowerMax('player', 0)
-	self.rage.max = UnitPowerMax('player', 1)
-	self.energy.max = UnitPowerMax('player', 3)
-	self.combo_points.max = UnitPowerMax('player', 4)
-
 	local node
 	local configId = C_ClassTalents.GetActiveConfigID()
 	for _, ability in next, Abilities.all do
@@ -1539,6 +1603,52 @@ function Player:UpdateKnown()
 	end
 end
 
+function Player:UpdateChannelInfo()
+	local channel = self.channel
+	local _, _, _, start, ends, _, _, spellId = UnitChannelInfo('player')
+	if not spellId then
+		channel.ability = nil
+		channel.chained = false
+		channel.start = 0
+		channel.ends = 0
+		channel.tick_count = 0
+		channel.tick_interval = 0
+		channel.ticks = 0
+		channel.ticks_remain = 0
+		channel.ticks_extra = 0
+		channel.interrupt_if = nil
+		channel.interruptible = false
+		channel.early_chain_if = nil
+		channel.early_chainable = false
+		return
+	end
+	local ability = Abilities.bySpellId[spellId]
+	if ability then
+		if ability == channel.ability then
+			channel.chained = true
+		end
+		channel.interrupt_if = ability.interrupt_if
+	else
+		channel.interrupt_if = nil
+	end
+	channel.ability = ability
+	channel.ticks = 0
+	channel.start = start / 1000
+	channel.ends = ends / 1000
+	if ability and ability.tick_interval then
+		channel.tick_interval = ability:TickTime()
+	else
+		channel.tick_interval = channel.ends - channel.start
+	end
+	channel.tick_count = (channel.ends - channel.start) / channel.tick_interval
+	if channel.chained then
+		channel.ticks_extra = channel.tick_count - floor(channel.tick_count)
+	else
+		channel.ticks_extra = 0
+	end
+	channel.ticks_remain = channel.tick_count
+end
+
 function Player:UpdateThreat()
 	local _, status, pct
 	_, status, pct = UnitDetailedThreatSituation('player', 'target')
@@ -1554,7 +1664,7 @@ function Player:UpdateThreat()
 end
 
 function Player:Update()
-	local _, start, ends, duration, spellId, speed_mh, speed_oh
+	local _, start, ends, duration, spellId, speed, max_speed, speed_mh, speed_oh
 	self.main =  nil
 	self.cd = nil
 	self.interrupt = nil
@@ -1577,14 +1687,10 @@ function Player:Update()
 		self.cast.remains = 0
 	end
 	self.execute_remains = max(self.cast.remains, self.gcd_remains)
-	speed_mh, speed_oh = UnitAttackSpeed('player')
-	self.swing.mh.speed = speed_mh or 0
-	self.swing.oh.speed = speed_oh or 0
-	self.swing.mh.remains = max(0, self.swing.mh.last + self.swing.mh.speed - self.time)
-	self.swing.oh.remains = max(0, self.swing.oh.last + self.swing.oh.speed - self.time)
-	self.moving = GetUnitSpeed('player') ~= 0
-	self:UpdateThreat()
-
+	if self.channel.tick_count > 1 then
+		self.channel.ticks = ((self.ctime - self.channel.start) / self.channel.tick_interval) - self.channel.ticks_extra
+		self.channel.ticks_remain = (self.channel.ends - self.ctime) / self.channel.tick_interval
+	end
 	self.mana.regen = GetPowerRegenForPowerType(0)
 	self.mana.current = UnitPower('player', 0) + (self.mana.regen * self.execute_remains)
 	if self.cast.ability then
@@ -1605,8 +1711,15 @@ function Player:Update()
 		self.rage.current = UnitPower('player', 1)
 		self.rage.deficit = self.rage.max - self.rage.current
 	end
-	self.berserk_remains = self.bs_inc:Remains()
-	self.berserk_up = self.berserk_remains > 0
+	speed_mh, speed_oh = UnitAttackSpeed('player')
+	self.swing.mh.speed = speed_mh or 0
+	self.swing.oh.speed = speed_oh or 0
+	self.swing.mh.remains = max(0, self.swing.mh.last + self.swing.mh.speed - self.time)
+	self.swing.oh.remains = max(0, self.swing.oh.last + self.swing.oh.speed - self.time)
+	speed, max_speed = GetUnitSpeed('player')
+	self.moving = speed ~= 0
+	self.movement_speed = max_speed / 7 * 100
+	self:UpdateThreat()
 
 	trackAuras:Purge()
 	if Opt.auto_aoe then
@@ -1616,7 +1729,17 @@ function Player:Update()
 		AutoAoe:Purge()
 	end
 
+	self.berserk_remains = self.bs_inc:Remains()
+	self.berserk_up = self.berserk_remains > 0
+
 	self.main = APL[self.spec]:Main()
+
+	if self.channel.interrupt_if then
+		self.channel.interruptible = self.channel.ability ~= self.main and self.channel.interrupt_if()
+	end
+	if self.channel.early_chain_if then
+		self.channel.early_chainable = self.channel.ability == self.main and self.channel.early_chain_if()
+	end
 end
 
 function Player:Init()
@@ -1629,7 +1752,6 @@ function Player:Init()
 	clawPreviousPanel.ability = nil
 	self.guid = UnitGUID('player')
 	self.name = UnitName('player')
-	self.level = UnitLevel('player')
 	_, self.instance = IsInInstance()
 	Events:GROUP_ROSTER_UPDATE()
 	Events:PLAYER_SPECIALIZATION_CHANGED('player')
@@ -1668,6 +1790,7 @@ function Target:Update()
 	local guid = UnitGUID('target')
 	if not guid then
 		self.guid = nil
+		self.uid = nil
 		self.boss = false
 		self.stunnable = true
 		self.classification = 'normal'
@@ -1687,6 +1810,7 @@ function Target:Update()
 	end
 	if guid ~= self.guid then
 		self.guid = guid
+		self.uid = tonumber(guid:match('^%w+-%d+-%d+-%d+-%d+-(%d+)') or 0)
 		self:UpdateHealth(true)
 	end
 	self.boss = false
@@ -1701,6 +1825,9 @@ function Target:Update()
 	if not self.player and self.classification ~= 'minus' and self.classification ~= 'normal' then
 		self.boss = self.level >= (Player.level + 3)
 		self.stunnable = self.level < (Player.level + 2)
+	end
+	if self.Dummies[self.uid] then
+		self.boss = true
 	end
 	if self.hostile or Opt.always_on then
 		UI:UpdateCombat()
@@ -1721,10 +1848,7 @@ function Target:TimeToPct(pct)
 end
 
 function Target:Stunned()
-	if MightyBash:Up() or Maim:Up() then
-		return true
-	end
-	return false
+	return MightyBash:Up() or Maim:Up()
 end
 
 -- End Target Functions
@@ -2025,6 +2149,14 @@ function Maul:RageCost()
 end
 Raze.RageCost = Maul.RageCost
 
+function ConvokeTheSpirits:Duration()
+	local duration = self.buff_duration
+	if AshamanesGuidance.known then
+		duration = duration * (1 - 0.25)
+	end
+	return duration
+end
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -2125,7 +2257,7 @@ actions+=/run_action_list,name=builder,if=combo_points<5
 	end
 	self:cooldown()
 	if Player.health.pct < 85 and not Player:Stealthed() then
-		if Regrowth:Usable() and (Player.health.pct <= Opt.heal_threshold or Player.combo_points.current >= 5) and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() then
+		if Regrowth:Usable() and (Player.health.pct <= Opt.heal or Player.combo_points.current >= 5) and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() then
 			UseExtra(Regrowth)
 		elseif NaturesVigil:Usable() then
 			UseExtra(NaturesVigil)
@@ -2423,7 +2555,7 @@ actions+=/potion,if=((talent.heart_of_the_wild.enabled&buff.heart_of_the_wild.up
 actions+=/run_action_list,name=catweave,if=(target.cooldown.pause_action.remains|time>=30)&druid.catweave_bear=1&buff.tooth_and_claw.remains>1.5&(buff.incarnation_guardian_of_ursoc.down&buff.berserk_bear.down)&(cooldown.thrash_bear.remains>0&cooldown.mangle.remains>0&dot.moonfire.remains>=2)|(buff.cat_form.up&energy>25&druid.catweave_bear=1&buff.tooth_and_claw.remains>1.5)|(buff.heart_of_the_wild.up&energy>90&druid.catweave_bear=1&buff.tooth_and_claw.remains>1.5)
 actions+=/run_action_list,name=bear
 ]]
-	if Player.health.pct <= Opt.heal_threshold then
+	if Player.health.pct <= Opt.heal then
 		if FrenziedRegeneration:Usable() and FrenziedRegeneration:Down() and FrenziedRegeneration:ChargesFractional() >= 1.5 then
 			UseExtra(FrenziedRegeneration)
 		end
@@ -2607,11 +2739,14 @@ APL.Interrupt = function(self)
 	if SolarBeam:Usable() then
 		return SolarBeam
 	end
+	if MightyBash:Usable() then
+		return MightyBash
+	end
 	if Maim:Usable() then
 		return Maim
 	end
-	if MightyBash:Usable() then
-		return MightyBash
+	if IncapacitatingRoar:Usable() then
+		return IncapacitatingRoar
 	end
 	if Typhoon:Usable() then
 		return Typhoon
@@ -2900,6 +3035,7 @@ end
 function UI:UpdateDisplay()
 	Timer.display = 0
 	local border, dim, dim_cd, text_center, text_cd, text_bl, text_tr
+	local channel = Player.channel
 
 	if Opt.dimmer then
 		dim = not ((not Player.main) or
@@ -2931,6 +3067,23 @@ function UI:UpdateDisplay()
 		if deficit > 0 then
 			text_center = format('POOL\n%d', deficit)
 			dim = Opt.dimmer
+		end
+	end
+	if channel.ability and not channel.ability.ignore_channel and channel.tick_count > 0 then
+		dim = Opt.dimmer
+		if channel.tick_count > 1 then
+			local ctime = GetTime()
+			channel.ticks = ((ctime - channel.start) / channel.tick_interval) - channel.ticks_extra
+			channel.ticks_remain = (channel.ends - ctime) / channel.tick_interval
+			text_center = format('TICKS\n%.1f', max(0, channel.ticks))
+			if channel.ability == Player.main then
+				if channel.ticks_remain < 1 or channel.early_chainable then
+					dim = false
+					text_center = '|cFF00FF00CHAIN'
+				end
+			elseif channel.interruptible then
+				dim = false
+			end
 		end
 	end
 	if Player.berserk_up then
@@ -3172,9 +3325,20 @@ end
 
 function Events:UNIT_HEALTH(unitId)
 	if unitId == 'player' then
-		Player.health.current = UnitHealth('player')
-		Player.health.max = UnitHealthMax('player')
+		Player.health.current = UnitHealth(unitId)
+		Player.health.max = UnitHealthMax(unitId)
 		Player.health.pct = Player.health.current / Player.health.max * 100
+	end
+end
+
+function Events:UNIT_MAXPOWER(unitId)
+	if unitId == 'player' then
+		Player.level = UnitLevel(unitId)
+		Player.mana.base = Player.BaseMana[Player.level]
+		Player.mana.max = UnitPowerMax(unitId, 0)
+		Player.rage.max = UnitPowerMax(unitId, 1)
+		Player.energy.max = UnitPowerMax(unitId, 3)
+		Player.combo_points.max = UnitPowerMax(unitId, 4)
 	end
 end
 
@@ -3222,6 +3386,14 @@ function Events:UNIT_SPELLCAST_SUCCEEDED(unitId, castGUID, spellId)
 		ability.next_castGUID = castGUID
 	end
 end
+
+function Events:UNIT_SPELLCAST_CHANNEL_UPDATE(unitId, castGUID, spellId)
+	if unitId == 'player' then
+		Player:UpdateChannelInfo()
+	end
+end
+Events.UNIT_SPELLCAST_CHANNEL_START = Events.UNIT_SPELLCAST_CHANNEL_UPDATE
+Events.UNIT_SPELLCAST_CHANNEL_STOP = Events.UNIT_SPELLCAST_CHANNEL_UPDATE
 
 function Events:PLAYER_REGEN_DISABLED()
 	Player:UpdateTime()
@@ -3281,6 +3453,8 @@ function Events:PLAYER_EQUIPMENT_CHANGED()
 
 	Player.set_bonus.t29 = (Player:Equipped(200351) and 1 or 0) + (Player:Equipped(200353) and 1 or 0) + (Player:Equipped(200354) and 1 or 0) + (Player:Equipped(200355) and 1 or 0) + (Player:Equipped(200356) and 1 or 0)
 	Player.set_bonus.t30 = (Player:Equipped(202513) and 1 or 0) + (Player:Equipped(202514) and 1 or 0) + (Player:Equipped(202515) and 1 or 0) + (Player:Equipped(202516) and 1 or 0) + (Player:Equipped(202518) and 1 or 0)
+	Player.set_bonus.t31 = (Player:Equipped(207252) and 1 or 0) + (Player:Equipped(207253) and 1 or 0) + (Player:Equipped(207254) and 1 or 0) + (Player:Equipped(207255) and 1 or 0) + (Player:Equipped(207257) and 1 or 0)
+	Player.set_bonus.t32 = (Player:Equipped(217191) and 1 or 0) + (Player:Equipped(217192) and 1 or 0) + (Player:Equipped(217193) and 1 or 0) + (Player:Equipped(217194) and 1 or 0) + (Player:Equipped(217195) and 1 or 0)
 
 	Player:ResetSwing(true, true)
 	Player:UpdateKnown()
@@ -3297,6 +3471,7 @@ function Events:PLAYER_SPECIALIZATION_CHANGED(unitId)
 	Events:UPDATE_SHAPESHIFT_FORM()
 	Events:PLAYER_REGEN_ENABLED()
 	Events:UNIT_HEALTH('player')
+	Events:UNIT_MAXPOWER('player')
 	UI.OnResourceFrameShow()
 	Target:Update()
 	Player:Update()
@@ -3675,15 +3850,15 @@ SlashCmdList[ADDON] = function(msg, editbox)
 	end
 	if startsWith(msg[1], 'he') then
 		if msg[2] then
-			Opt.heal_threshold = clamp(tonumber(msg[2]) or 65, 0, 100)
+			Opt.heal = clamp(tonumber(msg[2]) or 60, 0, 100)
 		end
-		return Status('Health threshold to recommend Frenzied Regeneration and Regrowth at', Opt.heal_threshold .. '%')
+		return Status('Health percentage threshold to recommend self healing spells', Opt.heal .. '%')
 	end
 	if startsWith(msg[1], 'mu') then
 		if msg[2] then
 			Opt.multipliers = msg[2] == 'on'
 		end
-		return Status('Show DoT multiplier differences in top right corner', Opt.multipliers)
+		return Status('Show DoT multiplier differences (top right)', Opt.multipliers)
 	end
 	if msg[1] == 'reset' then
 		UI:Reset()
@@ -3713,8 +3888,8 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'ttd |cFFFFD000[seconds]|r  - minimum enemy lifetime to use cooldowns on (default is 8 seconds, ignored on bosses)',
 		'pot |cFF00C000on|r/|cFFC00000off|r - show flasks and battle potions in cooldown UI',
 		'trinket |cFF00C000on|r/|cFFC00000off|r - show on-use trinkets in cooldown UI',
-		'heal |cFFFFD000[health]|r  - health threshold to recommend Frenzied Regeneration and Regrowth at (default is 65%)',
-		'multipliers |cFF00C000on|r/|cFFC00000off|r - show DoT multiplier differences in top right corner',
+		'heal |cFFFFD000[percent]|r - health percentage threshold to recommend self healing spells (default is 60%, 0 to disable)',
+		'multipliers |cFF00C000on|r/|cFFC00000off|r - show DoT multiplier differences (top right)',
 		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
 		print('  ' .. SLASH_Claw1 .. ' ' .. cmd)
