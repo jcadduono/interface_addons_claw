@@ -220,6 +220,7 @@ local Player = {
 		base = 0,
 		current = 0,
 		max = 100,
+		pct = 100,
 		regen = 0,
 	},
 	energy = {
@@ -313,6 +314,7 @@ Player.BaseMana = {
 -- current target information
 local Target = {
 	boss = false,
+	dummy = false,
 	health = {
 		current = 0,
 		loss_per_sec = 0,
@@ -326,12 +328,14 @@ local Target = {
 
 -- target dummy unit IDs (count these units as bosses)
 Target.Dummies = {
+	[189617] = true,
+	[189632] = true,
 	[194643] = true,
-	[194648] = true,
-	[198594] = true,
 	[194644] = true,
+	[194648] = true,
 	[194649] = true,
 	[197833] = true,
+	[198594] = true,
 }
 
 -- Start AoE
@@ -647,6 +651,48 @@ function Ability:Ticking()
 		count = count + 1
 	end
 	return count
+end
+
+function Ability:HighestRemains()
+	local highest
+	if self.traveling then
+		for _, cast in next, self.traveling do
+			if Player.time - cast.start < self.max_range / self.velocity then
+				highest = self:Duration()
+			end
+		end
+	end
+	if self.aura_targets then
+		local remains
+		for _, aura in next, self.aura_targets do
+			remains = max(0, aura.expires - Player.time - Player.execute_remains)
+			if remains > 0 and (not highest or remains > highest) then
+				highest = remains
+			end
+		end
+	end
+	return highest or 0
+end
+
+function Ability:LowestRemains()
+	local lowest
+	if self.traveling then
+		for _, cast in next, self.traveling do
+			if Player.time - cast.start < self.max_range / self.velocity then
+				lowest = self:Duration()
+			end
+		end
+	end
+	if self.aura_targets then
+		local remains
+		for _, aura in next, self.aura_targets do
+			remains = max(0, aura.expires - Player.time - Player.execute_remains)
+			if remains > 0 and (not lowest or remains < lowest) then
+				lowest = remains
+			end
+		end
+	end
+	return lowest or 0
 end
 
 function Ability:TickTime()
@@ -1693,10 +1739,11 @@ function Player:Update()
 	end
 	self.mana.regen = GetPowerRegenForPowerType(0)
 	self.mana.current = UnitPower('player', 0) + (self.mana.regen * self.execute_remains)
-	if self.cast.ability then
+	if self.cast.ability and self.cast.ability.mana_cost > 0 then
 		self.mana.current = self.mana.current - self.cast.ability:ManaCost()
 	end
 	self.mana.current = clamp(self.mana.current, 0, self.mana.max)
+	self.mana.pct = self.mana.current / self.mana.max * 100
 	if self.form == FORM.CAT then
 		self.gcd = 1
 		self.energy.regen = GetPowerRegenForPowerType(3)
@@ -1780,7 +1827,11 @@ function Target:UpdateHealth(reset)
 	self.timeToDieMax = self.health.current / Player.health.max * 10
 	self.health.pct = self.health.max > 0 and (self.health.current / self.health.max * 100) or 100
 	self.health.loss_per_sec = (self.health.history[1] - self.health.current) / 5
-	self.timeToDie = self.health.loss_per_sec > 0 and min(self.timeToDieMax, self.health.current / self.health.loss_per_sec) or self.timeToDieMax
+	self.timeToDie = (
+		(self.dummy and 600) or
+		(self.health.loss_per_sec > 0 and min(self.timeToDieMax, self.health.current / self.health.loss_per_sec)) or
+		self.timeToDieMax
+	)
 end
 
 function Target:Update()
@@ -1792,6 +1843,7 @@ function Target:Update()
 		self.guid = nil
 		self.uid = nil
 		self.boss = false
+		self.dummy = false
 		self.stunnable = true
 		self.classification = 'normal'
 		self.player = false
@@ -1814,6 +1866,7 @@ function Target:Update()
 		self:UpdateHealth(true)
 	end
 	self.boss = false
+	self.dummy = false
 	self.stunnable = true
 	self.classification = UnitClassification('target')
 	self.player = UnitIsPlayer('target')
@@ -1828,6 +1881,7 @@ function Target:Update()
 	end
 	if self.Dummies[self.uid] then
 		self.boss = true
+		self.dummy = true
 	end
 	if self.hostile or Opt.always_on then
 		UI:UpdateCombat()
@@ -1973,16 +2027,6 @@ function Rake:NextMultiplier()
 		multiplier = multiplier * 1.60
 	end
 	return multiplier
-end
-
-function Rip:LowestRemains()
-	local guid, aura, lowest
-	for guid, aura in next, self.aura_targets do
-		if AutoAoe.targets[guid] and (not lowest or aura.expires < lowest) then
-			lowest = aura.expires
-		end
-	end
-	return max(0, (lowest or 0) - Player.time - Player.execute_remains)
 end
 
 function Rip:Duration(comboPoints, appliedBy)
