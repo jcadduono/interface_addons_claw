@@ -1165,7 +1165,7 @@ SurvivalInstincts.triggers_gcd = false
 local Swipe = Ability:Add(213771, false, true)
 Swipe:AutoAoe(true)
 Swipe.learn_spellId = 213764
-Swipe.requires_form = FORM.CAT
+Swipe.requires_form = FORM.BEAR
 local SwipeCat = Ability:Add(106785, false, true)
 SwipeCat.energy_cost = 35
 SwipeCat.triggers_bt = true
