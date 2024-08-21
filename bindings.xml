@@ -17,4 +17,7 @@
 	<Binding name="CLAW_TARGET4" category="BINDING_CATEGORY_CLAW">
 		Claw_SetTargetMode(4)
 	</Binding>
+	<Binding name="CLAW_TARGET5" category="BINDING_CATEGORY_CLAW">
+		Claw_SetTargetMode(5)
+	</Binding>
 </Bindings>

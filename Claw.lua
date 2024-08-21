@@ -7,7 +7,8 @@ BINDING_NAME_CLAW_TARGETLESS = "Toggle Targets -"
 BINDING_NAME_CLAW_TARGET1 = "Set Targets to 1"
 BINDING_NAME_CLAW_TARGET2 = "Set Targets to 2"
 BINDING_NAME_CLAW_TARGET3 = "Set Targets to 3"
-BINDING_NAME_CLAW_TARGET4 = "Set Targets to 4+"
+BINDING_NAME_CLAW_TARGET4 = "Set Targets to 4"
+BINDING_NAME_CLAW_TARGET5 = "Set Targets to 5+"
 
 local function log(...)
 	print(ADDON, '-', ...)
@@ -23,13 +24,19 @@ local min = math.min
 local max = math.max
 local floor = math.floor
 local GetPowerRegenForPowerType = _G.GetPowerRegenForPowerType
-local GetSpellCharges = _G.GetSpellCharges
-local GetSpellCooldown = _G.GetSpellCooldown
-local GetSpellInfo = _G.GetSpellInfo
+local GetSpellCharges = C_Spell.GetSpellCharges
+local GetSpellCooldown = C_Spell.GetSpellCooldown
+local GetSpellInfo = C_Spell.GetSpellInfo
+local GetItemCount = C_Item.GetItemCount
+local GetItemCooldown = C_Item.GetItemCooldown
+local GetInventoryItemCooldown = _G.GetInventoryItemCooldown
+local GetItemInfo = C_Item.GetItemInfo
 local GetTime = _G.GetTime
 local GetUnitSpeed = _G.GetUnitSpeed
+local IsSpellUsable = C_Spell.IsSpellUsable
+local IsItemUsable = C_Item.IsUsableItem
 local UnitAttackSpeed = _G.UnitAttackSpeed
-local UnitAura = _G.UnitAura
+local UnitAura = C_UnitAuras.GetAuraDataByIndex
 local UnitCastingInfo = _G.UnitCastingInfo
 local UnitChannelInfo = _G.UnitChannelInfo
 local UnitDetailedThreatSituation = _G.UnitDetailedThreatSituation
@@ -54,6 +61,11 @@ local function startsWith(str, start) -- case insensitive check to see if a stri
 		return false
 	end
 	return string.lower(str:sub(1, start:len())) == start:lower()
+end
+
+local function ToUID(guid)
+	local uid = guid:match('^%w+-%d+-%d+-%d+-%d+-(%d+)')
+	return uid and tonumber(uid)
 end
 -- end useful functions
 
@@ -280,6 +292,7 @@ local Player = {
 		t30 = 0, -- Strands of the Autumn Blaze
 		t31 = 0, -- Benevolent Embersage's Guidance
 		t32 = 0, -- Strands of the Autumn Blaze (Awakened)
+		t33 = 0, -- Mane of the Greatlynx
 	},
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
@@ -411,8 +424,8 @@ function AutoAoe:Add(guid, update)
 	if self.blacklist[guid] then
 		return
 	end
-	local unitId = guid:match('^%w+-%d+-%d+-%d+-%d+-(%d+)')
-	if unitId and self.ignored_units[tonumber(unitId)] then
+	local uid = ToUID(guid)
+	if uid and self.ignored_units[uid] then
 		self.blacklist[guid] = Player.time + 10
 		return
 	end
@@ -567,16 +580,16 @@ function Ability:Remains()
 	if self:Casting() or self:Traveling() > 0 then
 		return self:Duration()
 	end
-	local _, id, expires
+	local aura
 	for i = 1, 40 do
-		_, _, _, _, _, expires, _, _, _, id = UnitAura(self.aura_target, i, self.aura_filter)
-		if not id then
+		aura = UnitAura(self.aura_target, i, self.aura_filter)
+		if not aura then
 			return 0
-		elseif self:Match(id) then
-			if expires == 0 then
+		elseif self:Match(aura.spellId) then
+			if aura.expirationTime == 0 then
 				return 600 -- infinite duration
 			end
-			return max(0, expires - Player.ctime - (self.off_gcd and 0 or Player.execute_remains))
+			return max(0, aura.expirationTime - Player.ctime - (self.off_gcd and 0 or Player.execute_remains))
 		end
 	end
 	return 0
@@ -587,9 +600,9 @@ function Ability:Expiring(seconds)
 	return remains > 0 and remains < (seconds or Player.gcd)
 end
 
-function Ability:Refreshable(...)
+function Ability:Refreshable()
 	if self.buff_duration > 0 then
-		return self:Remains() < self:Duration(...) * 0.3
+		return self:Remains() < self:Duration() * 0.3
 	end
 	return self:Down()
 end
@@ -707,11 +720,11 @@ function Ability:Cooldown()
 	if self.cooldown_duration > 0 and self:Casting() then
 		return self:CooldownDuration()
 	end
-	local start, duration = GetSpellCooldown(self.spellId)
-	if start == 0 then
+	local cooldown = GetSpellCooldown(self.spellId)
+	if cooldown.startTime == 0 then
 		return 0
 	end
-	return max(0, duration - (Player.ctime - start) - (self.off_gcd and 0 or Player.execute_remains))
+	return max(0, cooldown.duration - (Player.ctime - cooldown.startTime) - (self.off_gcd and 0 or Player.execute_remains))
 end
 
 function Ability:CooldownExpected()
@@ -721,23 +734,23 @@ function Ability:CooldownExpected()
 	if self.cooldown_duration > 0 and self:Casting() then
 		return self:CooldownDuration()
 	end
-	local start, duration = GetSpellCooldown(self.spellId)
-	if start == 0 then
+	local cooldown = GetSpellCooldown(self.spellId)
+	if cooldown.startTime == 0 then
 		return 0
 	end
-	local remains = duration - (Player.ctime - start)
+	local remains = cooldown.duration - (Player.ctime - cooldown.startTime)
 	local reduction = (Player.time - self.last_used) / (self:CooldownDuration() - remains)
 	return max(0, (remains * reduction) - (self.off_gcd and 0 or Player.execute_remains))
 end
 
 function Ability:Stack()
-	local _, id, expires, count
+	local aura
 	for i = 1, 40 do
-		_, _, count, _, _, expires, _, _, _, id = UnitAura(self.aura_target, i, self.aura_filter)
-		if not id then
+		aura = UnitAura(self.aura_target, i, self.aura_filter)
+		if not aura then
 			return 0
-		elseif self:Match(id) then
-			return (expires == 0 or expires - Player.ctime > (self.off_gcd and 0 or Player.execute_remains)) and count or 0
+		elseif self:Match(aura.spellId) then
+			return (aura.expirationTime == 0 or aura.expirationTime - Player.ctime > (self.off_gcd and 0 or Player.execute_remains)) and aura.applications or 0
 		end
 	end
 	return 0
@@ -764,17 +777,21 @@ function Ability:RageCost()
 end
 
 function Ability:ChargesFractional()
-	local charges, max_charges, recharge_start, recharge_time = GetSpellCharges(self.spellId)
+	local info = GetSpellCharges(self.spellId)
+	if not info then
+		return 0
+	end
+	local charges = info.currentCharges
 	if self:Casting() then
-		if charges >= max_charges then
+		if charges >= info.maxCharges then
 			return charges - 1
 		end
 		charges = charges - 1
 	end
-	if charges >= max_charges then
+	if charges >= info.maxCharges then
 		return charges
 	end
-	return charges + ((max(0, Player.ctime - recharge_start + (self.off_gcd and 0 or Player.execute_remains))) / recharge_time)
+	return charges + ((max(0, Player.ctime - info.cooldownStartTime + (self.off_gcd and 0 or Player.execute_remains))) / info.cooldownDuration)
 end
 
 function Ability:Charges()
@@ -782,22 +799,26 @@ function Ability:Charges()
 end
 
 function Ability:MaxCharges()
-	local _, max_charges = GetSpellCharges(self.spellId)
-	return max_charges or 0
+	local info = GetSpellCharges(self.spellId)
+	return info and info.maxCharges or 0
 end
 
 function Ability:FullRechargeTime()
-	local charges, max_charges, recharge_start, recharge_time = GetSpellCharges(self.spellId)
+	local info = GetSpellCharges(self.spellId)
+	if not info then
+		return 0
+	end
+	local charges = info.currentCharges
 	if self:Casting() then
-		if charges >= max_charges then
-			return recharge_time
+		if charges >= info.maxCharges then
+			return info.cooldownDuration
 		end
 		charges = charges - 1
 	end
-	if charges >= max_charges then
+	if charges >= info.maxCharges then
 		return 0
 	end
-	return (max_charges - charges - 1) * recharge_time + (recharge_time - (Player.ctime - recharge_start) - (self.off_gcd and 0 or Player.execute_remains))
+	return (info.maxCharges - charges - 1) * info.cooldownDuration + (info.cooldownDuration - (Player.ctime - info.cooldownStartTime) - (self.off_gcd and 0 or Player.execute_remains))
 end
 
 function Ability:Duration()
@@ -813,11 +834,8 @@ function Ability:Channeling()
 end
 
 function Ability:CastTime()
-	local _, _, _, castTime = GetSpellInfo(self.spellId)
-	if castTime == 0 then
-		return 0
-	end
-	return castTime / 1000
+	local info = GetSpellInfo(self.spellId)
+	return info and info.castTime / 1000 or 0
 end
 
 function Ability:CastEnergyRegen()
@@ -901,6 +919,9 @@ function Ability:CastSuccess(dstGUID)
 		Player.previous_gcd[10] = nil
 		table.insert(Player.previous_gcd, 1, self)
 	end
+	if self.triggers_bt then
+		self.bt_trigger = self.last_used
+	end
 	if self.aura_targets and self.requires_react then
 		self:RemoveAura(self.aura_target == 'player' and Player.guid or dstGUID)
 	end
@@ -914,9 +935,6 @@ function Ability:CastSuccess(dstGUID)
 			dstGUID = dstGUID,
 		}
 		self.next_castGUID = nil
-	end
-	if self.triggers_bt then
-		self.bt_trigger = self.last_used
 	end
 	if Opt.previous then
 		clawPreviousPanel.ability = self
@@ -1037,7 +1055,7 @@ end
 
 --[[
 Note: To get talent_node value for a talent, hover over talent and use macro:
-/dump GetMouseFocus():GetNodeID()
+/dump GetMouseFoci()[1]:GetNodeID()
 ]]
 
 -- Druid Abilities
@@ -1435,6 +1453,7 @@ end
 
 -- Inventory Items
 local Healthstone = InventoryItem:Add(5512)
+Healthstone.max_charges = 3
 -- Equipment
 local DreambinderLoomOfTheGreatCycle = InventoryItem:Add(208616)
 DreambinderLoomOfTheGreatCycle.cooldown_duration = 120
@@ -1539,20 +1558,20 @@ function Player:UnderAttack()
 end
 
 function Player:BloodlustActive()
-	local _, id
+	local aura
 	for i = 1, 40 do
-		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL')
-		if not id then
+		aura = UnitAura('player', i, 'HELPFUL')
+		if not aura then
 			return false
 		elseif (
-			id == 2825 or   -- Bloodlust (Horde Shaman)
-			id == 32182 or  -- Heroism (Alliance Shaman)
-			id == 80353 or  -- Time Warp (Mage)
-			id == 90355 or  -- Ancient Hysteria (Hunter Pet - Core Hound)
-			id == 160452 or -- Netherwinds (Hunter Pet - Nether Ray)
-			id == 264667 or -- Primal Rage (Hunter Pet - Ferocity)
-			id == 381301 or -- Feral Hide Drums (Leatherworking)
-			id == 390386    -- Fury of the Aspects (Evoker)
+			aura.spellId == 2825 or   -- Bloodlust (Horde Shaman)
+			aura.spellId == 32182 or  -- Heroism (Alliance Shaman)
+			aura.spellId == 80353 or  -- Time Warp (Mage)
+			aura.spellId == 90355 or  -- Ancient Hysteria (Hunter Pet - Core Hound)
+			aura.spellId == 160452 or -- Netherwinds (Hunter Pet - Nether Ray)
+			aura.spellId == 264667 or -- Primal Rage (Hunter Pet - Ferocity)
+			aura.spellId == 381301 or -- Feral Hide Drums (Leatherworking)
+			aura.spellId == 390386    -- Fury of the Aspects (Evoker)
 		) then
 			return true
 		end
@@ -1599,13 +1618,16 @@ function Player:UpdateTime(timeStamp)
 end
 
 function Player:UpdateKnown()
-	local node
+	local info, node
 	local configId = C_ClassTalents.GetActiveConfigID()
 	for _, ability in next, Abilities.all do
 		ability.known = false
 		ability.rank = 0
 		for _, spellId in next, ability.spellIds do
-			ability.spellId, ability.name, _, ability.icon = spellId, GetSpellInfo(spellId)
+			info = GetSpellInfo(spellId)
+			if info then
+				ability.spellId, ability.name, ability.icon = info.spellID, info.name, info.originalIconID
+			end
 			if IsPlayerSpell(spellId) or (ability.learn_spellId and IsPlayerSpell(ability.learn_spellId)) then
 				ability.known = true
 				break
@@ -1621,7 +1643,7 @@ function Player:UpdateKnown()
 				ability.known = ability.rank > 0
 			end
 		end
-		if C_LevelLink.IsSpellLocked(ability.spellId) or (ability.check_usable and not IsUsableSpell(ability.spellId)) then
+		if C_LevelLink.IsSpellLocked(ability.spellId) or (ability.check_usable and not IsSpellUsable(ability.spellId)) then
 			ability.known = false -- spell is locked, do not mark as known
 		end
 	end
@@ -1710,16 +1732,18 @@ function Player:UpdateThreat()
 end
 
 function Player:Update()
-	local _, start, ends, duration, spellId, speed, max_speed, speed_mh, speed_oh
-	self.main =  nil
+	local _, cooldown, start, ends, spellId, speed, max_speed, speed_mh, speed_oh
+	self.main = nil
 	self.cd = nil
 	self.interrupt = nil
 	self.extra = nil
+	self.wait_time = nil
 	self.pool_energy = nil
 	self:UpdateTime()
 	self.haste_factor = 1 / (1 + UnitSpellHaste('player') / 100)
-	start, duration = GetSpellCooldown(61304)
-	self.gcd_remains = start > 0 and duration - (self.ctime - start) or 0
+	self.gcd = 1.5 * self.haste_factor
+	cooldown = GetSpellCooldown(61304)
+	self.gcd_remains = cooldown.startTime > 0 and cooldown.duration - (self.ctime - cooldown.startTime) or 0
 	_, _, _, start, ends, _, _, _, spellId = UnitCastingInfo('player')
 	if spellId then
 		self.cast.ability = Abilities.bySpellId[spellId]
@@ -1824,7 +1848,7 @@ function Target:UpdateHealth(reset)
 		table.remove(self.health.history, 1)
 		self.health.history[25] = self.health.current
 	end
-	self.timeToDieMax = self.health.current / Player.health.max * 10
+	self.timeToDieMax = self.health.current / Player.health.max * (Player.spec == SPEC.SHADOW and 10 or 20)
 	self.health.pct = self.health.max > 0 and (self.health.current / self.health.max * 100) or 100
 	self.health.loss_per_sec = (self.health.history[1] - self.health.current) / 5
 	self.timeToDie = (
@@ -1862,7 +1886,7 @@ function Target:Update()
 	end
 	if guid ~= self.guid then
 		self.guid = guid
-		self.uid = tonumber(guid:match('^%w+-%d+-%d+-%d+-%d+-(%d+)') or 0)
+		self.uid = ToUID(guid) or 0
 		self:UpdateHealth(true)
 	end
 	self.boss = false
@@ -2010,16 +2034,14 @@ Thrash.Duration = Rake.Duration
 ThrashCat.Duration = Rake.Duration
 
 function Rake:NextMultiplier()
-	local multiplier = 1.00
-	local stealthed = false
-	local _, id
+	local multiplier, stealthed, aura = 1.00, false
 	for i = 1, 40 do
-		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL|PLAYER')
+		aura = UnitAura('player', i, 'HELPFUL|PLAYER')
 		if not id then
 			break
-		elseif Shadowmeld:Match(id) or Prowl:Match(id) or Berserk:Match(id) or IncarnationAvatarOfAshamane:Match(id) or SuddenAmbush:Match(id) then
+		elseif Shadowmeld:Match(aura.spellId) or Prowl:Match(aura.spellId) or Berserk:Match(aura.spellId) or IncarnationAvatarOfAshamane:Match(aura.spellId) or SuddenAmbush:Match(aura.spellId) then
 			stealthed = true
-		elseif TigersFury:Match(id) then
+		elseif TigersFury:Match(aura.spellId) then
 			multiplier = multiplier * TigersFury:Multiplier()
 		end
 	end
@@ -2067,16 +2089,15 @@ function Rip:MultiplierMax()
 end
 
 function Rip:NextMultiplier()
-	local multiplier = 1.00
-	local _, id
+	local multiplier, aura = 1.00
 	for i = 1, 40 do
-		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL|PLAYER')
-		if not id then
+		aura = UnitAura('player', i, 'HELPFUL|PLAYER')
+		if not aura then
 			break
 		end
-		if TigersFury:Match(id) then
+		if TigersFury:Match(aura.spellId) then
 			multiplier = multiplier * TigersFury:Multiplier()
-		elseif Bloodtalons:Match(id) then
+		elseif Bloodtalons:Match(aura.spellId) then
 			multiplier = multiplier * 1.25
 		end
 	end
@@ -2106,13 +2127,12 @@ AdaptiveSwarm.dot.Duration = Moonfire.Duration
 AdaptiveSwarm.hot.Duration = Moonfire.Duration
 
 function MoonfireCat:NextMultiplier()
-	local multiplier = 1.00
-	local _, id
+	local multiplier, aura = 1.00
 	for i = 1, 40 do
-		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL|PLAYER')
-		if not id then
+		aura = UnitAura('player', i, 'HELPFUL|PLAYER')
+		if not aura then
 			break
-		elseif TigersFury:Match(id) then
+		elseif TigersFury:Match(aura.spellId) then
 			multiplier = multiplier * TigersFury:Multiplier()
 		end
 	end
@@ -2127,14 +2147,13 @@ function Shred:CastSuccess(...)
 end
 
 function ThrashCat:NextMultiplier()
-	local multiplier = 1.00
-	local _, id
+	local multiplier, aura = 1.00
 	for i = 1, 40 do
-		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL|PLAYER')
-		if not id then
+		aura = UnitAura('player', i, 'HELPFUL|PLAYER')
+		if not aura then
 			break
 		end
-		if TigersFury:Match(id) then
+		if TigersFury:Match(aura.spellId) then
 			multiplier = multiplier * TigersFury:Multiplier()
 		end
 	end
@@ -2996,23 +3015,23 @@ UI.anchor_points = {
 	kui = { -- Kui Nameplates
 		[FORM.NONE] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 24 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -2 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -1 }
 		},
 		[FORM.MOONKIN] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 24 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -2 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -1 }
 		},
 		[FORM.CAT] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 24 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -2 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -1 }
 		},
 		[FORM.BEAR] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 24 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -2 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -1 }
 		},
 		[FORM.TRAVEL] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 24 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -2 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -1 }
 		},
 	},
 }
@@ -3078,16 +3097,16 @@ end
 
 function UI:UpdateDisplay()
 	Timer.display = 0
-	local border, dim, dim_cd, text_center, text_cd, text_bl, text_tr
+	local border, dim, dim_cd, text_cd, text_center, text_bl, text_tr
 	local channel = Player.channel
 
 	if Opt.dimmer then
 		dim = not ((not Player.main) or
-		           (Player.main.spellId and IsUsableSpell(Player.main.spellId)) or
-		           (Player.main.itemId and IsUsableItem(Player.main.itemId)))
+		           (Player.main.spellId and IsSpellUsable(Player.main.spellId)) or
+		           (Player.main.itemId and IsItemUsable(Player.main.itemId)))
 		dim_cd = not ((not Player.cd) or
-		           (Player.cd.spellId and IsUsableSpell(Player.cd.spellId)) or
-		           (Player.cd.itemId and IsUsableItem(Player.cd.itemId)))
+		           (Player.cd.spellId and IsSpellUsable(Player.cd.spellId)) or
+		           (Player.cd.itemId and IsItemUsable(Player.cd.itemId)))
 	end
 	if Player.main then
 		if Player.main.requires_react then
@@ -3173,8 +3192,8 @@ function UI:UpdateCombat()
 	if Player.cd then
 		clawCooldownPanel.icon:SetTexture(Player.cd.icon)
 		if Player.cd.spellId then
-			local start, duration = GetSpellCooldown(Player.cd.spellId)
-			clawCooldownPanel.swipe:SetCooldown(start, duration)
+			local cooldown = GetSpellCooldown(Player.cd.spellId)
+			clawCooldownPanel.swipe:SetCooldown(cooldown.startTime, cooldown.duration)
 		end
 	end
 	if Player.extra then
@@ -3272,6 +3291,10 @@ CombatEvent.TRIGGER = function(timeStamp, event, _, srcGUID, _, _, _, dstGUID, _
 end
 
 CombatEvent.UNIT_DIED = function(event, srcGUID, dstGUID)
+	local uid = ToUID(dstGUID)
+	if not uid or Target.Dummies[uid] then
+		return
+	end
 	trackAuras:Remove(dstGUID)
 	if Opt.auto_aoe then
 		AutoAoe:Remove(dstGUID)
@@ -3499,6 +3522,7 @@ function Events:PLAYER_EQUIPMENT_CHANGED()
 	Player.set_bonus.t30 = (Player:Equipped(202513) and 1 or 0) + (Player:Equipped(202514) and 1 or 0) + (Player:Equipped(202515) and 1 or 0) + (Player:Equipped(202516) and 1 or 0) + (Player:Equipped(202518) and 1 or 0)
 	Player.set_bonus.t31 = (Player:Equipped(207252) and 1 or 0) + (Player:Equipped(207253) and 1 or 0) + (Player:Equipped(207254) and 1 or 0) + (Player:Equipped(207255) and 1 or 0) + (Player:Equipped(207257) and 1 or 0)
 	Player.set_bonus.t32 = (Player:Equipped(217191) and 1 or 0) + (Player:Equipped(217192) and 1 or 0) + (Player:Equipped(217193) and 1 or 0) + (Player:Equipped(217194) and 1 or 0) + (Player:Equipped(217195) and 1 or 0)
+	Player.set_bonus.t33 = (Player:Equipped(212054) and 1 or 0) + (Player:Equipped(212055) and 1 or 0) + (Player:Equipped(212056) and 1 or 0) + (Player:Equipped(212057) and 1 or 0) + (Player:Equipped(212059) and 1 or 0)
 
 	Player:ResetSwing(true, true)
 	Player:UpdateKnown()
@@ -3544,15 +3568,17 @@ end
 
 function Events:SPELL_UPDATE_COOLDOWN()
 	if Opt.spell_swipe then
-		local _, start, duration, castStart, castEnd
+		local _, cooldown, castStart, castEnd
 		_, _, _, castStart, castEnd = UnitCastingInfo('player')
 		if castStart then
-			start = castStart / 1000
-			duration = (castEnd - castStart) / 1000
+			cooldown = {
+				startTime = castStart / 1000,
+				duration = (castEnd - castStart) / 1000
+			}
 		else
-			start, duration = GetSpellCooldown(61304)
+			cooldown = GetSpellCooldown(61304)
 		end
-		clawPanel.swipe:SetCooldown(start, duration)
+		clawPanel.swipe:SetCooldown(cooldown.startTime, cooldown.duration)
 	end
 end
 
@@ -3908,7 +3934,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		UI:Reset()
 		return Status('Position has been reset to', 'default')
 	end
-	print(ADDON, '(version: |cFFFFD000' .. GetAddOnMetadata(ADDON, 'Version') .. '|r) - Commands:')
+	print(ADDON, '(version: |cFFFFD000' .. C_AddOns.GetAddOnMetadata(ADDON, 'Version') .. '|r) - Commands:')
 	for _, cmd in next, {
 		'locked |cFF00C000on|r/|cFFC00000off|r - lock the ' .. ADDON .. ' UI so that it can\'t be moved',
 		'snap |cFF00C000above|r/|cFF00C000below|r/|cFFC00000off|r - snap the ' .. ADDON .. ' UI to the Personal Resource Display',
