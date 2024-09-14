@@ -789,6 +789,16 @@ function Ability:RageCost()
 	return self.rage_cost
 end
 
+function Ability:Free()
+	return (
+		(Player.form == FORM.CAT and (
+			(self.energy_cost > 0 and self:EnergyCost() == 0) or
+			(self.cp_cost > 0 and self:CPCost() == 0)
+		)) or
+		(Player.form == FORM.BEAR and self.rage_cost > 0 and self:RageCost() == 0)
+	)
+end
+
 function Ability:ChargesFractional()
 	local info = GetSpellCharges(self.spellId)
 	if not info then
@@ -1316,7 +1326,7 @@ local Clearcasting = Ability:Add(16864, true, true, 135700)
 Clearcasting.buff_duration = 15
 local PredatorySwiftness = Ability:Add(16974, true, true, 69369)
 PredatorySwiftness.buff_duration = 12
-local Sabertooth = Ability:Add(202031, true, true, 391722)
+local Sabertooth = Ability:Add(202031, false, true, 391722)
 Sabertooth.buff_duration = 4
 local SuddenAmbush = Ability:Add(384667, true, true, 391974)
 SuddenAmbush.buff_duration = 15
@@ -1386,7 +1396,18 @@ GalacticGuardian.buff_duration = 15
 ------ Procs
 
 -- Hero talents
-
+local Ravage = Ability:Add(441583, true, true)
+RavageBear = Ability:Add(441605, true, true, 441602)
+RavageBear.buff_duration = 15
+RavageBear.rage_cost = 40
+RavageBear.requires_form = FORM.BEAR
+RavageBear.requires_react = true
+RavageCat = Ability:Add(441591, true, true, 441585)
+RavageCat.buff_duration = 15
+RavageCat.cp_cost = 1
+RavageCat.energy_cost = 25
+RavageCat.requires_form = FORM.CAT
+RavageCat.requires_react = true
 -- PvP talents
 local Thorns = Ability:Add(305497, true, true)
 Thorns.buff_duration = 12
@@ -1656,6 +1677,10 @@ function Player:UpdateKnown()
 	end
 	if Rip.known then
 		Rip.multiplier_max = Rip:MultiplierMax()
+	end
+	if Ravage.known then
+		RavageBear.known = Player.spec == SPEC.GUARDIAN
+		RavageCat.known = Player.spec == SPEC.FERAL
 	end
 
 	Abilities:Update()
@@ -1985,12 +2010,20 @@ function Bloodtalons:Reset()
 	end
 end
 
+function FerociousBite:Usable(...)
+	if RavageCat.known and RavageCat:Up() then
+		return false
+	end
+	return Ability.Usable(self, ...)
+end
+
 function FerociousBite:CPCost()
 	if ApexPredatorsCraving.known and ApexPredatorsCraving:Up() then
 		return 0
 	end
 	return Ability.CPCost(self)
 end
+RavageCat.CPCost = FerociousBite.CPCost
 
 function FerociousBite:EnergyCost()
 	if ApexPredatorsCraving.known and ApexPredatorsCraving:Up() then
@@ -1998,6 +2031,7 @@ function FerociousBite:EnergyCost()
 	end
 	return Ability.EnergyCost(self)
 end
+RavageCat.EnergyCost = FerociousBite.EnergyCost
 
 function Regrowth:ManaCost()
 	if PredatorySwiftness:Up() then
@@ -2156,25 +2190,25 @@ function ThrashCat:NextMultiplier()
 	return multiplier
 end
 
-function Prowl:Usable()
+function Prowl:Usable(...)
 	if Prowl:Up() or Shadowmeld:Up() or (InCombatLockdown() and not IncarnationAvatarOfAshamane.prowl:Up()) then
 		return false
 	end
-	return Ability.Usable(self)
+	return Ability.Usable(self, ...)
 end
 
-function Shadowmeld:Usable()
+function Shadowmeld:Usable(...)
 	if Prowl:Up() or Shadowmeld:Up() or not UnitInParty('player') then
 		return false
 	end
-	return Ability.Usable(self)
+	return Ability.Usable(self, ...)
 end
 
-function Maim:Usable()
+function Maim:Usable(...)
 	if not Target.stunnable then
 		return false
 	end
-	return Ability.Usable(self)
+	return Ability.Usable(self, ...)
 end
 MightyBash.Usable = Maim.Usable
 Typhoon.Usable = Maim.Usable
@@ -2196,6 +2230,13 @@ function Ironfur:RageCost()
 	return cost
 end
 
+function Maul:Usable(...)
+	if RavageBear.known and RavageBear:Up() then
+		return false
+	end
+	return Ability.Usable(self, ...)
+end
+
 function Maul:RageCost()
 	if ToothAndClaw.known and ToothAndClaw:Up() then
 		return 0
@@ -2207,6 +2248,7 @@ function Maul:RageCost()
 	return cost
 end
 Raze.RageCost = Maul.RageCost
+RavageBear.RageCost = Maul.RageCost
 
 function ConvokeTheSpirits:Duration()
 	local duration = self.buff_duration
@@ -2214,6 +2256,10 @@ function ConvokeTheSpirits:Duration()
 		duration = duration * (1 - 0.25)
 	end
 	return duration
+end
+
+function Regrowth:Free()
+	return PredatorySwiftness.known and PredatorySwiftness:Up()
 end
 
 -- End Ability Modifications
@@ -2316,7 +2362,7 @@ actions+=/run_action_list,name=builder,if=combo_points<5
 	end
 	self:cooldown()
 	if Player.health.pct < 85 and not Player:Stealthed() then
-		if Regrowth:Usable() and (Player.health.pct <= Opt.heal or Player.combo_points.current >= 5) and PredatorySwiftness:Up() and Regrowth:WontCapEnergy() then
+		if Regrowth:Usable() and (Player.health.pct <= Opt.heal or Player.combo_points.current >= 5) and Regrowth:Free() and Regrowth:WontCapEnergy() then
 			UseExtra(Regrowth)
 		elseif NaturesVigil:Usable() then
 			UseExtra(NaturesVigil)
@@ -2327,6 +2373,9 @@ actions+=/run_action_list,name=builder,if=combo_points<5
 	end
 	if Player.enemies > 1 and PrimalWrath.known then
 		return self:aoe()
+	end
+	if ApexPredatorsCraving.known and RavageCat:Usable() and ApexPredatorsCraving:Up() and (ApexPredatorsCraving:Remains() < 2 or Rip:Ticking() > 0) then
+		return RavageCat
 	end
 	if ApexPredatorsCraving.known and FerociousBite:Usable() and ApexPredatorsCraving:Up() and (ApexPredatorsCraving:Remains() < 2 or Rip:Ticking() > 0) then
 		return FerociousBite
@@ -2394,7 +2443,7 @@ APL[SPEC.FERAL].aoe = function(self)
 --[[
 actions.aoe=pool_resource,for_next=1
 actions.aoe+=/primal_wrath,if=combo_points=5
-actions.aoe+=/ferocious_bite,if=buff.apex_predators_craving.up&buff.sabertooth.down
+actions.aoe+=/ferocious_bite,if=buff.apex_predators_craving.up&debuff.sabertooth.down
 actions.aoe+=/run_action_list,name=bloodtalons,if=variable.need_bt&active_bt_triggers>=1
 actions.aoe+=/pool_resource,for_next=1
 actions.aoe+=/thrash_cat,target_if=refreshable
@@ -2410,6 +2459,12 @@ actions.aoe+=/swipe_cat
 actions.aoe+=/shred,if=action.shred.damage>action.thrash_cat.damage
 actions.aoe+=/thrash_cat
 ]]
+	if RavageCat:Usable() and (
+		(Player.combo_points.current >= 5 and Rip:LowestRemains() > (Player.berserk_remains > 4 and 5 or 8)) or
+		(ApexPredatorsCraving.known and ApexPredatorsCraving:Up() and (ApexPredatorsCraving:Remains() < 2 or Rip:Ticking() > 0))
+	) then
+		return Pool(RavageCat)
+	end
 	if FerociousBite:Usable() and Player.enemies <= 5 and Player.combo_points.current >= 5 and Rip:LowestRemains() > (Player.berserk_remains > 4 and 7 or 10) then
 		return Pool(FerociousBite)
 	end
@@ -2503,6 +2558,9 @@ actions.finisher+=/ferocious_bite,if=(buff.bs_inc.up&talent.soul_of_the_forest.e
 	end
 	if Rip:Usable(0, true) and Rip:Refreshable() and Target.timeToDie > (Rip:Remains() + Rip:TickTime() * 4) then
 		return Pool(Rip)
+	end
+	if RavageCat:Usable(0, true) then
+		return Pool(RavageCat, (Player.berserk_remains == 0 or not SoulOfTheForest.known) and Target.timeToDie > 2 and 25 or 0)
 	end
 	if FerociousBite:Usable(0, true) then
 		return Pool(FerociousBite, (Player.berserk_remains == 0 or not SoulOfTheForest.known) and Target.timeToDie > 2 and 25 or 0)
@@ -2682,6 +2740,9 @@ actions.bear+=/swipe_bear
 		UseCooldown(HeartOfTheWild)
 	end
 ]]
+	if RavageBear:Usable() and Player.enemies > 1 then
+		return RavageBear
+	end
 	if Moonfire:Usable() and Moonfire:Refreshable() and Target.timeToDie > 12 and Player.enemies < (FuryOfNature.known and 7 or 4) then
 		return Moonfire
 	end
@@ -2705,6 +2766,9 @@ actions.bear+=/swipe_bear
 	end
 	if RageOfTheSleeper:Usable() and RageOfTheSleeper:Down() and (not IncarnationGuardianOfUrsoc.known or IncarnationGuardianOfUrsoc:CooldownExpected() > 45 or IncarnationGuardianOfUrsoc:Up()) then
 		UseCooldown(RageOfTheSleeper)
+	end
+	if RavageBear:Usable() then
+		return RavageBear
 	end
 	if not self.If_build then
 		if RageOfTheSleeper.known and RageOfTheSleeper:Up() and ToothAndClaw:Stack() > 0 then
@@ -3080,7 +3144,7 @@ end
 
 function UI:UpdateDisplay()
 	Timer.display = 0
-	local border, dim, dim_cd, text_cd, text_center, text_bl, text_tr
+	local border, dim, dim_cd, text_cd, text_center, text_bl, text_tl, text_tr
 	local channel = Player.channel
 
 	if Opt.dimmer then
@@ -3105,7 +3169,7 @@ function UI:UpdateDisplay()
 	if Player.cd and Player.cd.requires_react then
 		local react = Player.cd:React()
 		if react > 0 then
-			text_cd = format('%.1f', react)
+			text_tl = format('%.1f', react)
 		end
 	end
 	if Player.pool_energy then
@@ -3151,8 +3215,9 @@ function UI:UpdateDisplay()
 
 	clawPanel.dimmer:SetShown(dim)
 	clawPanel.text.center:SetText(text_center)
-	clawPanel.text.bl:SetText(text_bl)
+	clawPanel.text.tl:SetText(text_tl)
 	clawPanel.text.tr:SetText(text_tr)
+	clawPanel.text.bl:SetText(text_bl)
 	--clawPanel.text.bl:SetText(format('%.1fs', Target.timeToDie))
 	clawCooldownPanel.text:SetText(text_cd)
 	clawCooldownPanel.dimmer:SetShown(dim_cd)
@@ -3170,7 +3235,7 @@ function UI:UpdateCombat()
 		else
 			clawPanel.text.multiplier_diff = nil
 		end
-		Player.main_freecast = (Player.main.energy_cost > 0 and Player.main:EnergyCost() == 0) or (Player.main.cp_cost > 0 and Player.main:CPCost() == 0) or (Player.main.rage_cost > 0 and Player.main:RageCost() == 0) or (Player.main.Free and Player.main:Free())
+		Player.main_freecast = Player.main:Free()
 	end
 	if Player.cd then
 		clawCooldownPanel.icon:SetTexture(Player.cd.icon)
