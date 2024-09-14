@@ -161,7 +161,7 @@ local Abilities = {
 	bySpellId = {},
 	velocity = {},
 	autoAoe = {},
-	trackAuras = {},
+	tracked = {},
 	bloodtalons = {},
 }
 
@@ -171,6 +171,9 @@ local AutoAoe = {
 	blacklist = {},
 	ignored_units = {},
 }
+
+-- methods for tracking ticking debuffs on targets
+local TrackedAuras = {}
 
 -- timers for updating combat/display/hp info
 local Timer = {
@@ -288,10 +291,6 @@ local Player = {
 		last_taken = 0,
 	},
 	set_bonus = {
-		t29 = 0, -- Lost Landcaller's Vesture
-		t30 = 0, -- Strands of the Autumn Blaze
-		t31 = 0, -- Benevolent Embersage's Guidance
-		t32 = 0, -- Strands of the Autumn Blaze (Awakened)
 		t33 = 0, -- Mane of the Greatlynx
 	},
 	previous_gcd = {},-- list of previous GCD abilities
@@ -308,20 +307,22 @@ local Player = {
 
 -- base mana pool max for each level
 Player.BaseMana = {
-	260,	270,	285,	300,	310,	--  5
-	330,	345,	360,	380,	400,	-- 10
-	430,	465,	505,	550,	595,	-- 15
-	645,	700,	760,	825,	890,	-- 20
-	965,	1050,	1135,	1230,	1335,	-- 25
-	1445,	1570,	1700,	1845,	2000,	-- 30
-	2165,	2345,	2545,	2755,	2990,	-- 35
-	3240,	3510,	3805,	4125,	4470,	-- 40
-	4845,	5250,	5690,	6170,	6685,	-- 45
-	7245,	7855,	8510,	9225,	10000,	-- 50
-	11745,	13795,	16205,	19035,	22360,	-- 55
-	26265,	30850,	36235,	42565,	50000,	-- 60
-	58730,	68985,	81030,	95180,	111800,	-- 65
-	131325,	154255,	181190,	212830,	250000,	-- 70
+	260,     270,     285,     300,     310,     -- 5
+	330,     345,     360,     380,     400,     -- 10
+	430,     465,     505,     550,     595,     -- 15
+	645,     700,     760,     825,     890,     -- 20
+	965,     1050,    1135,    1230,    1335,    -- 25
+	1445,    1570,    1700,    1845,    2000,    -- 30
+	2165,    2345,    2545,    2755,    2990,    -- 35
+	3240,    3510,    3805,    4125,    4470,    -- 40
+	4845,    5250,    5690,    6170,    6685,    -- 45
+	7245,    7855,    8510,    9225,    10000,   -- 50
+	11745,   13795,   16205,   19035,   22360,   -- 55
+	26265,   30850,   36235,   42565,   50000,   -- 60
+	58730,   68985,   81030,   95180,   111800,  -- 65
+	131325,  154255,  181190,  212830,  250000,  -- 70
+	293650,  344930,  405160,  475910,  559015,  -- 75
+	656630,  771290,  905970,  1064170, 2500000, -- 80
 }
 
 -- current target information
@@ -349,6 +350,14 @@ Target.Dummies = {
 	[194649] = true,
 	[197833] = true,
 	[198594] = true,
+	[219250] = true,
+	[225983] = true,
+	[225984] = true,
+	[225985] = true,
+	[225976] = true,
+	[225977] = true,
+	[225978] = true,
+	[225982] = true,
 }
 
 -- Start AoE
@@ -593,6 +602,10 @@ function Ability:Remains()
 		end
 	end
 	return 0
+end
+
+function Ability:React()
+	return self:Remains()
 end
 
 function Ability:Expiring(seconds)
@@ -979,10 +992,8 @@ end
 
 -- Start DoT tracking
 
-local trackAuras = {}
-
-function trackAuras:Purge()
-	for _, ability in next, Abilities.trackAuras do
+function TrackedAuras:Purge()
+	for _, ability in next, Abilities.tracked do
 		for guid, aura in next, ability.aura_targets do
 			if aura.expires <= Player.time then
 				ability:RemoveAura(guid)
@@ -991,13 +1002,13 @@ function trackAuras:Purge()
 	end
 end
 
-function trackAuras:Remove(guid)
-	for _, ability in next, Abilities.trackAuras do
+function TrackedAuras:Remove(guid)
+	for _, ability in next, Abilities.tracked do
 		ability:RemoveAura(guid)
 	end
 end
 
-function Ability:TrackAuras()
+function Ability:Track()
 	self.aura_targets = {}
 end
 
@@ -1151,7 +1162,7 @@ Rake.tick_interval = 3
 Rake.hasted_ticks = true
 Rake.triggers_bt = true
 Rake.requires_form = FORM.CAT
-Rake:TrackAuras()
+Rake:Track()
 Rake:AutoAoe(false, 'apply')
 local Rip = Ability:Add(1079, false, true)
 Rip.buff_duration = 4
@@ -1160,7 +1171,7 @@ Rip.cp_cost = 1
 Rip.tick_interval = 2
 Rip.hasted_ticks = true
 Rip.requires_form = FORM.CAT
-Rip:TrackAuras()
+Rip:Track()
 local SkullBash = Ability:Add(106839, false, true)
 SkullBash.cooldown_duration = 15
 SkullBash.triggers_gcd = false
@@ -1207,7 +1218,7 @@ ThrashCat.hasted_ticks = true
 ThrashCat.triggers_bt = true
 ThrashCat.requires_form = FORM.CAT
 ThrashCat:AutoAoe(true)
-ThrashCat:TrackAuras()
+ThrashCat:Track()
 local Typhoon = Ability:Add(132469, false, true)
 Typhoon.buff_duration = 6
 Typhoon.cooldown_duration = 30
@@ -1235,14 +1246,14 @@ AdaptiveSwarm.dot.tick_interval = 2
 AdaptiveSwarm.dot.hasted_ticks = true
 AdaptiveSwarm.dot.learn_spellId = 391888
 AdaptiveSwarm.dot:SetVelocity(12)
-AdaptiveSwarm.dot:TrackAuras()
+AdaptiveSwarm.dot:Track()
 AdaptiveSwarm.hot = Ability:Add(391891, true, true)
 AdaptiveSwarm.hot.buff_duration = 12
 AdaptiveSwarm.hot.tick_interval = 2
 AdaptiveSwarm.hot.hasted_ticks = true
 AdaptiveSwarm.hot.learn_spellId = 391888
 AdaptiveSwarm.hot:SetVelocity(12)
-AdaptiveSwarm.hot:TrackAuras()
+AdaptiveSwarm.hot:Track()
 local AshamanesGuidance = Ability:Add(391548, false, true)
 local Berserk = Ability:Add(106951, true, true)
 Berserk.buff_duration = 20
@@ -1282,7 +1293,7 @@ MoonfireCat.tick_interval = 2
 MoonfireCat.hasted_ticks = true
 MoonfireCat.triggers_bt = true
 MoonfireCat.learn_spellId = 155580 -- Lunar Inspiration
-MoonfireCat:TrackAuras()
+MoonfireCat:Track()
 local PrimalWrath = Ability:Add(285381, false, true)
 PrimalWrath.energy_cost = 1
 PrimalWrath.cp_cost = 1
@@ -1300,7 +1311,7 @@ local ApexPredatorsCraving = Ability:Add(391881, true, true, 391882)
 ApexPredatorsCraving.buff_duration = 15
 local Bloodtalons = Ability:Add(319439, true, true, 145152)
 Bloodtalons.buff_duration = 30
-Bloodtalons:TrackAuras()
+Bloodtalons:Track()
 local Clearcasting = Ability:Add(16864, true, true, 135700)
 Clearcasting.buff_duration = 15
 local PredatorySwiftness = Ability:Add(16974, true, true, 69369)
@@ -1374,15 +1385,16 @@ GalacticGuardian.buff_duration = 15
 
 ------ Procs
 
--- Racials
-local Shadowmeld = Ability:Add(58984, true, true)
+-- Hero talents
+
 -- PvP talents
 local Thorns = Ability:Add(305497, true, true)
 Thorns.buff_duration = 12
 Thorns.cooldown_duration = 45
+-- Racials
+local Shadowmeld = Ability:Add(58984, true, true)
 -- Trinket effects
-local SolarMaelstrom = Ability:Add(422146, false, true) -- Belor'relos
-SolarMaelstrom:AutoAoe()
+
 -- End Abilities
 
 -- Start Inventory Items
@@ -1455,26 +1467,8 @@ end
 local Healthstone = InventoryItem:Add(5512)
 Healthstone.max_charges = 3
 -- Equipment
-local DreambinderLoomOfTheGreatCycle = InventoryItem:Add(208616)
-DreambinderLoomOfTheGreatCycle.cooldown_duration = 120
-DreambinderLoomOfTheGreatCycle.off_gcd = false
-local IridalTheEarthsMaster = InventoryItem:Add(208321)
-IridalTheEarthsMaster.cooldown_duration = 180
-IridalTheEarthsMaster.off_gcd = false
 local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
-Trinket.BeaconToTheBeyond = InventoryItem:Add(203963)
-Trinket.BeaconToTheBeyond.cooldown_duration = 150
-Trinket.BeaconToTheBeyond.off_gcd = false
-Trinket.BelorrelosTheSuncaller = InventoryItem:Add(207172)
-Trinket.BelorrelosTheSuncaller.cast_spell = SolarMaelstrom
-Trinket.BelorrelosTheSuncaller.cooldown_duration = 120
-Trinket.BelorrelosTheSuncaller.off_gcd = false
-Trinket.DragonfireBombDispenser = InventoryItem:Add(202610)
-Trinket.ElementiumPocketAnvil = InventoryItem:Add(202617)
-Trinket.NymuesUnravelingSpindle = InventoryItem:Add(208615)
-Trinket.NymuesUnravelingSpindle.cooldown_duration = 120
-Trinket.NymuesUnravelingSpindle.off_gcd = false
 -- End Inventory Items
 
 -- Start Abilities Functions
@@ -1483,7 +1477,7 @@ function Abilities:Update()
 	wipe(self.bySpellId)
 	wipe(self.velocity)
 	wipe(self.autoAoe)
-	wipe(self.trackAuras)
+	wipe(self.tracked)
 	wipe(self.bloodtalons)
 	for _, ability in next, self.all do
 		if ability.known then
@@ -1498,7 +1492,7 @@ function Abilities:Update()
 				self.autoAoe[#self.autoAoe + 1] = ability
 			end
 			if ability.aura_targets then
-				self.trackAuras[#self.trackAuras + 1] = ability
+				self.tracked[#self.tracked + 1] = ability
 			end
 			if ability.triggers_bt then
 				self.bloodtalons[#self.bloodtalons + 1] = ability
@@ -1792,7 +1786,7 @@ function Player:Update()
 	self.movement_speed = max_speed / 7 * 100
 	self:UpdateThreat()
 
-	trackAuras:Purge()
+	TrackedAuras:Purge()
 	if Opt.auto_aoe then
 		for _, ability in next, Abilities.autoAoe do
 			ability:UpdateTargetsHit()
@@ -1848,7 +1842,9 @@ function Target:UpdateHealth(reset)
 		table.remove(self.health.history, 1)
 		self.health.history[25] = self.health.current
 	end
-	self.timeToDieMax = self.health.current / Player.health.max * (Player.spec == SPEC.SHADOW and 10 or 20)
+	self.timeToDieMax = self.health.current / Player.health.max * (
+		15 + (Player.spec == SPEC.RESTORATION and 10 or 0) + (Player.spec == SPEC.GUARDIAN and 5 or 0)
+	)
 	self.health.pct = self.health.max > 0 and (self.health.current / self.health.max * 100) or 100
 	self.health.loss_per_sec = (self.health.history[1] - self.health.current) / 5
 	self.timeToDie = (
@@ -2386,13 +2382,7 @@ actions.cooldown+=/use_items
 	end
 --]]
 	if Opt.trinket then
-		if Trinket.BeaconToTheBeyond:Usable() and not Player.berserk_up then
-			return UseCooldown(Trinket.BeaconToTheBeyond)
-		elseif Trinket.DragonfireBombDispenser:Usable() and (Player.enemies > 1 or Target.timeToDie > 8) then
-			return UseCooldown(Trinket.DragonfireBombDispenser)
-		elseif Trinket.ElementiumPocketAnvil:Usable() and Player.energy.deficit >= (15 + Player.energy.regen) then
-			return UseCooldown(Trinket.ElementiumPocketAnvil)
-		elseif Trinket1:Usable() then
+		if Trinket1:Usable() then
 			return UseCooldown(Trinket1)
 		elseif Trinket2:Usable() then
 			return UseCooldown(Trinket2)
@@ -2613,7 +2603,6 @@ APL[SPEC.GUARDIAN].Main = function(self)
 actions=auto_attack,if=!buff.prowl.up
 actions+=/use_item,slot=trinket1
 actions+=/use_item,slot=trinket2
-actions+=/use_item,name=djaruun_pillar_of_the_elder_flame,if=dot.moonfire.ticking
 actions+=/potion,if=((talent.heart_of_the_wild.enabled&buff.heart_of_the_wild.up)|((buff.berserk_bear.up|buff.incarnation_guardian_of_ursoc.up)&(!druid.catweave_bear&!druid.owlweave_bear)))
 actions+=/run_action_list,name=catweave,if=(target.cooldown.pause_action.remains|time>=30)&druid.catweave_bear=1&buff.tooth_and_claw.remains>1.5&(buff.incarnation_guardian_of_ursoc.down&buff.berserk_bear.down)&(cooldown.thrash_bear.remains>0&cooldown.mangle.remains>0&dot.moonfire.remains>=2)|(buff.cat_form.up&energy>25&druid.catweave_bear=1&buff.tooth_and_claw.remains>1.5)|(buff.heart_of_the_wild.up&energy>90&druid.catweave_bear=1&buff.tooth_and_claw.remains>1.5)
 actions+=/run_action_list,name=bear
@@ -2630,13 +2619,7 @@ actions+=/run_action_list,name=bear
 		end
 	end
 	if Opt.trinket then
-		if Trinket.BeaconToTheBeyond:Usable() and not Player.berserk_up then
-			UseCooldown(Trinket.BeaconToTheBeyond)
-		elseif Trinket.DragonfireBombDispenser:Usable() and (Player.enemies > 1 or Target.timeToDie > 8) then
-			UseCooldown(Trinket.DragonfireBombDispenser)
-		elseif Trinket.ElementiumPocketAnvil:Usable() and Player.rage.deficit >= 40 then
-			UseCooldown(Trinket.ElementiumPocketAnvil)
-		elseif Trinket1:Usable() then
+		if Trinket1:Usable() then
 			UseCooldown(Trinket1)
 		elseif Trinket2:Usable() then
 			UseCooldown(Trinket2)
@@ -3295,7 +3278,7 @@ CombatEvent.UNIT_DIED = function(event, srcGUID, dstGUID)
 	if not uid or Target.Dummies[uid] then
 		return
 	end
-	trackAuras:Remove(dstGUID)
+	TrackedAuras:Remove(dstGUID)
 	if Opt.auto_aoe then
 		AutoAoe:Remove(dstGUID)
 	end
@@ -3336,7 +3319,7 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 
 	local ability = spellId and Abilities.bySpellId[spellId]
 	if not ability then
-		--log(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', event, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
+		--log(format('%.3f EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', Player.time, event, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
 		return
 	end
 
@@ -3518,10 +3501,6 @@ function Events:PLAYER_EQUIPMENT_CHANGED()
 		end
 	end
 
-	Player.set_bonus.t29 = (Player:Equipped(200351) and 1 or 0) + (Player:Equipped(200353) and 1 or 0) + (Player:Equipped(200354) and 1 or 0) + (Player:Equipped(200355) and 1 or 0) + (Player:Equipped(200356) and 1 or 0)
-	Player.set_bonus.t30 = (Player:Equipped(202513) and 1 or 0) + (Player:Equipped(202514) and 1 or 0) + (Player:Equipped(202515) and 1 or 0) + (Player:Equipped(202516) and 1 or 0) + (Player:Equipped(202518) and 1 or 0)
-	Player.set_bonus.t31 = (Player:Equipped(207252) and 1 or 0) + (Player:Equipped(207253) and 1 or 0) + (Player:Equipped(207254) and 1 or 0) + (Player:Equipped(207255) and 1 or 0) + (Player:Equipped(207257) and 1 or 0)
-	Player.set_bonus.t32 = (Player:Equipped(217191) and 1 or 0) + (Player:Equipped(217192) and 1 or 0) + (Player:Equipped(217193) and 1 or 0) + (Player:Equipped(217194) and 1 or 0) + (Player:Equipped(217195) and 1 or 0)
 	Player.set_bonus.t33 = (Player:Equipped(212054) and 1 or 0) + (Player:Equipped(212055) and 1 or 0) + (Player:Equipped(212056) and 1 or 0) + (Player:Equipped(212057) and 1 or 0) + (Player:Equipped(212059) and 1 or 0)
 
 	Player:ResetSwing(true, true)
