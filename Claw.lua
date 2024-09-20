@@ -1141,11 +1141,11 @@ ConvokeTheSpirits.tick_interval = 0.25
 local FrenziedRegeneration = Ability:Add(22842, true, true)
 FrenziedRegeneration.buff_duration = 3
 FrenziedRegeneration.cooldown_duration = 36
+FrenziedRegeneration.energy_cost = 40
 FrenziedRegeneration.rage_cost = 10
 FrenziedRegeneration.tick_interval = 1
 FrenziedRegeneration.hasted_cooldown = true
 FrenziedRegeneration.requires_charge = true
-FrenziedRegeneration.requires_form = FORM.BEAR
 local HeartOfTheWild = Ability:Add(319454, true, true, 108291)
 HeartOfTheWild.buff_duration = 45
 HeartOfTheWild.cooldown_duration = 300
@@ -1404,6 +1404,7 @@ GalacticGuardian.buff_duration = 15
 ------ Procs
 
 -- Hero talents
+local EmpoweredShapeshifting = Ability:Add(441689, true, true)
 local Ravage = Ability:Add(441583, true, true)
 RavageBear = Ability:Add(441605, true, true, 441602)
 RavageBear.buff_duration = 15
@@ -2284,6 +2285,16 @@ function Regrowth:Free()
 	return PredatorySwiftness.known and PredatorySwiftness:Up()
 end
 
+function FrenziedRegeneration:Usable(...)
+	if not (
+		Player.form == FORM.BEAR or
+		(Player.form == FORM.CAT and EmpoweredShapeshifting.known)
+	) then
+		return false
+	end
+	return Ability.Usable(self, ...)
+end
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -2386,6 +2397,8 @@ actions+=/run_action_list,name=builder,if=combo_points<5
 	if Player.health.pct < 85 and not Player:Stealthed() then
 		if Regrowth:Usable() and (Player.health.pct <= Opt.heal or Player.combo_points.current >= 5) and Regrowth:Free() and Regrowth:WontCapEnergy() then
 			UseExtra(Regrowth)
+		elseif FrenziedRegeneration:Usable() and Player.health.pct <= Opt.heal and FrenziedRegeneration:Down() then
+			UseExtra(FrenziedRegeneration)
 		elseif NaturesVigil:Usable() then
 			UseExtra(NaturesVigil)
 		end
