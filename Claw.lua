@@ -1045,7 +1045,11 @@ function Ability:RefreshAura(guid, extend)
 	end
 	local duration = self:Duration(self.next_combo_points, self.next_applied_by)
 	aura.expires = max(aura.expires, Player.time + min(duration * (self.no_pandemic and 1.0 or 1.3), (aura.expires - Player.time) + (extend or duration)))
-	if self.next_multiplier then
+	if self.next_multiplier and (
+		not self.retain_higher_multiplier or
+		not aura.multiplier or
+		self.next_multiplier > aura.multiplier
+	) then
 		aura.multiplier = self.next_multiplier
 	end
 	return aura
@@ -1055,7 +1059,11 @@ function Ability:RefreshAuraAll(extend)
 	local duration = self:Duration(self.next_combo_points, self.next_applied_by)
 	for guid, aura in next, self.aura_targets do
 		aura.expires = max(aura.expires, Player.time + min(duration * (self.no_pandemic and 1.0 or 1.3), (aura.expires - Player.time) + (extend or duration)))
-		if self.next_multiplier then
+		if self.next_multiplier and (
+			not self.retain_higher_multiplier or
+			not aura.multiplier or
+			self.next_multiplier > aura.multiplier
+		) then
 			aura.multiplier = self.next_multiplier
 		end
 	end
@@ -1408,6 +1416,11 @@ RavageCat.cp_cost = 1
 RavageCat.energy_cost = 25
 RavageCat.requires_form = FORM.CAT
 RavageCat.requires_react = true
+local DreadfulWound = Ability:Add(441809, false, true, 441812)
+DreadfulWound.buff_duration = 6
+DreadfulWound.tick_interval = 2
+DreadfulWound.retain_higher_multiplier = true
+DreadfulWound:Track()
 -- PvP talents
 local Thorns = Ability:Add(305497, true, true)
 Thorns.buff_duration = 12
@@ -2043,7 +2056,7 @@ end
 function TigersFury:Multiplier()
 	local multiplier = 1.15
 	if CarnivorousInstinct.known then
-		mulitplier = multiplier + CarnivorousInstinct.rank * 0.06
+		multiplier = multiplier + CarnivorousInstinct.rank * 0.06
 	end
 	return multiplier
 end
@@ -2067,7 +2080,7 @@ function Rake:NextMultiplier()
 	local multiplier, stealthed, aura = 1.00, false
 	for i = 1, 40 do
 		aura = UnitAura('player', i, 'HELPFUL|PLAYER')
-		if not id then
+		if not aura then
 			break
 		elseif Shadowmeld:Match(aura.spellId) or Prowl:Match(aura.spellId) or Berserk:Match(aura.spellId) or IncarnationAvatarOfAshamane:Match(aura.spellId) or SuddenAmbush:Match(aura.spellId) then
 			stealthed = true
@@ -2124,8 +2137,7 @@ function Rip:NextMultiplier()
 		aura = UnitAura('player', i, 'HELPFUL|PLAYER')
 		if not aura then
 			break
-		end
-		if TigersFury:Match(aura.spellId) then
+		elseif TigersFury:Match(aura.spellId) then
 			multiplier = multiplier * TigersFury:Multiplier()
 		elseif Bloodtalons:Match(aura.spellId) then
 			multiplier = multiplier * 1.25
@@ -2167,6 +2179,16 @@ function MoonfireCat:NextMultiplier()
 		end
 	end
 	return multiplier
+end
+
+DreadfulWound.NextMultiplier = MoonfireCat.NextMultiplier
+
+function RavageCat:Multiplier()
+	return DreadfulWound:Multiplier()
+end
+
+function RavageCat:NextMultiplier()
+	return max(DreadfulWound:Multiplier(), DreadfulWound:NextMultiplier())
 end
 
 function Shred:CastSuccess(...)
@@ -2374,10 +2396,10 @@ actions+=/run_action_list,name=builder,if=combo_points<5
 	if Player.enemies > 1 and PrimalWrath.known then
 		return self:aoe()
 	end
-	if ApexPredatorsCraving.known and RavageCat:Usable() and ApexPredatorsCraving:Up() and (ApexPredatorsCraving:Remains() < 2 or Rip:Ticking() > 0) then
+	if ApexPredatorsCraving.known and RavageCat:Usable() and ApexPredatorsCraving:Up() and (ApexPredatorsCraving:Remains() < 2 or Rip:Up()) then
 		return RavageCat
 	end
-	if ApexPredatorsCraving.known and FerociousBite:Usable() and ApexPredatorsCraving:Up() and (ApexPredatorsCraving:Remains() < 2 or Rip:Ticking() > 0) then
+	if ApexPredatorsCraving.known and FerociousBite:Usable() and ApexPredatorsCraving:Up() and (ApexPredatorsCraving:Remains() < 2 or Rip:Up()) then
 		return FerociousBite
 	end
 	if self.need_bt and Player.berserk_remains == 0 and (Player.combo_points.current < 5 or Bloodtalons:ActiveTriggers() > 1) then
@@ -2419,7 +2441,7 @@ actions.cooldown+=/use_items
 	if Thorns:Usable() and Player:UnderAttack() and Thorns:WontCapEnergy() then
 		return UseCooldown(Thorns)
 	end
-	if AdaptiveSwarm:Usable() and Target.timeToDie > 5 and (Rip:Up() or Player.energy.current < 35) and ((AdaptiveSwarm:Traveling() == 0 and (AdaptiveSwarm.dot:Ticking() == 0 or AdaptiveSwarm.dot:Remains() < 2) and (AdaptiveSwarm.dot:Stack() < 3 or AdaptiveSwarm.hot:Stack() <= 1)) or (Player.enemies > 2 and AdaptiveSwarm.dot:Ticking() == 0 and Player.energy.current < 35)) then
+	if AdaptiveSwarm:Usable() and Target.timeToDie > 5 and (Rip:Up() or Player.energy.current < 35) and ((AdaptiveSwarm:Traveling() == 0 and (AdaptiveSwarm.dot:Ticking() == 0 or AdaptiveSwarm.dot:Remains() < (Player.gcd * 2)) and (AdaptiveSwarm.dot:Stack() < 3 or AdaptiveSwarm.hot:Stack() <= 1)) or (Player.enemies > 2 and AdaptiveSwarm.dot:Ticking() == 0 and Player.energy.current < 35)) then
 		return UseCooldown(AdaptiveSwarm)
 	end
 	if self.use_cds and Shadowmeld:Usable() and Player.combo_points.current < 4 and Rake:Usable() and Rake:Multiplier() < 1.6 and TigersFury:Remains() > 1.5 and Player.berserk_remains == 0 and SuddenAmbush:Down() and not Player.bs_inc:Ready(Rake:Duration()) then
@@ -2460,18 +2482,19 @@ actions.aoe+=/shred,if=action.shred.damage>action.thrash_cat.damage
 actions.aoe+=/thrash_cat
 ]]
 	if RavageCat:Usable() and (
-		(Player.combo_points.current >= 5 and Rip:LowestRemains() > (Player.berserk_remains > 4 and 5 or 8)) or
-		(ApexPredatorsCraving.known and ApexPredatorsCraving:Up() and (ApexPredatorsCraving:Remains() < 2 or Rip:Ticking() > 0))
+		(Player.combo_points.current >= 5 and Rip:Ticking() >= Player.enemies and Rip:LowestRemains() > (Rip:TickTime() * (Player.berserk_remains > 3 and 2 or 3))) or
+		(ApexPredatorsCraving.known and ApexPredatorsCraving:Up() and (ApexPredatorsCraving:Remains() < (Player.gcd * 2) or Rip:Up())) or
+		(Player.combo_points.current >= 3 and RavageCat:React() < (Player.gcd * 2))
 	) then
 		return Pool(RavageCat)
 	end
-	if FerociousBite:Usable() and Player.enemies <= 5 and Player.combo_points.current >= 5 and Rip:LowestRemains() > (Player.berserk_remains > 4 and 7 or 10) then
+	if FerociousBite:Usable() and Player.enemies <= 5 and Player.combo_points.current >= 5 and Rip:LowestRemains() > (Rip:TickTime() * (4 + (RavageCat.known and 1 or 0) - (Player.berserk_remains > 3 and 1 or 0))) then
 		return Pool(FerociousBite)
 	end
 	if PrimalWrath:Usable(0, true) and Player.combo_points.current >= 5 then
 		return Pool(PrimalWrath)
 	end
-	if ApexPredatorsCraving.known and FerociousBite:Usable() and ApexPredatorsCraving:Up() and (ApexPredatorsCraving:Remains() < 2 or (Rip:Ticking() > 0 and Sabertooth:Down())) then
+	if ApexPredatorsCraving.known and FerociousBite:Usable() and ApexPredatorsCraving:Up() and (ApexPredatorsCraving:Remains() < (Player.gcd * 2) or (Rip:Up() and Sabertooth:Down())) then
 		return FerociousBite
 	end
 	if self.need_bt and Bloodtalons:ActiveTriggers() >= 1 then
@@ -2553,6 +2576,9 @@ actions.finisher+=/pool_resource,for_next=1
 actions.finisher+=/ferocious_bite,max_energy=1,if=!buff.bs_inc.up|(buff.bs_inc.up&!talent.soul_of_the_forest.enabled)
 actions.finisher+=/ferocious_bite,if=(buff.bs_inc.up&talent.soul_of_the_forest.enabled)
 ]]
+	if RavageCat:Usable(0, true) and Target.timeToDie < 2 then
+		return Pool(RavageCat)
+	end
 	if PrimalWrath:Usable(0, true) and (Player.enemies > 2 or (Player.enemies > 1 and Rip:Refreshable(nil, PrimalWrath))) then
 		return Pool(PrimalWrath)
 	end
@@ -3483,6 +3509,8 @@ function Events:UNIT_SPELLCAST_SENT(unitId, destName, castGUID, spellId)
 		Rip.next_applied_by = ability
 		Rip.next_combo_points = UnitPower('player', 4)
 		ability = Rip
+	elseif ability == RavageCat then
+		ability = DreadfulWound
 	end
 	if ability.NextMultiplier then
 		ability.next_multiplier = ability:NextMultiplier()
