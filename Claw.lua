@@ -146,7 +146,7 @@ end
 local UI = {
 	anchor = {},
 	buttons = {},
-	remains_list = {},
+	action_slots = {},
 }
 
 -- combat event related functions container
@@ -245,19 +245,19 @@ local Player = {
 	},
 	energy = {
 		current = 0,
-		deficit = 100,
 		max = 100,
+		deficit = 100,
 		regen = 0,
 	},
 	rage = {
 		current = 0,
-		deficit = 100,
 		max = 100,
+		deficit = 100,
 	},
 	combo_points = {
 		current = 0,
-		deficit = 5,
 		max = 5,
+		deficit = 5,
 	},
 	cast = {
 		start = 0,
@@ -542,6 +542,7 @@ function Ability:Add(spellId, buff, player, spellId2)
 		last_used = 0,
 		aura_target = buff and 'player' or 'target',
 		aura_filter = (buff and 'HELPFUL' or 'HARMFUL') .. (player and '|PLAYER' or ''),
+		keybinds = {},
 	}
 	setmetatable(ability, self)
 	Abilities.all[#Abilities.all + 1] = ability
@@ -1468,6 +1469,7 @@ function InventoryItem:Add(itemId)
 		icon = icon,
 		can_use = false,
 		off_gcd = true,
+		keybinds = {},
 	}
 	setmetatable(item, self)
 	InventoryItems.all[#InventoryItems.all + 1] = item
@@ -1577,7 +1579,11 @@ function Player:ManaTimeToMax()
 end
 
 function Player:EnergyTimeToMax(energy)
-	return (energy and max(0, energy - self.energy.current) or self.energy.deficit) / self.energy.regen
+	local deficit = (energy or self.energy.max) - self.energy.current
+	if deficit <= 0 then
+		return 0
+	end
+	return deficit / self.energy.regen
 end
 
 function Player:ResetSwing(mainHand, offHand, missed)
@@ -1874,6 +1880,7 @@ function Player:Init()
 	local _
 	if not self.initialized then
 		UI:ScanActionButtons()
+		UI:ScanActionSlots()
 		UI:DisableOverlayGlows()
 		UI:CreateOverlayGlows()
 		UI:HookResourceFrame()
@@ -2962,12 +2969,13 @@ function UI:UpdateGlowColorAndScale()
 end
 
 function UI:DisableOverlayGlows()
-	if LibStub and LibStub.GetLibrary and not Opt.glow.blizzard then
-		local lib = LibStub:GetLibrary('LibButtonGlow-1.0', true)
-		if lib then
-			lib.ShowOverlayGlow = function(self)
-				return
-			end
+	if Opt.glow.blizzard or not LibStub then
+		return
+	end
+	local lib = LibStub:GetLibrary('LibButtonGlow-1.0', true)
+	if lib then
+		lib.ShowOverlayGlow = function(...)
+			return lib.HideOverlayGlow(...)
 		end
 	end
 end
@@ -3035,32 +3043,34 @@ function UI:CreateOverlayGlows()
 end
 
 function UI:UpdateGlows()
-	local glow, icon
-	for i, button in next, self.buttons do
-		glow = button['glow' .. ADDON]
-		icon = button.icon:GetTexture()
-		if icon and glow.button.icon:IsVisible() and (
-			(Opt.glow.main and Player.main and icon == Player.main.icon) or
-			(Opt.glow.cooldown and Player.cd and icon == Player.cd.icon) or
-			(Opt.glow.interrupt and Player.interrupt and icon == Player.interrupt.icon) or
-			(Opt.glow.extra and Player.extra and icon == Player.extra.icon)
+	local glow, action
+	for _, slot in next, self.action_slots do
+		action = slot.action
+		for _, button in next, slot.buttons do
+			glow = button['glow' .. ADDON]
+			if action and button:IsVisible() and (
+				(Opt.glow.main and action == Player.main) or
+				(Opt.glow.cooldown and action == Player.cd) or
+				(Opt.glow.interrupt and action == Player.interrupt) or
+				(Opt.glow.extra and action == Player.extra)
 			) then
-			if not glow:IsVisible() then
-				glow:Show()
-				if Opt.glow.animation then
-					glow.ProcStartAnim:Play()
-				else
-					glow.ProcLoop:Play()
+				if not glow:IsVisible() then
+					glow:Show()
+					if Opt.glow.animation then
+						glow.ProcStartAnim:Play()
+					else
+						glow.ProcLoop:Play()
+					end
 				end
+			elseif glow:IsVisible() then
+				if glow.ProcStartAnim:IsPlaying() then
+					glow.ProcStartAnim:Stop()
+				end
+				if glow.ProcLoop:IsPlaying() then
+					glow.ProcLoop:Stop()
+				end
+				glow:Hide()
 			end
-		elseif glow:IsVisible() then
-			if glow.ProcStartAnim:IsPlaying() then
-				glow.ProcStartAnim:Stop()
-			end
-			if glow.ProcLoop:IsPlaying() then
-				glow.ProcLoop:Stop()
-			end
-			glow:Hide()
 		end
 	end
 end
@@ -3112,40 +3122,70 @@ function UI:GetButtonKeybind(button)
 	end
 end
 
-function UI:GetButtonAction(button)
-	local action = (button.CalculateAction and button:CalculateAction()) or button:GetAttribute('action') or 0
-	if action > 0 then
-		local actionType, id, subType = GetActionInfo(action)
-		if id and id > 0 then
-			if (actionType == 'item' or (actionType == 'macro' and subType == 'item')) then
-				return 'item', id
-			elseif (actionType == 'spell' or (actionType == 'macro' and subType == 'spell')) then
-				return 'spell', id
-			end
+function UI:GetActionFromID(actionId)
+	local actionType, id, subType = GetActionInfo(actionId)
+	if id and type(id) == 'number' and id > 0 then
+		if (actionType == 'item' or (actionType == 'macro' and subType == 'item')) then
+			return InventoryItems.byItemId[id]
+		elseif (actionType == 'spell' or (actionType == 'macro' and subType == 'spell')) then
+			return Abilities.bySpellId[id]
 		end
 	end
 end
 
-function UI:UpdateBindings()
-	for i, item in next, InventoryItems.all do
-		item.keybind = nil
-	end
-	for a, ability in next, Abilities.all do
-		ability.keybind = nil
-	end
-	if not Opt.keybinds then
+function UI:UpdateActionSlot(actionId)
+	local slot = self.action_slots[actionId]
+	if not slot then
 		return
 	end
-	local bind, action, id
-	for b, button in next, self.buttons do
-		bind = self:GetButtonKeybind(button)
-		if bind then
-			local action, id = self:GetButtonAction(button)
-			if action == 'item' and InventoryItems.byItemId[id] then
-				InventoryItems.byItemId[id].keybind = bind
-			elseif action =='spell' and Abilities.bySpellId[id] then
-				Abilities.bySpellId[id].keybind = bind
+	local action = self:GetActionFromID(actionId)
+	if action ~= slot.action then
+		if slot.action then
+			slot.action.keybinds[actionId] = nil
+		end
+		slot.action = action
+	end
+	if not action then
+		return
+	end
+	for _, button in next, slot.buttons do
+		action.keybinds[actionId] = self:GetButtonKeybind(button)
+		if action.keybinds[actionId] then
+			return
+		end
+	end
+	action.keybinds[actionId] = nil
+end
+
+function UI:UpdateBindings()
+	for _, item in next, InventoryItems.all do
+		wipe(item.keybinds)
+	end
+	for _, ability in next, Abilities.all do
+		wipe(ability.keybinds)
+	end
+	for actionId in next, self.action_slots do
+		self:UpdateActionSlot(actionId)
+	end
+end
+
+function UI:ScanActionSlots()
+	wipe(self.action_slots)
+	local actionId, buttons
+	for _, button in next, self.buttons do
+		actionId = (
+			(button._state_type == 'action' and button._state_action) or
+			(button.CalculateAction and button:CalculateAction()) or
+			(button:GetAttribute('action'))
+		) or 0
+		if actionId > 0 then
+			if not self.action_slots[actionId] then
+				self.action_slots[actionId] = {
+					buttons = {},
+				}
 			end
+			buttons = self.action_slots[actionId].buttons
+			buttons[#buttons + 1] = button
 		end
 	end
 end
@@ -3205,45 +3245,45 @@ UI.anchor_points = {
 	blizzard = { -- Blizzard Personal Resource Display (Default)
 		[FORM.NONE] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 42 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -9 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -9 },
 		},
 		[FORM.MOONKIN] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 42 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -9 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -9 },
 		},
 		[FORM.CAT] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 42 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -30 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -30 },
 		},
 		[FORM.BEAR] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 42 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -9 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -9 },
 		},
 		[FORM.TRAVEL] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 42 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -9 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -9 },
 		},
 	},
 	kui = { -- Kui Nameplates
 		[FORM.NONE] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 24 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -1 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -1 },
 		},
 		[FORM.MOONKIN] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 24 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -1 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -1 },
 		},
 		[FORM.CAT] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 24 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -1 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -1 },
 		},
 		[FORM.BEAR] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 24 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -1 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -1 },
 		},
 		[FORM.TRAVEL] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 24 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -1 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -1 },
 		},
 	},
 }
@@ -3330,8 +3370,11 @@ function UI:UpdateDisplay()
 		if Player.main_freecast then
 			border = 'freecast'
 		end
-		if Opt.keybinds and Player.main.keybind then
-			text_tr = Player.main.keybind
+		if Opt.keybinds then
+			for _, bind in next, Player.main.keybinds do
+				text_tr = bind
+				break
+			end
 		end
 	end
 	if Player.cd then
@@ -3341,8 +3384,11 @@ function UI:UpdateDisplay()
 				text_cd_center = format('%.1f', react)
 			end
 		end
-		if Opt.keybinds and Player.cd.keybind then
-			text_cd_tr = Player.cd.keybind
+		if Opt.keybinds then
+			for _, bind in next, Player.cd.keybinds do
+				text_cd_tr = bind
+				break
+			end
 		end
 	end
 	if Player.pool_energy then
@@ -3767,6 +3813,7 @@ function Events:PLAYER_SPECIALIZATION_CHANGED(unitId)
 	Events:PLAYER_REGEN_ENABLED()
 	Events:UNIT_HEALTH('player')
 	Events:UNIT_MAXPOWER('player')
+	Events:UPDATE_BINDINGS()
 	UI.OnResourceFrameShow()
 	Target:Update()
 	Player:Update()
@@ -3813,14 +3860,27 @@ function Events:PLAYER_PVP_TALENT_UPDATE()
 	Player:UpdateKnown()
 end
 
-function Events:ACTIONBAR_SLOT_CHANGED()
+function Events:ACTIONBAR_SLOT_CHANGED(slot)
+	if not slot or slot < 1 then
+		UI:ScanActionSlots()
+		UI:UpdateBindings()
+	else
+		UI:UpdateActionSlot(slot)
+	end
 	UI:UpdateGlows()
-	UI:UpdateBindings()
 end
+
+function Events:ACTIONBAR_PAGE_CHANGED()
+	C_Timer.After(0, function()
+		Events:ACTIONBAR_SLOT_CHANGED(0)
+	end)
+end
+Events.UPDATE_BONUS_ACTIONBAR = Events.ACTIONBAR_PAGE_CHANGED
 
 function Events:UPDATE_BINDINGS()
 	UI:UpdateBindings()
 end
+Events.GAME_PAD_ACTIVE_CHANGED = Events.UPDATE_BINDINGS
 
 function Events:GROUP_ROSTER_UPDATE()
 	Player.group_size = clamp(GetNumGroupMembers(), 1, 40)
@@ -4095,7 +4155,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		return Status('Only use cooldowns on bosses', Opt.boss_only)
 	end
-	if msg[1] == 'hidespec' or startsWith(msg[1], 'spec') then
+	if startsWith(msg[1], 'hide') or startsWith(msg[1], 'spec') then
 		if msg[2] then
 			if startsWith(msg[2], 'b') then
 				Opt.hide.balance = not Opt.hide.balance
