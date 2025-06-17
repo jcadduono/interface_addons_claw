@@ -2939,21 +2939,6 @@ end
 
 -- Start UI Functions
 
-function UI.DenyOverlayGlow(actionButton)
-	if Opt.glow.blizzard then
-		return
-	end
-	local alert = actionButton.SpellActivationAlert
-	if not alert then
-		return
-	end
-	if alert.ProcStartAnim:IsPlaying() then
-		alert.ProcStartAnim:Stop()
-	end
-	alert:Hide()
-end
-hooksecurefunc('ActionButton_ShowOverlayGlow', UI.DenyOverlayGlow) -- Disable Blizzard's built-in action button glowing
-
 function UI:UpdateGlowColorAndScale()
 	local w, h, glow
 	local r, g, b = Opt.glow.color.r, Opt.glow.color.g, Opt.glow.color.b
@@ -2969,6 +2954,10 @@ function UI:UpdateGlowColorAndScale()
 end
 
 function UI:DisableOverlayGlows()
+	if not Opt.glow.blizzard then
+		SetCVar('assistedCombatHighlight', 0)
+		AssistedCombatManager:ProcessCVars()
+	end
 	if Opt.glow.blizzard or not LibStub then
 		return
 	end
@@ -3033,7 +3022,7 @@ end
 function UI:CreateOverlayGlows()
 	local glow
 	for i, button in next, self.buttons do
-		glow = button['glow' .. ADDON] or CreateFrame('Frame', nil, button, 'ActionBarButtonSpellActivationAlert')
+		glow = button['glow' .. ADDON] or CreateFrame('Frame', nil, button, 'ActionButtonSpellAlertTemplate')
 		glow:Hide()
 		glow.ProcStartAnim:Play() -- will bug out if ProcLoop plays first
 		glow.button = button
