@@ -145,8 +145,6 @@ end
 -- UI related functions container
 local UI = {
 	anchor = {},
-	buttons = {},
-	action_slots = {},
 }
 
 -- combat event related functions container
@@ -167,6 +165,25 @@ local Abilities = {
 	autoAoe = {},
 	tracked = {},
 	bloodtalons = {},
+}
+
+-- inventory item template
+local InventoryItem, Trinket = {}, {}
+InventoryItem.__index = InventoryItem
+
+-- classified inventory items
+local InventoryItems = {
+	all = {},
+	byItemId = {},
+}
+
+-- action button template
+local Button = {}
+Button.__index = Button
+
+-- classified action buttons
+local Buttons = {
+	all = {},
 }
 
 -- methods for target tracking / aoe modes
@@ -1453,14 +1470,6 @@ local Shadowmeld = Ability:Add(58984, true, true)
 
 -- Start Inventory Items
 
-local InventoryItem, Trinket = {}, {}
-InventoryItem.__index = InventoryItem
-
-local InventoryItems = {
-	all = {},
-	byItemId = {},
-}
-
 function InventoryItem:Add(itemId)
 	local name, _, _, _, _, _, _, _, _, icon = GetItemInfo(itemId)
 	local item = {
@@ -1531,6 +1540,161 @@ Healthstone.max_charges = 3
 local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
 -- End Inventory Items
+
+-- Start Buttons
+
+Buttons.KeybindPatterns = {
+	['ALT%-'] = 'a-',
+	['CTRL%-'] = 'c-',
+	['SHIFT%-'] = 's-',
+	['META%-'] = 'm-',
+	['NUMPAD'] = 'NP',
+	['PLUS'] = '%+',
+	['MINUS'] = '%-',
+	['MULTIPLY'] = '%*',
+	['DIVIDE'] = '%/',
+	['BACKSPACE'] = 'BS',
+	['BUTTON'] = 'MB',
+	['CLEAR'] = 'Clr',
+	['DELETE'] = 'Del',
+	['END'] = 'End',
+	['HOME'] = 'Home',
+	['INSERT'] = 'Ins',
+	['MOUSEWHEELDOWN'] = 'MwD',
+	['MOUSEWHEELUP'] = 'MwU',
+	['PAGEDOWN'] = 'PgDn',
+	['PAGEUP'] = 'PgUp',
+	['CAPSLOCK'] = 'Caps',
+	['NUMLOCK'] = 'NumL',
+	['SCROLLLOCK'] = 'ScrL',
+	['SPACEBAR'] = 'Space',
+	['SPACE'] = 'Space',
+	['TAB'] = 'Tab',
+	['DOWNARROW'] = 'Down',
+	['LEFTARROW'] = 'Left',
+	['RIGHTARROW'] = 'Right',
+	['UPARROW'] = 'Up',
+}
+
+function Buttons:Scan()
+	if Bartender4 then
+		for i = 1, 120 do
+			Button:Add(_G['BT4Button' .. i])
+		end
+		for i = 1, 10 do
+			Button:Add(_G['BT4PetButton' .. i])
+		end
+		return
+	end
+	if ElvUI then
+		for b = 1, 6 do
+			for i = 1, 12 do
+				Button:Add(_G['ElvUI_Bar' .. b .. 'Button' .. i])
+			end
+		end
+		return
+	end
+	if LUI then
+		for b = 1, 6 do
+			for i = 1, 12 do
+				Button:Add(_G['LUIBarBottom' .. b .. 'Button' .. i])
+				Button:Add(_G['LUIBarLeft' .. b .. 'Button' .. i])
+				Button:Add(_G['LUIBarRight' .. b .. 'Button' .. i])
+			end
+		end
+		return
+	end
+	if Dominos then
+		for i = 1, 60 do
+			Button:Add(_G['DominosActionButton' .. i])
+		end
+		-- fallthrough because Dominos re-uses Blizzard action buttons
+	end
+	for i = 1, 12 do
+		Button:Add(_G['ActionButton' .. i])
+		Button:Add(_G['MultiBarLeftButton' .. i])
+		Button:Add(_G['MultiBarRightButton' .. i])
+		Button:Add(_G['MultiBarBottomLeftButton' .. i])
+		Button:Add(_G['MultiBarBottomRightButton' .. i])
+		Button:Add(_G['MultiBar5Button' .. i])
+		Button:Add(_G['MultiBar6Button' .. i])
+		Button:Add(_G['MultiBar7Button' .. i])
+	end
+	for i = 1, 10 do
+		Button:Add(_G['PetActionButton' .. i])
+	end
+end
+
+function Button:UpdateGlowDisplay()
+	local w, h = self.frame:GetSize()
+	self.glow:SetSize(w * 1.4, h * 1.4)
+	self.glow:SetPoint('TOPLEFT', self.frame, 'TOPLEFT', -w * 0.2 * Opt.scale.glow, h * 0.2 * Opt.scale.glow)
+	self.glow:SetPoint('BOTTOMRIGHT', self.frame, 'BOTTOMRIGHT', w * 0.2 * Opt.scale.glow, -h * 0.2 * Opt.scale.glow)
+	self.glow.ProcStartFlipbook:SetVertexColor(Opt.glow.color.r, Opt.glow.color.g, Opt.glow.color.b)
+	self.glow.ProcLoopFlipbook:SetVertexColor(Opt.glow.color.r, Opt.glow.color.g, Opt.glow.color.b)
+	self.glow.ProcStartAnim:Play()
+	self.glow:Hide()
+end
+
+function Button:UpdateActionID()
+	self.action_id = (
+		(self.frame._state_type == 'action' and self.frame._state_action) or
+		(self.frame.CalculateAction and self.frame:CalculateAction()) or
+		(self.frame:GetAttribute('action'))
+	) or 0
+end
+
+function Button:UpdateAction()
+	self.action = nil
+	if self.action_id <= 0 then
+		return
+	end
+	local actionType, id, subType = GetActionInfo(self.action_id)
+	if id and type(id) == 'number' and id > 0 then
+		if (actionType == 'item' or (actionType == 'macro' and subType == 'item')) then
+			self.action = InventoryItems.byItemId[id]
+		elseif (actionType == 'spell' or (actionType == 'macro' and subType == 'spell')) then
+			self.action = Abilities.bySpellId[id]
+		end
+	end
+end
+
+function Button:UpdateKeybind()
+	self.keybind = nil
+	local bind = self.frame.bindingAction or (self.frame.config and self.frame.config.keyBoundTarget)
+	if bind then
+		local key = GetBindingKey(bind)
+		if key then
+			key = key:gsub(' ', ''):upper()
+			for pattern, short in next, Buttons.KeybindPatterns do
+				key = key:gsub(pattern, short)
+			end
+			self.keybind = key
+			return
+		end
+	end
+end
+
+function Button:Add(actionButton)
+	if not actionButton then
+		return
+	end
+	local button = {
+		frame = actionButton,
+		name = actionButton:GetName(),
+		action_id = 0,
+		glow = CreateFrame('Frame', nil, actionButton, 'ActionButtonSpellAlertTemplate')
+	}
+	setmetatable(button, self)
+	Buttons.all[#Buttons.all + 1] = button
+	button:UpdateActionID()
+	button:UpdateAction()
+	button:UpdateKeybind()
+	button:UpdateGlowDisplay()
+	return button
+end
+
+-- End Buttons
 
 -- Start Abilities Functions
 
@@ -1879,10 +2043,8 @@ end
 function Player:Init()
 	local _
 	if not self.initialized then
-		UI:ScanActionButtons()
-		UI:ScanActionSlots()
+		Buttons:Scan()
 		UI:DisableOverlayGlows()
-		UI:CreateOverlayGlows()
 		UI:HookResourceFrame()
 		self.guid = UnitGUID('player')
 		self.name = UnitName('player')
@@ -2939,24 +3101,9 @@ end
 
 -- Start UI Functions
 
-function UI:UpdateGlowColorAndScale()
-	local w, h, glow
-	local r, g, b = Opt.glow.color.r, Opt.glow.color.g, Opt.glow.color.b
-	for i, button in next, self.buttons do
-		glow = button['glow' .. ADDON]
-		w, h = glow.button:GetSize()
-		glow:SetSize(w * 1.4, h * 1.4)
-		glow:SetPoint('TOPLEFT', glow.button, 'TOPLEFT', -w * 0.2 * Opt.scale.glow, h * 0.2 * Opt.scale.glow)
-		glow:SetPoint('BOTTOMRIGHT', glow.button, 'BOTTOMRIGHT', w * 0.2 * Opt.scale.glow, -h * 0.2 * Opt.scale.glow)
-		glow.ProcStartFlipbook:SetVertexColor(r, g, b)
-		glow.ProcLoopFlipbook:SetVertexColor(r, g, b)
-	end
-end
-
 function UI:DisableOverlayGlows()
 	if not Opt.glow.blizzard then
 		SetCVar('assistedCombatHighlight', 0)
-		AssistedCombatManager:ProcessCVars()
 	end
 	if Opt.glow.blizzard or not LibStub then
 		return
@@ -2969,181 +3116,32 @@ function UI:DisableOverlayGlows()
 	end
 end
 
-function UI:ScanActionButtons()
-	wipe(self.buttons)
-	if Bartender4 then
-		for i = 1, 120 do
-			self.buttons[#self.buttons + 1] = _G['BT4Button' .. i]
-		end
-		for i = 1, 10 do
-			self.buttons[#self.buttons + 1] = _G['BT4PetButton' .. i]
-		end
-		return
-	end
-	if ElvUI then
-		for b = 1, 6 do
-			for i = 1, 12 do
-				self.buttons[#self.buttons + 1] = _G['ElvUI_Bar' .. b .. 'Button' .. i]
-			end
-		end
-		return
-	end
-	if LUI then
-		for b = 1, 6 do
-			for i = 1, 12 do
-				self.buttons[#self.buttons + 1] = _G['LUIBarBottom' .. b .. 'Button' .. i]
-				self.buttons[#self.buttons + 1] = _G['LUIBarLeft' .. b .. 'Button' .. i]
-				self.buttons[#self.buttons + 1] = _G['LUIBarRight' .. b .. 'Button' .. i]
-			end
-		end
-		return
-	end
-	if Dominos then
-		for i = 1, 60 do
-			self.buttons[#self.buttons + 1] = _G['DominosActionButton' .. i]
-		end
-		-- fallthrough because Dominos re-uses Blizzard action buttons
-	end
-	for i = 1, 12 do
-		self.buttons[#self.buttons + 1] = _G['ActionButton' .. i]
-		self.buttons[#self.buttons + 1] = _G['MultiBarLeftButton' .. i]
-		self.buttons[#self.buttons + 1] = _G['MultiBarRightButton' .. i]
-		self.buttons[#self.buttons + 1] = _G['MultiBarBottomLeftButton' .. i]
-		self.buttons[#self.buttons + 1] = _G['MultiBarBottomRightButton' .. i]
-		self.buttons[#self.buttons + 1] = _G['MultiBar5Button' .. i]
-		self.buttons[#self.buttons + 1] = _G['MultiBar6Button' .. i]
-		self.buttons[#self.buttons + 1] = _G['MultiBar7Button' .. i]
-	end
-	for i = 1, 10 do
-		self.buttons[#self.buttons + 1] = _G['PetActionButton' .. i]
-	end
-end
-
-function UI:CreateOverlayGlows()
-	local glow
-	for i, button in next, self.buttons do
-		glow = button['glow' .. ADDON] or CreateFrame('Frame', nil, button, 'ActionButtonSpellAlertTemplate')
-		glow:Hide()
-		glow.ProcStartAnim:Play() -- will bug out if ProcLoop plays first
-		glow.button = button
-		button['glow' .. ADDON] = glow
-	end
-	self:UpdateGlowColorAndScale()
-end
-
 function UI:UpdateGlows()
-	local glow, action
-	for _, slot in next, self.action_slots do
-		action = slot.action
-		for _, button in next, slot.buttons do
-			glow = button['glow' .. ADDON]
-			if action and button:IsVisible() and (
-				(Opt.glow.main and action == Player.main) or
-				(Opt.glow.cooldown and action == Player.cd) or
-				(Opt.glow.interrupt and action == Player.interrupt) or
-				(Opt.glow.extra and action == Player.extra)
-			) then
-				if not glow:IsVisible() then
-					glow:Show()
-					if Opt.glow.animation then
-						glow.ProcStartAnim:Play()
-					else
-						glow.ProcLoop:Play()
-					end
+	for _, button in next, Buttons.all do
+		if button.action and button.frame:IsVisible() and (
+			(Opt.glow.main and button.action == Player.main) or
+			(Opt.glow.cooldown and button.action == Player.cd) or
+			(Opt.glow.interrupt and button.action == Player.interrupt) or
+			(Opt.glow.extra and button.action == Player.extra)
+		) then
+			if not button.glow:IsVisible() then
+				button.glow:Show()
+				if Opt.glow.animation then
+					button.glow.ProcStartAnim:Play()
+				else
+					button.glow.ProcLoop:Play()
 				end
-			elseif glow:IsVisible() then
-				if glow.ProcStartAnim:IsPlaying() then
-					glow.ProcStartAnim:Stop()
-				end
-				if glow.ProcLoop:IsPlaying() then
-					glow.ProcLoop:Stop()
-				end
-				glow:Hide()
 			end
-		end
-	end
-end
-
-UI.KeybindPatterns = {
-	['ALT%-'] = 'a-',
-	['CTRL%-'] = 'c-',
-	['SHIFT%-'] = 's-',
-	['META%-'] = 'm-',
-	['NUMPAD'] = 'NP',
-	['PLUS'] = '%+',
-	['MINUS'] = '%-',
-	['MULTIPLY'] = '%*',
-	['DIVIDE'] = '%/',
-	['BACKSPACE'] = 'BS',
-	['BUTTON'] = 'MB',
-	['CLEAR'] = 'Clr',
-	['DELETE'] = 'Del',
-	['END'] = 'End',
-	['HOME'] = 'Home',
-	['INSERT'] = 'Ins',
-	['MOUSEWHEELDOWN'] = 'MwD',
-	['MOUSEWHEELUP'] = 'MwU',
-	['PAGEDOWN'] = 'PgDn',
-	['PAGEUP'] = 'PgUp',
-	['CAPSLOCK'] = 'Caps',
-	['NUMLOCK'] = 'NumL',
-	['SCROLLLOCK'] = 'ScrL',
-	['SPACEBAR'] = 'Space',
-	['SPACE'] = 'Space',
-	['TAB'] = 'Tab',
-	['DOWNARROW'] = 'Down',
-	['LEFTARROW'] = 'Left',
-	['RIGHTARROW'] = 'Right',
-	['UPARROW'] = 'Up',
-}
-
-function UI:GetButtonKeybind(button)
-	local bind = button.bindingAction or (button.config and button.config.keyBoundTarget)
-	if bind then
-		local key = GetBindingKey(bind)
-		if key then
-			key = key:gsub(' ', ''):upper()
-			for pattern, short in next, self.KeybindPatterns do
-				key = key:gsub(pattern, short)
+		elseif button.glow:IsVisible() then
+			if button.glow.ProcStartAnim:IsPlaying() then
+				button.glow.ProcStartAnim:Stop()
 			end
-			return key
+			if button.glow.ProcLoop:IsPlaying() then
+				button.glow.ProcLoop:Stop()
+			end
+			button.glow:Hide()
 		end
 	end
-end
-
-function UI:GetActionFromID(actionId)
-	local actionType, id, subType = GetActionInfo(actionId)
-	if id and type(id) == 'number' and id > 0 then
-		if (actionType == 'item' or (actionType == 'macro' and subType == 'item')) then
-			return InventoryItems.byItemId[id]
-		elseif (actionType == 'spell' or (actionType == 'macro' and subType == 'spell')) then
-			return Abilities.bySpellId[id]
-		end
-	end
-end
-
-function UI:UpdateActionSlot(actionId)
-	local slot = self.action_slots[actionId]
-	if not slot then
-		return
-	end
-	local action = self:GetActionFromID(actionId)
-	if action ~= slot.action then
-		if slot.action then
-			slot.action.keybinds[actionId] = nil
-		end
-		slot.action = action
-	end
-	if not action then
-		return
-	end
-	for _, button in next, slot.buttons do
-		action.keybinds[actionId] = self:GetButtonKeybind(button)
-		if action.keybinds[actionId] then
-			return
-		end
-	end
-	action.keybinds[actionId] = nil
 end
 
 function UI:UpdateBindings()
@@ -3153,28 +3151,9 @@ function UI:UpdateBindings()
 	for _, ability in next, Abilities.all do
 		wipe(ability.keybinds)
 	end
-	for actionId in next, self.action_slots do
-		self:UpdateActionSlot(actionId)
-	end
-end
-
-function UI:ScanActionSlots()
-	wipe(self.action_slots)
-	local actionId, buttons
-	for _, button in next, self.buttons do
-		actionId = (
-			(button._state_type == 'action' and button._state_action) or
-			(button.CalculateAction and button:CalculateAction()) or
-			(button:GetAttribute('action'))
-		) or 0
-		if actionId > 0 then
-			if not self.action_slots[actionId] then
-				self.action_slots[actionId] = {
-					buttons = {},
-				}
-			end
-			buttons = self.action_slots[actionId].buttons
-			buttons[#buttons + 1] = button
+	for _, button in next, Buttons.all do
+		if button.action and button.keybind then
+			button.action.keybinds[#button.action.keybinds + 1] = button.keybind
 		end
 	end
 end
@@ -3850,12 +3829,12 @@ function Events:PLAYER_PVP_TALENT_UPDATE()
 end
 
 function Events:ACTIONBAR_SLOT_CHANGED(slot)
-	if not slot or slot < 1 then
-		UI:ScanActionSlots()
-		UI:UpdateBindings()
-	else
-		UI:UpdateActionSlot(slot)
+	for _, button in next, Buttons.all do
+		if not slot or button.action_id == slot then
+			button:UpdateAction()
+		end
 	end
+	UI:UpdateBindings()
 	UI:UpdateGlows()
 end
 
@@ -4013,7 +3992,9 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		if msg[2] == 'glow' then
 			if msg[3] then
 				Opt.scale.glow = tonumber(msg[3]) or 1
-				UI:UpdateGlowColorAndScale()
+				for _, button in next, Buttons.all do
+					button:UpdateGlowDisplay()
+				end
 			end
 			return Status('Action button glow scale', Opt.scale.glow, 'times')
 		end
@@ -4080,7 +4061,9 @@ SlashCmdList[ADDON] = function(msg, editbox)
 				Opt.glow.color.r = clamp(tonumber(msg[3]) or 0, 0, 1)
 				Opt.glow.color.g = clamp(tonumber(msg[4]) or 0, 0, 1)
 				Opt.glow.color.b = clamp(tonumber(msg[5]) or 0, 0, 1)
-				UI:UpdateGlowColorAndScale()
+				for _, button in next, Buttons.all do
+					button:UpdateGlowDisplay()
+				end
 			end
 			return Status('Glow color', '|cFFFF0000' .. Opt.glow.color.r, '|cFF00FF00' .. Opt.glow.color.g, '|cFF0000FF' .. Opt.glow.color.b)
 		end
